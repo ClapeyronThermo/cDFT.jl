@@ -11,12 +11,13 @@ end
 
 export PCSAFTFunctional
 
-function PCSAFTFunctional(eosmodel::EoSModel,width::Float64;N::Int64=100)
+function PCSAFTFunctional(eosmodel::EoSModel,width::Float64;dz::Float64=0.01)
     σ = maximum(eosmodel.params.sigma.values)
-    coords_full = range(-width-2*σ,width+2*σ,length=N)
+    N = Int(2*(width+2)/dz)+1
+    coords_full = range(-width-2,width+2,length=N)
     coords_full = [coords_full[i] for i in 1:N]
     coords = coords_full[-width .<=coords_full .<=width]
-    return PCSAFTFunctional(eosmodel,coords,zeros(length(coords)),coords_full,zeros(N),width)
+    return PCSAFTFunctional(eosmodel,coords.*σ,zeros(length(coords)),coords_full.*σ,zeros(N),width*σ)
 end
 
 function F(model::PCSAFTFunctionalModel,T)
