@@ -32,7 +32,7 @@ function F_hs(model::SAFTFunctionalModel,T)
     
     Φ = @. -n₀*log(1-n₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃)/(12*π*n₃^2)+1/(12*π*n₃*(1-n₃)^2))
 
-    return ∫(Φ,dz)
+    return ∫(Φ,dz) ./ ∫(n₀,dz)
 end
 
 function δFδρ_hs(model::SAFTFunctionalModel,T)
@@ -62,7 +62,7 @@ function δFδρ_hs(model::SAFTFunctionalModel,T)
     ∂Φ∂n₂ = @. n₁/(1-n₃)+3*(n₂^2-nᵥ₂^2)*
                (n₃+(1-n₃)^2*log(1-n₃))/(36π*n₃^2*(1-n₃)^2)
     ∂Φ∂n₃ = @. n₀/(1-n₃)+(n₁*n₂-nᵥ₁*nᵥ₂)/(1-n₃)^2-(n₂^3-3*n₂*nᵥ₁*nᵥ₂)*
-               (n₃*(n₃^2-5*n₃+2)+2*(1-n₃)^2*log(1-n₃))/(36π*n₃^3*(1-n₃)^3)
+               (n₃*(n₃^2-5*n₃+2)+2*(1-n₃)^3*log(1-n₃))/(36π*n₃^3*(1-n₃)^3)
     ∂Φ∂nᵥ₁ = @. -nᵥ₂/(1-n₃)
     ∂Φ∂nᵥ₂ = @. -nᵥ₁/(1-n₃)-n₂*nᵥ₂*(n₃+(1-n₃)^2*log(1-n₃))/(6π*n₃^2*(1-n₃)^2)
 
