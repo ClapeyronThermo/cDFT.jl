@@ -7,6 +7,7 @@ include("utils/types.jl")
 include("utils/integrals.jl")
 
 include("models/FMT.jl")
+include("models/HC.jl")
 include("models/PCSAFT.jl")
 
 include("methods/initial.jl")

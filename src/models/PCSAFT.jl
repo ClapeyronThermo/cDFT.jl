@@ -17,15 +17,16 @@ function PCSAFTFunctional(eosmodel::EoSModel,width::Float64;dz::Float64=0.01)
     coords_full = range(-width-2,width+2,length=N)
     coords_full = [coords_full[i] for i in 1:N]
     coords = coords_full[-width .<=coords_full .<=width]
-    return PCSAFTFunctional(eosmodel,coords.*σ,zeros(length(coords)),coords_full.*σ,zeros(N),width*σ)
+    return PCSAFTFunctional(eosmodel,coords,zeros(length(coords)),coords_full,zeros(N),width)
 end
 
 function F(model::PCSAFTFunctionalModel,T)
-    return F_hs(model,T)
+    m = model.eosmodel.params.segment.values[1]
+    return m*F_hs(model,T)+F_hc(model,T)
 end
 
 function δFδρ(model::PCSAFTFunctionalModel,T)
-    return δFδρ_hs(model,T)
+    return δFδρ_hs(model,T)+δFδρ_hc(model,T)
 end
 
 export F, δFδρ
