@@ -4,7 +4,7 @@ function initial_interfacial_density_profile!(model::FunctionalModel,T)
     z = model.coords_full
     σ = model.eosmodel.params.sigma.values[1]
     (Tc,pc,vc) = crit_pure(model.eosmodel)
-    (T,vl,vv) = saturation_pressure(model.eosmodel,T)
+    (p,vl,vv) = saturation_pressure(model.eosmodel,T)
 
     ρl = 1/vl
     ρv = 1/vv
