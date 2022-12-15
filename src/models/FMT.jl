@@ -15,38 +15,76 @@ function F_hs(model::SAFTFunctionalModel,T)
 
     (n₀, n₁, n₂, n₃, nᵥ₁, nᵥ₂)  = weights_hs(model,T,z)
     
-    Φ = @. -n₀*log(1-n₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃)/(12*π*n₃^2)+1/(12*π*n₃*(1-n₃)^2))
+    Φ = @. f_hs(Ref(model), T, n₀, n₁, n₂, n₃, nᵥ₁, nᵥ₂)
 
     return ∫(Φ,dz) ./ ∫(n₀,dz)
 end
 
+function f_hs(model::SAFTFunctionalModel, T, n₀, n₁, n₂, n₃, nᵥ₁, nᵥ₂)
+    m = model.eosmodel.params.segment.values[1]
+    return m*(-n₀*log(1-n₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃)/(12*π*n₃^2)+1/(12*π*n₃*(1-n₃)^2)))
+end
+
+function δfδρ_hs(model::SAFTFunctionalModel ,T ,n₀, n₁, n₂, n₃, nᵥ₁, nᵥ₂)    
+    f(x) = f_hs(model,T,x[1],x[2],x[3],x[4],x[5],x[6])
+    df(x) = ForwardDiff.gradient(f,x)
+
+    δfδn  = mapslices(df,hcat([n₀ n₁ n₂ n₃ nᵥ₁ nᵥ₂]);dims=2)
+    ∂f∂n₀ = δfδn[:,1]
+    ∂f∂n₁ = δfδn[:,2]
+    ∂f∂n₂ = δfδn[:,3]
+    ∂f∂n₃ = δfδn[:,4]
+    ∂f∂nᵥ₁ = δfδn[:,5]
+    ∂f∂nᵥ₂ = δfδn[:,6]
+    
+    return (∂f∂n₀, ∂f∂n₁, ∂f∂n₂, ∂f∂n₃, ∂f∂nᵥ₁, ∂f∂nᵥ₂)
+end
+
 function δFδρ_hs(model::SAFTFunctionalModel,T)
+    HSd = d(model.eosmodel,[],T,[1.])[1]
+
     z = model.coords
     z_full = model.coords_full
-
-    HSd = d(model.eosmodel,[],T,[1.])[1]
-    dz = (z[2]-z[1])*HSd
-
-    m = model.eosmodel.params.segment.values[1]
     
     idx1 = @. (z[1]-1<=z_full && z_full<=z[end]+1)
 
     (n₀, n₁, n₂, n₃, nᵥ₁, nᵥ₂)  = weights_hs(model,T,z_full[idx1])
+    (∂f∂n₀, ∂f∂n₁, ∂f∂n₂, ∂f∂n₃, ∂f∂nᵥ₁, ∂f∂nᵥ₂) = δfδρ_hs(model, T, n₀, n₁, n₂, n₃, nᵥ₁, nᵥ₂)
 
-    ∂Φ∂n₀ = @. -log(1-n₃)
-    ∂Φ∂n₁ = @. n₂/(1-n₃)
-    ∂Φ∂n₂ = @. n₁/(1-n₃)+3*(n₂^2-nᵥ₂^2)*
-               (n₃+(1-n₃)^2*log(1-n₃))/(36π*n₃^2*(1-n₃)^2)
-    ∂Φ∂n₃ = @. n₀/(1-n₃)+(n₁*n₂-nᵥ₁*nᵥ₂)/(1-n₃)^2-(n₂^3-3*n₂*nᵥ₂^2)*
-               (n₃*(n₃^2-5*n₃+2)+2*(1-n₃)^3*log(1-n₃))/(36π*n₃^3*(1-n₃)^3)
-    ∂Φ∂nᵥ₁ = @. -nᵥ₂/(1-n₃)
-    ∂Φ∂nᵥ₂ = @. -nᵥ₁/(1-n₃)-n₂*nᵥ₂*(n₃+(1-n₃)^2*log(1-n₃))/(6π*n₃^2*(1-n₃)^2)
+    δFδρ_hs_1 = ∫fdz.(Ref(1/HSd*∂f∂n₀+1/2*∂f∂n₁+π*HSd*∂f∂n₂),Ref(z_full[idx1]),z,1/2)*HSd
+    δFδρ_hs_2 = ∫fz²dz.(Ref(π*∂f∂n₃),Ref(z_full[idx1]),z,1/2)*HSd^3
+    δFδρ_hs_3 = ∫fzdz.(Ref(1/HSd*∂f∂nᵥ₁+2π*∂f∂nᵥ₂),Ref(z_full[idx1]),z,1/2)*HSd^2
 
-    δFδρ_hs_1 = ∫fdz.(Ref(1/HSd*∂Φ∂n₀+1/2*∂Φ∂n₁+π*HSd*∂Φ∂n₂),Ref(z_full[idx1]),z,1/2)*HSd
-    δFδρ_hs_2 = ∫fz²dz.(Ref(π*∂Φ∂n₃),Ref(z_full[idx1]),z,1/2)*HSd^3
-    δFδρ_hs_3 = ∫fzdz.(Ref(1/HSd*∂Φ∂nᵥ₁+2π*∂Φ∂nᵥ₂),Ref(z_full[idx1]),z,1/2)*HSd^2
-    return m*(δFδρ_hs_1+δFδρ_hs_2+δFδρ_hs_3)
+    return δFδρ_hs_1+δFδρ_hs_2+δFδρ_hs_3
 end
+
+# function δFδρ_hs(model::SAFTFunctionalModel,T)
+#     z = model.coords
+#     z_full = model.coords_full
+
+#     HSd = d(model.eosmodel,[],T,[1.])[1]
+#     dz = (z[2]-z[1])*HSd
+
+#     m = model.eosmodel.params.segment.values[1]
+    
+#     idx1 = @. (z[1]-1<=z_full && z_full<=z[end]+1)
+
+#     (n₀, n₁, n₂, n₃, nᵥ₁, nᵥ₂)  = weights_hs(model,T,z_full[idx1])
+
+#     ∂Φ∂n₀ = @. -log(1-n₃)
+#     ∂Φ∂n₁ = @. n₂/(1-n₃)
+#     ∂Φ∂n₂ = @. n₁/(1-n₃)+3*(n₂^2-nᵥ₂^2)*
+#                (n₃+(1-n₃)^2*log(1-n₃))/(36π*n₃^2*(1-n₃)^2)
+#     ∂Φ∂n₃ = @. n₀/(1-n₃)+(n₁*n₂-nᵥ₁*nᵥ₂)/(1-n₃)^2-(n₂^3-3*n₂*nᵥ₂^2)*
+#                (n₃*(n₃^2-5*n₃+2)+2*(1-n₃)^3*log(1-n₃))/(36π*n₃^3*(1-n₃)^3)
+#     ∂Φ∂nᵥ₁ = @. -nᵥ₂/(1-n₃)
+#     ∂Φ∂nᵥ₂ = @. -nᵥ₁/(1-n₃)-n₂*nᵥ₂*(n₃+(1-n₃)^2*log(1-n₃))/(6π*n₃^2*(1-n₃)^2)
+
+#     δFδρ_hs_1 = ∫fdz.(Ref(1/HSd*∂Φ∂n₀+1/2*∂Φ∂n₁+π*HSd*∂Φ∂n₂),Ref(z_full[idx1]),z,1/2)*HSd
+#     δFδρ_hs_2 = ∫fz²dz.(Ref(π*∂Φ∂n₃),Ref(z_full[idx1]),z,1/2)*HSd^3
+#     δFδρ_hs_3 = ∫fzdz.(Ref(1/HSd*∂Φ∂nᵥ₁+2π*∂Φ∂nᵥ₂),Ref(z_full[idx1]),z,1/2)*HSd^2
+#     return m*(δFδρ_hs_1+δFδρ_hs_2+δFδρ_hs_3)
+# end
 
 function weights_hs(model::SAFTFunctionalModel,T,z_eval)
     z_full = model.coords_full
