@@ -1,0 +1,1 @@
+Base.length(model::FunctionalModel) = Base.length(model.eosmodel)
