@@ -2,13 +2,13 @@
 #     return sum(f)*dz
 # end
 
-function ∫(f,dz)
-    return (f[1]+f[end]+2*sum(f[2:end-1]))*dz/2
-end
-
 # function ∫(f,dz)
-#     return 1/3*dz*(f[1]+f[end]+4*sum(f[2:2:end-1])+2*sum(f[3:2:end-1]))
+#     return (f[1]+f[end]+2*sum(f[2:end-1]))*dz/2
 # end
+
+function ∫(f,dz)
+    return 1/3*dz*(f[1]+f[end]+4*sum(f[2:2:end-1])+2*sum(f[3:2:end-1]))
+end
 
 function ∫fdz(f::Vector,z::Vector,z_eval::Float64,lim::Float64)
     dz = z[2]-z[1]
