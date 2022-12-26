@@ -1,59 +1,68 @@
 export F_hc, δFδρ_hc
 
-function F_hc(model::SAFTFunctionalModel,T)
-    m = model.eosmodel.params.segment.values[1]
-    z = model.coords
-    HSd = d(model.eosmodel,[],T,[1.])[1]
-    dz = (z[2]-z[1])*HSd
+function F_hc(model::SAFTModel,ρ,T,z)
+    HSd = d(model,[],T,[1.])[1]
+    dz = ρ.mesh_size
+
+    lim = 1/2*HSd
+
+    (n, n₃,nᵥ)  = weights_hs(model,ρ,z,lim)
+
+    n₀ = n./HSd
     
-    (n₀, n₁, n₂, n₃, nᵥ₁, nᵥ₂)  = weights_hs(model,T,z)
-    
-    I = f_hc(Ref(model), T, n₀, n₁, n₂, n₃, nᵥ₁, nᵥ₂)
+    I = f_hc.(Ref(model), T, n, n₃, nᵥ)
 
     return ∫(I,dz)/∫(n₀,dz)
 end
 
-function f_hc(model::SAFTFunctionalModel, T, n₀, n₁, n₂, n₃, nᵥ₁, nᵥ₂)
-    m = model.eosmodel.params.segment.values[1]
-    HSd = d(model.eosmodel,[],T,[1.])[1]
+function f_hc(model::SAFTModel, T, n, n₃, nᵥ)
+    m = model.params.segment.values[1]
+    HSd = d(model,[],T,[1.])[1]
     
-    N₂ = n₂/6
-    g_hs = @. 1/(1-n₃)+3/2*N₂*HSd/(1-n₃)^2+1/2*N₂^2*HSd^2/(1-n₃)^3
+    n₀ = n./HSd
+    n₂ = π.*HSd.*n/6
+    g_hs = @. 1/(1-n₃)+3/2*n₂*HSd/(1-n₃)^2+1/2*n₂^2*HSd^2/(1-n₃)^3
     
     return -n₀*(m-1)*log(g_hs)
 end
 
-function δfδρ_hc(model::SAFTFunctionalModel ,T ,n₀, n₁, n₂, n₃, nᵥ₁, nᵥ₂)    
-    f(x) = f_hc(model,T,x[1],x[2],x[3],x[4],x[5],x[6])
+function δfδρ_hc(model::SAFTModel , T, n, n₃, nᵥ)
+    f(x) = f_hc(model,T,x[1],x[2],x[3])
     df(x) = ForwardDiff.gradient(f,x)
 
-    δfδn  = mapslices(df,hcat([n₀ n₁ n₂ n₃ nᵥ₁ nᵥ₂]);dims=2)
-    ∂f∂n₀ = δfδn[:,1]
-    ∂f∂n₁ = δfδn[:,2]
-    ∂f∂n₂ = δfδn[:,3]
-    ∂f∂n₃ = δfδn[:,4]
-    ∂f∂nᵥ₁ = δfδn[:,5]
-    ∂f∂nᵥ₂ = δfδn[:,6]
+    δfδn  = mapslices(df,hcat([n n₃ nᵥ]);dims=2)
+    ∂f∂n = δfδn[:,1]
+    ∂f∂n₃ = δfδn[:,2]
+    ∂f∂nᵥ = δfδn[:,3]
     
-    return (∂f∂n₀, ∂f∂n₁, ∂f∂n₂, ∂f∂n₃, ∂f∂nᵥ₁, ∂f∂nᵥ₂)
+    return (∂f∂n, ∂f∂n₃, ∂f∂nᵥ)
 end
 
 
-function δFδρ_hc(model::SAFTFunctionalModel,T)
-    HSd = d(model.eosmodel,[],T,[1.])[1]
+function δFδρ_hc(model::SAFTModel,ρ,T,z)
+    HSd = d(model,[],T,[1.])[1]
+    lim = 1/2*HSd
+    bounds = ρ.bounds.+[-lim,lim]
+    mesh_size = ρ.mesh_size
 
-    z = model.coords
-    z_full = model.coords_full
-    
-    idx1 = @. (z[1]-1<=z_full && z_full<=z[end]+1)
+    (n, n₃, nᵥ)  = weights_hs(model,ρ,z,lim)
 
-    (n₀, n₁, n₂, n₃, nᵥ₁, nᵥ₂)  = weights_hs(model,T,z_full[idx1])
-    (∂f∂n₀, ∂f∂n₁, ∂f∂n₂, ∂f∂n₃, ∂f∂nᵥ₁, ∂f∂nᵥ₂) = δfδρ_hc(model, T, n₀, n₁, n₂, n₃, nᵥ₁, nᵥ₂)
+    z_damp = 0:mesh_size:bounds[2]
+    zu = [z_damp[i] for i in 1:length(z_damp)]
+    zd = [-z_damp[i] for i in length(z_damp):-1:2]
+    z_damp = vcat(zd,zu)
 
-    δFδρ_hc_1 = ∫fdz.(Ref(1/HSd*∂f∂n₀+1/2*∂f∂n₁+π*HSd*∂f∂n₂),Ref(z_full[idx1]),z,1/2)*HSd
-    δFδρ_hc_2 = ∫fz²dz.(Ref(π*∂f∂n₃),Ref(z_full[idx1]),z,1/2)*HSd^3
-    δFδρ_hc_3 = ∫fzdz.(Ref(1/HSd*∂f∂nᵥ₁+2π*∂f∂nᵥ₂),Ref(z_full[idx1]),z,1/2)*HSd^2
+    (∂f∂n, ∂f∂n₃, ∂f∂nᵥ) = δfδρ_hc(model, T, n, n₃, nᵥ)
 
+    ∂f∂n = DensityProfile(∂f∂n,z_damp,bounds,[∂f∂n[1],∂f∂n[end]])
+    ∂f∂n₃ = DensityProfile(∂f∂n₃,z_damp,bounds,[∂f∂n₃[1],∂f∂n₃[end]])
+    ∂f∂nᵥ = DensityProfile(∂f∂nᵥ,z_damp,bounds,[∂f∂nᵥ[1],∂f∂nᵥ[end]])
+
+    span = range(-lim,lim,length=101)
+
+    δFδρ_hc_1 = ∫ρdz.(Ref(∂f∂n),z,Ref(span))
+    δFδρ_hc_2 = π*∫ρz²dz.(Ref(∂f∂n₃),z,Ref(span))
+    δFδρ_hc_3 = -∫ρzdz.(Ref(∂f∂nᵥ),z,Ref(span))
     return δFδρ_hc_1+δFδρ_hc_2+δFδρ_hc_3
 end
 
