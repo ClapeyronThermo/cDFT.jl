@@ -64,9 +64,9 @@ function δFδρ_hs(model::SAFTModel,ρ,T,z)
 
     (∂f∂n, ∂f∂n₃, ∂f∂nᵥ) = δfδρ_hs(model, T, n, n₃, nᵥ)
 
-    ∂f∂n = DensityProfile(∂f∂n,z_damp,bounds,[∂f∂n[1],∂f∂n[end]])
-    ∂f∂n₃ = DensityProfile(∂f∂n₃,z_damp,bounds,[∂f∂n₃[1],∂f∂n₃[end]])
-    ∂f∂nᵥ = DensityProfile(∂f∂nᵥ,z_damp,bounds,[∂f∂nᵥ[1],∂f∂nᵥ[end]])
+    ∂f∂n = DensityProfile(∂f∂n,z,bounds,[∂f∂n[1],∂f∂n[end]])
+    ∂f∂n₃ = DensityProfile(∂f∂n₃,z,bounds,[∂f∂n₃[1],∂f∂n₃[end]])
+    ∂f∂nᵥ = DensityProfile(∂f∂nᵥ,z,bounds,[∂f∂nᵥ[1],∂f∂nᵥ[end]])
 
     span = range(-lim,lim,length=101)
 

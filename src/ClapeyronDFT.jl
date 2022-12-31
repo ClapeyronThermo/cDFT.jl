@@ -8,9 +8,9 @@ using Clapeyron: PCSAFTModel
 
 
 include("utils/types.jl")
-include("utils/integrals.jl")
 include("utils/base.jl")
 include("utils/profiles.jl")
+include("utils/integrals.jl")
 include("utils/initial.jl")
 
 include("models/weights.jl")

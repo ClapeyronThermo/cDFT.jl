@@ -47,7 +47,15 @@ function DensityProfile(ρ,z,bounds,boundary_conditions)
     end
 
     return DensityProfile(z,ρ,bounds,boundary_conditions,coeffs[3:end-2,:],dz)
-end    
+end
+
+function update_profile!(ρ,ρnew)
+    z = ρ.coords
+    bounds = ρ.bounds
+    boundary_conditions = ρ.boundary_conditions
+    ρ = DensityProfile(ρnew,z,bounds,boundary_conditions)
+    return ρ
+end
 
 function (ρ::DensityProfile)(z)
     # Value sits on upper interval border
