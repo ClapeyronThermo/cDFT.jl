@@ -1,7 +1,12 @@
 function interfacial_tension(model::EoSModel,T)
     σ = model.params.sigma[1]
+    (Tc,pc,vc) = crit_pure(model)
     (p,vl,vv) = saturation_pressure(model,T)
-    ρ,z = initial_interfacial_density_profile(model,T,[-10σ,10σ],101);
+    # if T<0.75Tc
+        ρ,z = initial_interfacial_density_profile(model,T,[-25σ,25σ],201)
+    # else
+        # ρ,z = initial_interfacial_density_profile(model,T,[-25σ,25σ],201)
+    # end
 
     ρ = converge_profile!(model,ρ,T,z)
 
