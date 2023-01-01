@@ -1,5 +1,5 @@
 function F_res(model::PCSAFTModel,ρ,T,z)
-    ψ = 1.5357
+    ψ = 1.3862
     HSd = d(model,[],T,[1.])[1]
     dz = ρ.mesh_size
     bounds = ρ.bounds
@@ -58,7 +58,7 @@ end
 
 function δFδρ_disp(model::PCSAFTModel,ρ,T,z)
     HSd = d(model,[],T,[1.])[1]
-    lim = 1.5357*HSd
+    lim = 1.3862*HSd
     bounds = ρ.bounds.+[-lim,lim]
     mesh_size = ρ.mesh_size
 
@@ -95,8 +95,7 @@ function f_hc(model::PCSAFTModel, T, ρhc, ρ̄hc, λ)
 end
 
 function f_disp(model::PCSAFTModel, T, ρ̄)
-    ψ = 1.5357
-
+    ψ = 1.3862
     HSd = d(model,[],T,[1.])[1]
     ρ̄ = ρ̄*3/(4*ψ^3*HSd^3)/π
 
@@ -128,5 +127,29 @@ function I(model::PCSAFTModel,m̄,n₃,n)
     end
     return res
 end
+
+# function f_assoc(model::PCSAFTModel, T, n, n₃, nᵥ)
+#     _0 = zero(V+T+first(z))
+#     nn = Clapeyron.assoc_pair_length(model)
+#     iszero(nn) && return _0
+#     X_ = X()
+
+#     return -n₀*log(1-n₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃)/(12*π*n₃^2)+1/(12*π*n₃*(1-n₃)^2))
+# end
+
+# function Δ(model::PCSAFTModel, T, n₀, n₂, n₃, nᵥ₂, a, b)
+#     ϵ_assoc = model.params.epsilon_assoc.values
+#     κ = model.params.bondvol.values
+#     κijab = κ[1,1][a,b] 
+#     iszero(κijab) && return _0
+
+#     σ = model.params.sigma.values[1]
+#     m = model.params.segment[1]
+#     HSd = d(model,[],T,[1.])[1]
+
+#     ξ = 1-nᵥ₂^2/n₂^2
+#     g_hs = 1/(1-n₃)+HSd*ξ*n₂/(2*(1-n₃)^2)+HSd^2*n₂^2*ξ/(18*(1-n₃)^3)
+#     return g_hs*σ*(exp(ϵ_assoc[i,j][a,b]/T)-1)*κijab
+# end
 
 export F_res, δFδρ_res
