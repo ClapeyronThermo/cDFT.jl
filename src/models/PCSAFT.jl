@@ -9,12 +9,11 @@ function F_res(model::PCSAFTModel,ρ,T,z)
     (_, ρ̄,_)    = weights_hs(model,ρ,z,ψ*HSd)
 
     ρhc = ρ.(z)*N_A
-    n₀ = n./HSd
     
     Φ = f_hs.(Ref(model), Ref(T), n, n₃, nᵥ)+
         f_hc.(Ref(model), Ref(T), ρhc, ρ̄hc, λ)+
         f_disp.(Ref(model), Ref(T), ρ̄)
-    return ∫(Φ,dz) ./ ∫(n₀,dz)
+    return ∫(Φ,dz)
 end
 
 function δFδρ_res(model::PCSAFTModel,ρ,T,z)
@@ -53,7 +52,7 @@ function δFδρ_hc(model::PCSAFTModel,ρ,T,z)
 
     δFδρ_1 = ∫ρdz.(Ref(∂f∂λ),z,Ref(span))
     δFδρ_2 = π*∫ρz²dz.(Ref(∂f∂ρ̄hc),z,Ref(span))
-    δFδρ_3 = ∂f∂ρhc.(z)./model.params.segment[1]
+    δFδρ_3 = ∂f∂ρhc.(z)
     return δFδρ_1+δFδρ_2+δFδρ_3
 end
 
@@ -88,11 +87,11 @@ function f_hc(model::PCSAFTModel, T, ρhc, ρ̄hc, λ)
     HSd = d(model,[],T,[1.])[1]
     m = model.params.segment.values[1]
 
-    ζ₃ = 1/8*ρ̄hc
-    λ = λ/(2*m*HSd)
+    ζ₃ = 1/8*m*ρ̄hc
+    λ = λ/(2*HSd)
     
     yᵈᵈ = @. 1/(1-ζ₃)+1.5*ζ₃/(1-ζ₃)^2+0.5*ζ₃^2/(1-ζ₃)^3
-    return @. -ρhc*m*(m-1)*log(yᵈᵈ*λ/ρhc)
+    return @. -ρhc*(m-1)*log(yᵈᵈ*λ/ρhc)
 end
 
 function f_disp(model::PCSAFTModel, T, ρ̄)
@@ -105,13 +104,13 @@ function f_disp(model::PCSAFTModel, T, ρ̄)
     σ = model.params.sigma.values[1]
     m = model.params.segment.values[1]
 
-    η = π/6*ρ̄*HSd^3
+    η = π/6*ρ̄*m*HSd^3
 
     C₁ = 1+m*(8*η-2*η^2)/(1-η)^4+(1-m)*(20*η-27*η^2+12*η^3-2*η^4)/((1-η)^2*(2-η)^2)
     I₁ = I(model,m,η,1)
     I₂ = I(model,m,η,2)
 
-    return -π*m*ρ̄^2*(2*I₁*ϵ+m*C₁^-1*I₂*ϵ^2)*σ^3
+    return -π*ρ̄^2*m^2*(2*I₁*ϵ+m*C₁^-1*I₂*ϵ^2)*σ^3
 end
 
 function I(model::PCSAFTModel,m̄,n₃,n)

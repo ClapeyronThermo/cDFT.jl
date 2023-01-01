@@ -20,21 +20,23 @@ function F_hs(model::SAFTModel,ρ,T,z)
     
     Φ = f_hs.(Ref(model), Ref(T), n, n₃, nᵥ)
 
-    return ∫(Φ,dz) ./ ∫(n₀,dz)
+    return ∫(Φ,dz)
 end
 
 function f_hs(model::SAFTModel, T, n, n₃, nᵥ)
+    m = model.params.segment[1]
     HSd = d(model,[],T,[1.])[1]
 
-    n₀ = n./HSd
-    n₁ = n./2
-    n₂ = π.*HSd.*n
+    n₀ = n.*m./HSd
+    n₁ = n.*m./2
+    n₂ = π.*HSd.*n.*m
 
-    nᵥ₁ = -nᵥ./HSd
-    nᵥ₂ = -2π.*nᵥ
+    nᵥ₁ = -nᵥ.*m./HSd
+    nᵥ₂ = -2π.*nᵥ.*m
+    n₃  = n₃.*m
 
     m = model.params.segment.values[1]
-    return m*(-n₀*log(1-n₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃)/(12*π*n₃^2)+1/(12*π*n₃*(1-n₃)^2)))
+    return -n₀*log(1-n₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃)/(12*π*n₃^2)+1/(12*π*n₃*(1-n₃)^2))
 end
 
 function δfδρ_hs(model::SAFTModel ,T ,n, n₃, nᵥ)    
