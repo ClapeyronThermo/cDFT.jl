@@ -2,9 +2,9 @@ module ClapeyronDFT
 
 using ForwardDiff
 using Clapeyron
-using Clapeyron: d, N_A, k_B
+using Clapeyron: d, N_A, k_B, R̄
 using Clapeyron: Solvers, log, sqrt, log1p
-using Clapeyron: PCSAFTModel
+using Clapeyron: PCSAFTModel, BasicIdealModel
 
 
 include("utils/types.jl")
@@ -13,10 +13,14 @@ include("utils/profiles.jl")
 include("utils/integrals.jl")
 include("utils/initial.jl")
 
+include("models/BasicIdeal.jl")
+
 include("models/weights.jl")
 include("models/FMT.jl")
 include("models/HC.jl")
 include("models/PCSAFT.jl")
 
+include("methods/profiles.jl")
+include("methods/interfacial_tension.jl")
 
 end
