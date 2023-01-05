@@ -1,8 +1,9 @@
 module ClapeyronDFT
 
-using ForwardDiff, NLSolvers
+using ForwardDiff, NLSolvers, FixedPointAcceleration
 using Clapeyron
 using Clapeyron: d, N_A, k_B, R̄
+using Clapeyron: @comps
 using Clapeyron: Solvers, log, sqrt, log1p
 using Clapeyron: PCSAFTModel, BasicIdealModel
 
