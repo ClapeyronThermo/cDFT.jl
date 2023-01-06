@@ -9,74 +9,72 @@ Hard-Sphere Functional derived using Fundamental Measure Theory as presented by 
 """
 
 function F_hs(model::SAFTModel,ρ,T,z)
-    HSd = d(model,[],T,[1.])[1]
-    dz = ρ.mesh_size
+    HSd = d(model,[],T,ones(length(model)))
+    dz = ρ[1].mesh_size
 
     lim = 1/2*HSd
 
     (n, n₃,nᵥ)  = weights_hs(model,ρ,z,lim)
 
-    n₀ = n./HSd
-    
-    Φ = f_hs.(Ref(model), Ref(T), n, n₃, nᵥ)
+    nc = length(model)
+    idx = 1:nc
+    f(x) = f_hs(model,T,x[idx],x[idx.+nc],x[idx.+2*nc])
 
+    Φ = mapslices(f,hcat([n n₃ nᵥ]);dims=2)
     return ∫(Φ,dz)
 end
 
 function f_hs(model::SAFTModel, T, n, n₃, nᵥ)
-    m = model.params.segment[1]
-    HSd = d(model,[],T,[1.])[1]
+    m = model.params.segment.values
+    HSd = d(model,[],T,ones(length(n)))
 
-    n₀ = n.*m./HSd
-    n₁ = n.*m./2
-    n₂ = π.*HSd.*n.*m
+    n₀ = sum(n.*m./HSd)
+    n₁ = sum(n.*m./2)
+    n₂ = sum(π.*HSd.*n.*m)
 
-    nᵥ₁ = -nᵥ.*m./HSd
-    nᵥ₂ = -2π.*nᵥ.*m
-    n₃  = n₃.*m
-
-    m = model.params.segment.values[1]
+    nᵥ₁ = sum(-nᵥ.*m./HSd)
+    nᵥ₂ = sum(-2π.*nᵥ.*m)
+    n₃  = sum(n₃.*m)
     return -n₀*log(1-n₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃)/(12*π*n₃^2)+1/(12*π*n₃*(1-n₃)^2))
 end
 
 function δfδρ_hs(model::SAFTModel ,T ,n, n₃, nᵥ)    
-    f(x) = f_hs(model,T,x[1],x[2],x[3])
+    nc = length(model)
+    idx = 1:nc
+    f(x) = f_hs(model,T,x[idx],x[idx.+nc],x[idx.+2*nc])
     df(x) = ForwardDiff.gradient(f,x)
 
     δfδn  = mapslices(df,hcat([n n₃ nᵥ]);dims=2)
-    ∂f∂n = δfδn[:,1]
-    ∂f∂n₃ = δfδn[:,2]
-    ∂f∂nᵥ = δfδn[:,3]
+    ∂f∂n = δfδn[:,idx]
+    ∂f∂n₃ = δfδn[:,idx.+nc]
+    ∂f∂nᵥ = δfδn[:,idx.+2*nc]
     
     return (∂f∂n, ∂f∂n₃, ∂f∂nᵥ)
 end
 
 function δFδρ_hs(model::SAFTModel,ρ,T,z)
-    HSd = d(model,[],T,[1.])[1]
+    HSd = d(model,[],T,ones(length(model)))
     lim = 1/2*HSd
-    bounds = ρ.bounds.+[-lim,lim]
-    mesh_size = ρ.mesh_size
 
     (n, n₃, nᵥ)  = weights_hs(model,ρ,z,lim)
 
-    z_damp = 0:mesh_size:bounds[2]
-    zu = [z_damp[i] for i in 1:length(z_damp)]
-    zd = [-z_damp[i] for i in length(z_damp):-1:2]
-    z_damp = vcat(zd,zu)
+    (∂f∂n0, ∂f∂n₃0, ∂f∂nᵥ0) = δfδρ_hs(model, T, n, n₃, nᵥ)
+    δFδρ_hs = zeros(length(z),length(model))
+    for i in @comps 
+        bounds = ρ[i].bounds.+[-lim[i],lim[i]]
+        ∂f∂n = DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
+        ∂f∂n₃ = DensityProfile(∂f∂n₃0[:,i],z,bounds,[∂f∂n₃0[1,i],∂f∂n₃0[end,i]])
+        ∂f∂nᵥ = DensityProfile(∂f∂nᵥ0[:,i],z,bounds,[∂f∂nᵥ0[1,i],∂f∂nᵥ0[end,i]])
+    
+        span = range(-lim[i],lim[i],length=101)
 
-    (∂f∂n, ∂f∂n₃, ∂f∂nᵥ) = δfδρ_hs(model, T, n, n₃, nᵥ)
+        δFδρ_hs_1 = ∫ρdz.(Ref(∂f∂n),z,Ref(span))
+        δFδρ_hs_2 = π*∫ρz²dz.(Ref(∂f∂n₃),z,Ref(span))
+        δFδρ_hs_3 = -∫ρzdz.(Ref(∂f∂nᵥ),z,Ref(span))
 
-    ∂f∂n = DensityProfile(∂f∂n,z,bounds,[∂f∂n[1],∂f∂n[end]])
-    ∂f∂n₃ = DensityProfile(∂f∂n₃,z,bounds,[∂f∂n₃[1],∂f∂n₃[end]])
-    ∂f∂nᵥ = DensityProfile(∂f∂nᵥ,z,bounds,[∂f∂nᵥ[1],∂f∂nᵥ[end]])
-
-    span = range(-lim,lim,length=101)
-
-    δFδρ_hs_1 = ∫ρdz.(Ref(∂f∂n),z,Ref(span))
-    δFδρ_hs_2 = π*∫ρz²dz.(Ref(∂f∂n₃),z,Ref(span))
-    δFδρ_hs_3 = -∫ρzdz.(Ref(∂f∂nᵥ),z,Ref(span))
-
-    return δFδρ_hs_1+δFδρ_hs_2+δFδρ_hs_3
+        δFδρ_hs[:,i] = δFδρ_hs_1+δFδρ_hs_2+δFδρ_hs_3
+    end
+    return δFδρ_hs
 end
 
 # function δFδρ_hs(model::SAFTFunctionalModel,T)

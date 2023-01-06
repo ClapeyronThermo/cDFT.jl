@@ -1,7 +1,7 @@
 
 export initial_interfacial_density_profile, initial_uniform_density_profile
 
-function initial_interfacial_density_profile(model::EoSModel,T,bounds,ngrid::Int64=1001)
+function initial_interfacial_density_profile(model::EoSModel,T,bounds,ngrid::Int64=101)
     z = range(bounds[1],bounds[2],ngrid)
     z = [z[i] for i in 1:ngrid]
 
@@ -17,19 +17,45 @@ function initial_interfacial_density_profile(model::EoSModel,T,bounds,ngrid::Int
     σ = model.params.sigma.values[1]
     ρ =@. 1/2*(ρl-ρv)*tanh(z/σ*(2.4728-2.3625*T/Tc))+1/2*(ρl+ρv)
 
-    ρ = DensityProfile(ρ,z,bounds,boundary_conditions)
+    ρ = [DensityProfile(ρ,z,bounds,boundary_conditions)]
     return ρ, z
 end
 
-function initial_uniform_density_profile(model::EoSModel,ρ,bounds,ngrid::Int64=1001)
+function initial_interfacial_density_profile(model::EoSModel,T,x,bounds,ngrid::Int64=101)
     z = range(bounds[1],bounds[2],ngrid)
     z = [z[i] for i in 1:ngrid]
 
-    boundary_conditions = [ρ,ρ]
+    pure = Clapeyron.split_model(model)
+    crit = crit_pure.(pure)
+    (p,vl,vv,y) = bubble_pressure(model,T,x)
 
-    ρ = ρ*ones(length(z))
+    ρl = x./vl
+    ρv = y./vv
 
+    ρ = []
+    for i in @comps
+        boundary_conditions = [ρv[i],ρl[i]]
 
-    ρ = DensityProfile(ρ,z,bounds,boundary_conditions)
+        σ = model.params.sigma[i]
+        ρ_points =@. 1/2*(ρl[i]-ρv[i])*tanh(z/σ*(2.4728-2.3625*T/crit[i][1]))+1/2*(ρl[i]+ρv[i])
+
+        append!(ρ,[DensityProfile(ρ_points,z,bounds,boundary_conditions)])
+    end
+    return ρ, z
+end
+
+function initial_uniform_density_profile(model::EoSModel,ρ_val,bounds,ngrid::Int64=101)
+    z = range(bounds[1],bounds[2],ngrid)
+    z = [z[i] for i in 1:ngrid]
+
+    ρ = []
+
+    for i in @comps
+        boundary_conditions = [ρ_val[i],ρ_val[i]]
+
+        ρ_points = ρ_val[i]*ones(length(z))
+
+        append!(ρ,[DensityProfile(ρ_points,z,bounds,boundary_conditions)])
+    end
     return ρ, z
 end
