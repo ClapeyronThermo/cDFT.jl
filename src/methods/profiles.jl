@@ -1,4 +1,4 @@
-function converge_profile!(model,ρ,T,z;method=NLSolvers.Anderson(0,50,0.02,nothing))
+function converge_profile!(model,ρ,T,z;damping=0.05)
     ρl =[ρ[i].boundary_conditions[2] for i in @comps]
     Vl = 1/sum(ρl)
     X = ρl./sum(ρl)
@@ -26,7 +26,7 @@ function converge_profile!(model,ρ,T,z;method=NLSolvers.Anderson(0,50,0.02,noth
         return Gx
     end
 
-    fX(x) = obj(model,ρ,T,z,x,μ_res,ρl,0.05)
+    fX(x) = obj(model,ρ,T,z,x,μ_res,ρl,damping)
     X0 = zeros(length(z),length(ρ))
 
     for i in @comps
@@ -39,7 +39,7 @@ function converge_profile!(model,ρ,T,z;method=NLSolvers.Anderson(0,50,0.02,noth
                                             ConvergenceMetric = norm(output,input) = maximum(abs.(output./input .-1)),
                                             ConvergenceMetricThreshold=1e-6,
                                             MaxM=50)
-
+    return r
     ρ_new = r.FixedPoint_
     ρ_new = reshape(ρ_new,(length(z),length(ρ)))
     for i in @comps
