@@ -4,8 +4,10 @@ using ForwardDiff, NLSolvers, FixedPointAcceleration
 using Clapeyron
 using Clapeyron: d, N_A, k_B, R̄
 using Clapeyron: @comps
-using Clapeyron: Solvers, log, sqrt, log1p
+using Clapeyron: Solvers, log, sqrt, log1p, PackedVofV, sparse, SparseMatrixCSC
 using Clapeyron: PCSAFTModel, BasicIdealModel
+using Clapeyron: assoc_similar, assoc_matrix_solve, assoc_options, assoc_pair_length
+using Clapeyron: issite, compute_index, complement_index, indices
 
 
 include("utils/types.jl")
@@ -18,10 +20,10 @@ include("models/BasicIdeal.jl")
 
 include("models/weights.jl")
 include("models/FMT.jl")
-include("models/HC.jl")
 include("models/PCSAFT.jl")
 
 include("methods/profiles.jl")
+include("methods/surface_tension.jl")
 include("methods/interfacial_tension.jl")
 
 end
