@@ -13,10 +13,10 @@ function surface_tension(model::EoSModel,T)
 end
 
 function surface_tension(model::EoSModel,T,x)
-    σ = model.params.sigma[1]
+    σ = maximum(model.params.sigma.values)
     (p,vl,vv) = bubble_pressure(model,T,x)
     # if T<0.75Tc
-        ρ,z = initial_interfacial_density_profile(model,T,x,[-10σ,10σ],101)
+        ρ,z = initial_surface_tension_density_profile(model,T,x,[-10σ,10σ],101)
     # else
     #     ρ,z = initial_interfacial_density_profile(model,T,[-20σ,20σ],201)
     # end

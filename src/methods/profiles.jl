@@ -37,9 +37,9 @@ function converge_profile!(model,ρ,T,z;damping=0.05)
 
     r = fixed_point(fX, X0;Algorithm = :Anderson, 
                                             ConvergenceMetric = norm(output,input) = maximum(abs.(output./input .-1)),
-                                            ConvergenceMetricThreshold=1e-6,
+                                            ConvergenceMetricThreshold=1e-4,
                                             MaxM=50)
-    return r
+    # return r
     ρ_new = r.FixedPoint_
     ρ_new = reshape(ρ_new,(length(z),length(ρ)))
     for i in @comps

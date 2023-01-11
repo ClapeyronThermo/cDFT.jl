@@ -1,9 +1,9 @@
 function interfacial_tension(model::EoSModel,p,T,n)
     σ = maximum(model.params.sigma.values)
 
-    ρ,z = initial_interfacial_tension_density_profile(model,p,T,n,[-20σ,20σ],201)
+    ρ,z = initial_interfacial_tension_density_profile(model,p,T,n,[-20σ,20σ],201;coef=[2.,3.5])
 
-    ρ = converge_profile!(model,ρ,T,z;damping=0.00001)
+    ρ = converge_profile!(model,ρ,T,z;damping=0.001)
 
     ρ_bound = [ρ[i].boundary_conditions[1] for i in @comps]
 
