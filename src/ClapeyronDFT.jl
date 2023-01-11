@@ -8,7 +8,9 @@ using Clapeyron: Solvers, log, sqrt, log1p, PackedVofV, sparse, SparseMatrixCSC
 using Clapeyron: PCSAFTModel, BasicIdealModel
 using Clapeyron: assoc_similar, assoc_matrix_solve, assoc_options, assoc_pair_length
 using Clapeyron: issite, compute_index, complement_index, indices
-
+import Clapeyron.Solvers
+using Clapeyron: SingleComp
+using StaticArrays
 
 include("utils/types.jl")
 include("utils/base.jl")
