@@ -1,5 +1,6 @@
 module ClapeyronDFT
 
+using LinearAlgebra
 using ForwardDiff, NLSolvers, FixedPointAcceleration
 using Clapeyron
 using Clapeyron: d, N_A, k_B, R̄
@@ -17,6 +18,8 @@ include("utils/base.jl")
 include("utils/profiles.jl")
 include("utils/integrals.jl")
 include("utils/initial.jl")
+include("utils/anderson.jl") #TODO, port this to Clapeyron
+
 
 include("models/BasicIdeal.jl")
 

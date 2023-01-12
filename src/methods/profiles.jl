@@ -11,36 +11,41 @@ function converge_profile!(model,ρ,T,z;damping=0.05)
     #     return Gx
     # end
 
-    function obj(model,ρ,T,z,x,μ_res,ρl,α)
+    function obj(model,G,ρ,T,z,x,μ_res,ρl,α)
         x = reshape(x,(length(z),length(ρ)))
+        Gx = reshape(G,(length(z),length(ρ)))
         for i in @comps
-            ρ[i] = ClapeyronDFT.update_profile!(ρ[i],x[:,i])
+            ρ[i] = update_profile!(ρ[i],@view(x[:,i]))
         end
 
         δfδρ_res = δFδρ_res(model,ρ,T,z)
-        Gx = zeros(length(z),length(ρ))
+        #Gx = zeros(length(z),length(ρ))
         for i in @comps
-            Gx[:,i] = (1-α).*x[:,i]+α.*ρl[i].*exp.(μ_res[i].-δfδρ_res[:,i])
+            xi = @view(x[:,i])
+            δfδρ_resi = @view(δfδρ_res[:,i])
+            Gx[:,i] .= (1 .- α) .* xi .+ α .* ρl[i].*exp.(μ_res[i] .- δfδρ_resi)
         end
-        Gx = reshape(Gx,(length(z)*length(ρ)))
-        return Gx
+        return G
     end
 
-    fX(x) = obj(model,ρ,T,z,x,μ_res,ρl,damping)
     X0 = zeros(length(z),length(ρ))
-
+    GX0 = copy(X0)
+    f!(Gx,x) = obj(model,Gx,ρ,T,z,x,μ_res,ρl,damping)
+    fX(x) = obj(model,copy(x),ρ,T,z,x,μ_res,ρl,damping)
+    
     for i in @comps
         X0[:,i] = ρ[i].density
     end
 
-    X0 = reshape(X0,(length(z)*length(ρ)))
+    X0 = vec(X0)
 
-    r = fixed_point(fX, X0;Algorithm = :Anderson, 
+    ρ_new = Solvers.fixpoint(f!,X0,AndersonFixPoint(memory =20,delay = 5),rtol = 1e-4,return_last = true)
+    #=r = fixed_point(fX, X0;Algorithm = :Anderson, 
                                             ConvergenceMetric = norm(output,input) = maximum(abs.(output./input .-1)),
                                             ConvergenceMetricThreshold=1e-4,
-                                            MaxM=50)
-    # return r
-    ρ_new = r.FixedPoint_
+                                            MaxM=5)
+    # return r =#
+    #ρ_new = r.FixedPoint_
     ρ_new = reshape(ρ_new,(length(z),length(ρ)))
     for i in @comps
         ρ[i] = ClapeyronDFT.update_profile!(ρ[i],ρ_new[:,i])
