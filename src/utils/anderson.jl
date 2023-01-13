@@ -42,10 +42,11 @@ function Solvers._fixpoint(f!::F,
     while delay_iter < method.delay
         delay_iter += 1
         Gx = f!(Gx, x)
+        _rtol = rtol_anderson(Gx,x)
         Fx .= Gx .- x
         x .= Gx
         finite_check = NLSolvers.isallfinite(x)
-        if norm(Fx) < atol || rtol_anderson(Gx,x) < rtol || !finite_check
+        if norm(Fx) < atol ||_rtol < rtol || !finite_check
             return x
         end
     end
@@ -132,11 +133,11 @@ function Solvers._fixpoint(f!::F,
             x .= x .- (1 .- beta) .* (Fx .- Qv * Rv * γv)
         end
         finite_check = NLSolvers.isallfinite(x)
-
         if norm(Fx) < atol || rtol_anderson(Gx,x) < rtol || !finite_check
-            break #return (x = x, Fx = Fx, acc_iter = 0, finite = finite_check)
+            return x #return (x = x, Fx = Fx, acc_iter = 0, finite = finite_check)
         end
     end
+    
     !return_last && (x .= nan)
     return x
 end
