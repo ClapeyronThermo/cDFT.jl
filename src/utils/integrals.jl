@@ -1,5 +1,5 @@
 function ∫(f,dz)
-    return 1/3*dz*(f[1]+f[end]+4*sum(f[2:2:end-1])+2*sum(f[3:2:end-1]))
+    return 1/3*dz*(f[1]+f[end]+4*sum(@view(f[2:2:end-1]))+2*sum(@view(f[3:2:end-1])))
 end
 
 function ∫ρdz(ρ::DensityProfile,z_eval::Float64,span::StepRangeLen)
@@ -37,7 +37,7 @@ function ∫fzdz(model::FunctionalModel,f::Vector,z::Vector{Float64},z_eval::Flo
     idx = @. z_eval-lim-ϵerr<=z && z<=z_eval+lim+ϵerr
     dz = model.domain.mesh_size
 
-    return ∫(f[idx[:]].*(z[idx[:]].-z_eval),dz)
+    return ∫(f[vec(idx)].*(z[vec(idx)].-z_eval),dz)
 end
 
 
