@@ -14,13 +14,16 @@ function F_res(model::PCSAFTModel,ρ,T,z)
     nc = length(model)
     idx = 1:nc
 
-    f1(x) = f_hs(model,T,x[idx],x[idx.+nc],x[idx.+2*nc])+f_assoc(model,T,x[idx],x[idx.+nc],x[idx.+2*nc])
+    f1(x) = f_hs(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
+)+f_assoc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
+)
     Φ_hs_assoc = mapslices(f1,hcat([n n₃ nᵥ]);dims=2)
 
-    f2(x) = f_hc(model,T,x[idx],x[idx.+nc],x[idx.+2*nc])
+    f2(x) = f_hc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
+)
     Φ_hc = mapslices(f2,hcat([ρhc ρ̄hc λ]);dims=2)
     
-    f3(x) = f_disp(model,T,x[idx])
+    f3(x) = f_disp(model,T,@view(x[idx]))
     Φ_disp = mapslices(f3,ρ̄;dims=2)
     
     Φ = Φ_hs_assoc+Φ_hc+Φ_disp
@@ -46,7 +49,8 @@ function δFδρ_hc(model::PCSAFTModel,ρ,T,z)
 
     nc = length(model)
     idx = 1:nc
-    f(x) = f_hc(model,T,x[idx],x[idx.+nc],x[idx.+2*nc])
+    f(x) = f_hc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
+)
     df(x) = ForwardDiff.gradient(f,x)
 
     δfδn  = mapslices(df,hcat([ρhc ρ̄hc λ]);dims=2)
@@ -80,7 +84,7 @@ function δFδρ_disp(model::PCSAFTModel,ρ,T,z)
 
     nc = length(model)
     idx = 1:nc
-    f(x) = f_disp(model,T,x[idx])
+    f(x) = f_disp(model,T,@view(x[idx]))
     df(x) = ForwardDiff.gradient(f,x)
 
     δfδn0  = mapslices(df,ρ̄;dims=2)
@@ -109,7 +113,8 @@ function δFδρ_assoc(model::SAFTModel,ρ,T,z)
 
     nc = length(model)
     idx = 1:nc
-    f(x) = f_assoc(model,T,x[idx],x[idx.+nc],x[idx.+2*nc])
+    f(x) = f_assoc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
+)
     df(x) = ForwardDiff.gradient(f,x)
 
     δfδn0  = mapslices(df,hcat([n n₃ nᵥ]);dims=2)
