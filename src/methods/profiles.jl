@@ -39,7 +39,7 @@ function converge_profile!(model,ρ,T,z;damping=0.05)
 
     X0 = vec(X0)
 
-    ρ_new = Solvers.fixpoint(f!,X0,AndersonFixPoint(memory =20,delay = 5),rtol = 1e-4,return_last = true)
+    ρ_new = Solvers.fixpoint(f!,X0,AndersonFixPoint(memory =50),rtol = 1e-4)
     #=r = fixed_point(fX, X0;Algorithm = :Anderson, 
                                             ConvergenceMetric = norm(output,input) = maximum(abs.(output./input .-1)),
                                             ConvergenceMetricThreshold=1e-4,
