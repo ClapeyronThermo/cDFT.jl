@@ -1,4 +1,6 @@
-function ∫(f,dz)
+∫(f,dz) = _∫(f,dz)
+
+function _∫(f::AbstractArray,dz)
     return 1/3*dz*(f[1]+f[end]+4*sum(@view(f[2:2:end-1]))+2*sum(@view(f[3:2:end-1])))
 end
 
