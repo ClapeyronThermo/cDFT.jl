@@ -12,8 +12,7 @@ function _initial_eq_surface_tension(model::EoSModel,T,x)
     crit = crit_pure.(pure)
     Tc = first.(crit)
     (p,vl,vv,y) = bubble_pressure(model,T,x)
-    Tc,vl,vv,x,y
-    return 
+    return Tc,vl,vv,x,y 
 end
 
 function initial_surface_tension_density_profile(model::EoSModel,T,x,bounds,ngrid::Int64=101)

@@ -113,8 +113,7 @@ function δFδρ_assoc(model::SAFTModel,ρ,T,z)
 
     nc = length(model)
     idx = 1:nc
-    f(x) = f_assoc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
-)
+    f(x) = f_assoc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc]))
     df(x) = ForwardDiff.gradient(f,x)
 
     δfδn0  = mapslices(df,[n n₃ nᵥ];dims=2)
@@ -131,26 +130,44 @@ function δFδρ_assoc(model::SAFTModel,ρ,T,z)
     
         span = range(-lim[i],lim[i],length=101)
 
-        δFδρ_assoc_1 = ∫ρdz.(Ref(∂f∂n),z,Ref(span))
-        δFδρ_assoc_2 = π*∫ρz²dz.(Ref(∂f∂n₃),z,Ref(span))
-        δFδρ_assoc_3 = -∫ρzdz.(Ref(∂f∂nᵥ),z,Ref(span))
-
-        δFδρ_assoc[:,i] = δFδρ_assoc_1+δFδρ_assoc_2+δFδρ_assoc_3
+        for k in eachindex(z)
+            zk = z[k]
+            δFδρ_assoc_1 = ∫ρdz(∂f∂n,zk,span)
+            δFδρ_assoc_2 = π*∫ρz²dz(∂f∂n₃,zk,span)
+            δFδρ_assoc_3 = -∫ρzdz(∂f∂nᵥ,zk,span)
+            δFδρ_assoc[k,i] = δFδρ_assoc_1+δFδρ_assoc_2+δFδρ_assoc_3
+        end
     end
     return δFδρ_assoc
 end
 
-function f_hc(model::PCSAFTModel, T, ρhc, ρ̄hc, λ)
+function f_hc(model::PCSAFTModel, T, ρhc, ρ̄hc, _λ)
     HSd = d(model,nothing,T,onevec(model))
     m = model.params.segment.values
-
-    ζ₃ = sum(1/8*m.*ρ̄hc)
-    ζ₂ = sum(1/8*m.*ρ̄hc./HSd)
-    λ = λ./(2*HSd)
+    ζ₃ = zero(eltype(HSd)) + zero(eltype(ρ̄hc))
+    ζ₂ = zero(ζ₃)
+    for i in length(ρ̄hc)
+        mi,ρ̄hci,HSdi = m[i],ρ̄hc[i],HSd[i]
+        ζ₃ += mi*ρ̄hci
+        ζ₂ += mi*ρ̄hci/HSdi
+    end
+    ζ₃ *= 0.125
+    ζ₂ *= 0.125
+    #ζ₃ = 1/8*dot(m,ρ̄hc)
+    #ζ₂ = sum(1/8*m.*ρ̄hc./HSd)
+    ∑f = zero(ζ₃)
+    for i in length(_λ)
+        λ = _λ[i]/(2*HSd[i])
+        yᵈᵈ = 1/(1-ζ₃) + 1.5*HSd[i]*ζ₂/(1-ζ₃)^2+0.5*HSd[i]^2*ζ₂^2/(1-ζ₃)^3
+        fi = -ρhc[i]*(m[i]-1)*log(yᵈᵈ*λ/ρhc[i])
+        ∑f += fi
+    end
     
-    yᵈᵈ = @. 1/(1-ζ₃)+1.5*HSd*ζ₂/(1-ζ₃)^2+0.5*HSd^2*ζ₂^2/(1-ζ₃)^3
-    f = @. -ρhc*(m-1)*log(yᵈᵈ*λ/ρhc)
-    return sum(f)
+    return ∑f
+    #λ = _λ./(2*HSd) 
+    #yᵈᵈ = @. 1/(1-ζ₃)+1.5*HSd*ζ₂/(1-ζ₃)^2+0.5*HSd^2*ζ₂^2/(1-ζ₃)^3
+    #f = @. -ρhc*(m-1)*log(yᵈᵈ*λ/ρhc)
+    #return sum(f)
 end
 
 function f_disp(model::PCSAFTModel, T, ρ̄)
@@ -161,8 +178,8 @@ function f_disp(model::PCSAFTModel, T, ρ̄)
 
     ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
 
-    x = ρ̄/sum(ρ̄)
-    m̄ = sum(x.*m)
+    x = ρ̄ /sum(ρ̄)
+    m̄ = dot(x,m)
 
     η = π/6*sum(ρ̄.*m.*HSd.^3)
 
@@ -170,29 +187,10 @@ function f_disp(model::PCSAFTModel, T, ρ̄)
     I₁ = I(model,m̄,η,1)
     I₂ = I(model,m̄,η,2)
 
-    m2ϵσ3₁,m2ϵσ3₂ =  m2ϵσ3(model, T, x)
+    m2ϵσ3₁,m2ϵσ3₂ =  Clapeyron.m2ϵσ3(model,zero(T), T, x)
     ρ̄ = sum(ρ̄)
 
     return -2*π*ρ̄^2*I₁*m2ϵσ3₁-π*ρ̄^2*m̄*C₁^-1*I₂*m2ϵσ3₂
-end
-
-function m2ϵσ3(model::PCSAFTModel, T, x)
-    m = model.params.segment.values
-    σ = model.params.sigma.values
-    ϵ = model.params.epsilon.values
-    m2ϵσ3₂ = zero(T+first(x))
-    m2ϵσ3₁ = m2ϵσ3₂
-    @inbounds for i ∈ @comps
-        for j ∈ @comps
-            constant = x[i]*x[j]*m[i]*m[j] * σ[i,j]^3
-            exp1 = (ϵ[i,j]/T)
-            exp2 = exp1*exp1
-            m2ϵσ3₁ += constant*exp1
-            m2ϵσ3₂ += constant*exp2
-        end
-    end
-    return m2ϵσ3₁,m2ϵσ3₂
-    #return ∑(z[i]*z[j]*m[i]*m[j] * (ϵ[i,j]*(1)/T)^n * σ[i,j]^3 for i ∈ @comps, j ∈ @comps)/(sum(z)^2)
 end
 
 function I(model::PCSAFTModel,m̄,n₃,n)
