@@ -1,6 +1,6 @@
 function F_res(model::PCSAFTModel,ρ,T,z)
     ψ = 1.3862
-    HSd = d(model,[],T,ones(length(model)))
+    HSd = d(model,nothing,T,onevec(model))
     dz = ρ[1].mesh_size
 
     (n, n₃,nᵥ)  = weights_hs(model,ρ,z,1/2*HSd)
@@ -38,7 +38,7 @@ function δFδρ_res(model::PCSAFTModel,ρ,T,z)
 end
 
 function δFδρ_hc(model::PCSAFTModel,ρ,T,z)
-    HSd = d(model,[],T,ones(length(model)))
+    HSd = d(model,nothing,T,onevec(model))
     lim = HSd
 
     (λ, ρ̄hc,_)  = weights_hs(model,ρ,z,lim)
@@ -77,7 +77,7 @@ function δFδρ_hc(model::PCSAFTModel,ρ,T,z)
 end
 
 function δFδρ_disp(model::PCSAFTModel,ρ,T,z)
-    HSd = d(model,[],T,ones(length(model)))
+    HSd = d(model,nothing,T,onevec(model))
     lim = 1.3862*HSd
 
     (_, ρ̄,_)  = weights_hs(model,ρ,z,lim)
@@ -104,7 +104,7 @@ function δFδρ_disp(model::PCSAFTModel,ρ,T,z)
 end
 
 function δFδρ_assoc(model::SAFTModel,ρ,T,z)
-    HSd = d(model,[],T,ones(length(model)))
+    HSd = d(model,nothing,T,onevec(model))
     lim = 1/2*HSd
 
     (n, n₃, nᵥ)  = weights_hs(model,ρ,z,lim)
@@ -141,7 +141,7 @@ function δFδρ_assoc(model::SAFTModel,ρ,T,z)
 end
 
 function f_hc(model::PCSAFTModel, T, ρhc, ρ̄hc, λ)
-    HSd = d(model,[],T,ones(length(model)))
+    HSd = d(model,nothing,T,onevec(model))
     m = model.params.segment.values
 
     ζ₃ = sum(1/8*m.*ρ̄hc)
@@ -155,7 +155,7 @@ end
 
 function f_disp(model::PCSAFTModel, T, ρ̄)
     ψ = 1.3862
-    HSd = d(model,[],T,ones(length(model)))
+    HSd = d(model,nothing,T,onevec(model))
     σ = model.params.sigma.values
     m = model.params.segment.values
 
@@ -212,7 +212,7 @@ function I(model::PCSAFTModel,m̄,n₃,n)
 end
 
 function f_assoc(model::PCSAFTModel, T, n, n₃, nᵥ)
-    HSd = d(model,[],T,ones(length(model)))
+    HSd = d(model,nothing,T,onevec(model))
     _0 = zero(T+first(n)+first(n₃)+first(nᵥ))
     nn = assoc_pair_length(model)
     iszero(nn) && return _0
@@ -253,7 +253,7 @@ function Δ(model::PCSAFTModel, T, n, n₃, nᵥ, i, j, a, b)
 
     σ = model.params.sigma.values[i,j]
     m = model.params.segment.values
-    HSd = d(model,[],T,ones(length(model)))
+    HSd = d(model,nothing,T,onevec(model))
     dij = (HSd[i]*HSd[j])/(HSd[i]+HSd[j])
 
     n₂ = sum(π.*HSd.*n.*m)
@@ -283,7 +283,7 @@ function X(model::EoSModel,T,n,n₃,nᵥ)
 end
 
 function assoc_site_matrix(model,T,n,n₃,nᵥ)
-    HSd = d(model,[],T,ones(length(model)))
+    HSd = d(model,nothing,T,onevec(model))
 
     n₀ = n./HSd
     n₂ = π.*HSd.*n
