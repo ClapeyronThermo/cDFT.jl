@@ -17,9 +17,7 @@ include("utils/types.jl")
 include("utils/base.jl")
 include("utils/profiles.jl")
 include("utils/integrals.jl")
-include("utils/initial.jl")
 include("utils/anderson.jl") #TODO, port this to Clapeyron
-
 
 include("models/BasicIdeal.jl")
 

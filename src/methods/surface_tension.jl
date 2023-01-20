@@ -13,4 +13,37 @@ function surface_tension(model::EoSModel,T,x = SA[1.0])
     return F*k_B*T-sum([μ[i]*∫(ρ[i].density,ρ[i].mesh_size) for i in @comps])+p*∫(one.(z),ρ[1].mesh_size)
 end
 
+function _initial_eq_surface_tension(model::EoSModel,T,x::SingleComp)
+    (Tc,pc,vc) = crit_pure(model)
+    (p,vl,vv) = saturation_pressure(model,T)
+    return Tc,vl,vv,x,x
+end
+
+function _initial_eq_surface_tension(model::EoSModel,T,x)
+    pure = Clapeyron.split_model(model)
+    crit = crit_pure.(pure)
+    Tc = first.(crit)
+    (p,vl,vv,y) = bubble_pressure(model,T,x)
+    return Tc,vl,vv,x,y 
+end
+
+function initial_surface_tension_density_profile(model::EoSModel,T,x,bounds,ngrid::Int64=101)
+    z = range(first(bounds),last(bounds),ngrid) |> collect
+    
+    Tc,vl,vv,x,y = _initial_eq_surface_tension(model,T,x)
+
+    ρl = x./vl
+    ρv = y./vv
+
+    ρ = DensityProfile[]
+    for i in @comps
+        boundary_conditions = [ρv[i],ρl[i]]
+        σ = model.params.sigma[i]
+        ρ_points =@. 1/2*(ρl[i]-ρv[i])*tanh(z/σ*(2.4728-2.3625*T/Tc[i]))+1/2*(ρl[i]+ρv[i])
+
+        push!(ρ,DensityProfile(ρ_points,z,bounds,boundary_conditions))
+    end
+    return ρ, z
+end
+
 export surface_tension

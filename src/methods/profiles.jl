@@ -39,13 +39,13 @@ function converge_profile!(model,ρ,T,z;damping=0.05)
 
     X0 = vec(X0)
 
-    ρ_new = Solvers.fixpoint(f!,X0,AndersonFixPoint(memory =50),rtol = 1e-4)
-    #=r = fixed_point(fX, X0;Algorithm = :Anderson, 
+    # ρ_new = Solvers.fixpoint(f!,X0,AndersonFixPoint(memory =50),rtol = 1e-4)
+    r = fixed_point(fX, X0;Algorithm = :Anderson, 
                                             ConvergenceMetric = norm(output,input) = maximum(abs.(output./input .-1)),
                                             ConvergenceMetricThreshold=1e-4,
-                                            MaxM=5)
+                                            MaxM=25)
     # return r =#
-    #ρ_new = r.FixedPoint_
+    ρ_new = r.FixedPoint_
     ρ_new = reshape(ρ_new,(length(z),length(ρ)))
     for i in @comps
         ρ[i] = ClapeyronDFT.update_profile!(ρ[i],ρ_new[:,i])
