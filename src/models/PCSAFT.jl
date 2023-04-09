@@ -26,7 +26,7 @@ function F_res(model::PCSAFTModel,ρ,T,z)
     f3(x) = f_disp(model,T,@view(x[idx]))
     Φ_disp = mapslices(f3,ρ̄;dims=2)
     
-    Φ = Φ_hs_assoc+Φ_hc+Φ_disp
+    Φ = Φ_hc+Φ_disp+Φ_hs_assoc
     return ∫(Φ,dz)
 end
 
@@ -49,8 +49,7 @@ function δFδρ_hc(model::PCSAFTModel,ρ,T,z)
 
     nc = length(model)
     idx = 1:nc
-    f(x) = f_hc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
-)
+    f(x) = f_hc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc]))
     df(x) = ForwardDiff.gradient(f,x)
 
     δfδn  = mapslices(df,[ρhc ρ̄hc λ];dims=2)
@@ -146,7 +145,7 @@ function f_hc(model::PCSAFTModel, T, ρhc, ρ̄hc, _λ)
     m = model.params.segment.values
     ζ₃ = zero(eltype(HSd)) + zero(eltype(ρ̄hc))
     ζ₂ = zero(ζ₃)
-    for i in length(ρ̄hc)
+    for i in @comps
         mi,ρ̄hci,HSdi = m[i],ρ̄hc[i],HSd[i]
         ζ₃ += mi*ρ̄hci
         ζ₂ += mi*ρ̄hci/HSdi
@@ -156,7 +155,7 @@ function f_hc(model::PCSAFTModel, T, ρhc, ρ̄hc, _λ)
     #ζ₃ = 1/8*dot(m,ρ̄hc)
     #ζ₂ = sum(1/8*m.*ρ̄hc./HSd)
     ∑f = zero(ζ₃)
-    for i in length(_λ)
+    for i in @comps
         λ = _λ[i]/(2*HSd[i])
         yᵈᵈ = 1/(1-ζ₃) + 1.5*HSd[i]*ζ₂/(1-ζ₃)^2+0.5*HSd[i]^2*ζ₂^2/(1-ζ₃)^3
         fi = -ρhc[i]*(m[i]-1)*log(yᵈᵈ*λ/ρhc[i])
