@@ -1,4 +1,4 @@
-name = "ClapeyronDFT"
+name = "cDFT"
 uuid = "9d464fa6-e93d-4d45-9e5b-7c20149a9a88"
 authors = ["Pierre Walker <pjwalker@caltech.edu>"]
 version = "0.1.0"
