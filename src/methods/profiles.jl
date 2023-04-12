@@ -48,7 +48,7 @@ function converge_profile!(model,ρ,T,z;damping=0.05)
     ρ_new = r.FixedPoint_
     ρ_new = reshape(ρ_new,(length(z),length(ρ)))
     for i in @comps
-        ρ[i] = ClapeyronDFT.update_profile!(ρ[i],ρ_new[:,i])
+        ρ[i] = update_profile!(ρ[i],ρ_new[:,i])
     end
     return ρ
 end

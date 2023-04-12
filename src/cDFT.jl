@@ -1,7 +1,7 @@
 module cDFT
 
 using LinearAlgebra
-using ForwardDiff, NLSolvers, FixedPointAcceleration
+using ForwardDiff, Optim, FixedPointAcceleration
 using Clapeyron
 using Clapeyron: d, N_A, k_B, R̄
 using Clapeyron: @comps
@@ -27,6 +27,7 @@ include("models/FMT.jl")
 include("models/PCSAFT.jl")
 
 include("methods/profiles.jl")
+include("methods/inhomogeneous_free_energy.jl")
 include("methods/surface_tension.jl")
 include("methods/interfacial_tension.jl")
 
