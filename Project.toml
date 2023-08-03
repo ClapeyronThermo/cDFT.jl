@@ -12,4 +12,4 @@ Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
-Clapeyron = "0.4"
+Clapeyron = "0.4,0.5"
