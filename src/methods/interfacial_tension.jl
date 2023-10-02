@@ -13,7 +13,7 @@ function initial_interfacial_tension_density_profile(model::EoSModel,p,T,n,bound
 
     z = range(first(bounds),last(bounds),ngrid) |> collect
 
-    (x,N,G) = tp_flash(model,p,T,n,RRTPFlash(K0=[1000.,0.0001]))
+    (x,N,G) = tp_flash(model,p,T,n,RRTPFlash(equilibrium=:lle))
 
     v1 = volume(model,p,T,x[1,:])
     v2 = volume(model,p,T,x[2,:])
