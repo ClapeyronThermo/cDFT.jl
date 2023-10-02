@@ -1,4 +1,4 @@
-function surface_tension(model::EoSModel,T,x = SA[1.0])
+function surface_tension(model::EoSModel,T,x = [1.0])
     σ = maximum(model.params.sigma.values)
     (p,vl,vv,y) = bubble_pressure(model,T,x) #on single component, returns just the saturation pressure.
     # if T<0.75Tc
