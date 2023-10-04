@@ -29,7 +29,6 @@ function initial_interfacial_tension_density_profile(model::EoSModel,p,T,n,bound
     c0 = zeros(nc)
     c0[isurf] .= 10
     z0 = vcat(k0,c0)
-
     res =  optimize(f,z0,Optim.NelderMead(),Optim.Options())
     x_sol = Optim.minimizer(res)
     k = x_sol[1:nc]

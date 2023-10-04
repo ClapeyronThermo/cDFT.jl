@@ -4,46 +4,40 @@ function converge_profile!(model,ρ,T,z;damping=0.05)
     X = ρl./sum(ρl)
     μ_res = Clapeyron.VT_chemical_potential_res(model,Vl,T,X)/R̄/T
 
-    # function obj(model,ρ,T,z,Gx,x,μ_res,ρl,α)
-    #     ρ = ClapeyronDFT.update_profile!(ρ,x)
-    #     Gx .= (1-α).*x+α.*ρl.*exp.(μ_res.-δFδρ_res(model,ρ,T,z))
-    #     println(NLSolvers.norm(Gx.-x))
-    #     return Gx
-    # end
-
-    function obj(model,G,ρ,T,z,x,μ_res,ρl,α)
-        x = reshape(x,(length(z),length(ρ)))
-        Gx = reshape(G,(length(z),length(ρ)))
+    function obj(model,ln_G,ρ,T,z,ln_x,μ_res,ρl,α)
+        ln_x = reshape(ln_x, (length(z), length(ρ)))
+        ln_Gx = reshape(ln_G, (length(z), length(ρ)))
+        ln_ρl = log.(ρl)
         for i in @comps
-            ρ[i] = update_profile!(ρ[i],@view(x[:,i]))
+            ρ[i] = update_profile!(ρ[i], exp.(@view(ln_x[:,i])))
         end
 
         δfδρ_res = δFδρ_res(model,ρ,T,z)
-        #Gx = zeros(length(z),length(ρ))
         for i in @comps
-            xi = @view(x[:,i])
+            ln_xi = @view(ln_x[:,i])
             δfδρ_resi = @view(δfδρ_res[:,i])
-            Gx[:,i] .= (1 .- α) .* xi .+ α .* ρl[i].*exp.(μ_res[i] .- δfδρ_resi)
+            ln_Gx[:,i] .= (1 .- α) .* ln_xi .+ α .* (ln_ρl[i].+(μ_res[i] .- δfδρ_resi))
         end
-        return G
+        
+        return ln_G
     end
 
-    X0 = zeros(length(z),length(ρ))
-    GX0 = copy(X0)
-    f!(Gx,x) = obj(model,Gx,ρ,T,z,x,μ_res,ρl,damping)
-    fX(x) = obj(model,copy(x),ρ,T,z,x,μ_res,ρl,damping)
+    ln_X0 = zeros(length(z),length(ρ))
+    ln_GX0 = copy(ln_X0)
+    fX(ln_x) = obj(model, copy(ln_x), ρ, T, z, ln_x, μ_res, ρl, damping)
     
     for i in @comps
-        X0[:,i] = ρ[i].density
+        ln_X0[:,i] = log.(ρ[i].density)
     end
 
-    X0 = vec(X0)
+    ln_X0 = vec(ln_X0)
 
     # ρ_new = Solvers.fixpoint(f!,X0,AndersonFixPoint(memory =50),rtol = 1e-4)
+
     r = fixed_point(fX, X0;Algorithm = :Anderson, 
-                                            ConvergenceMetric = norm(output,input) = maximum(abs.(output .-input))/maximum(input),
-                                            ConvergenceMetricThreshold=1e-7,
-                                            MaxM=5, MaxIter=1000000)
+                                            ConvergenceMetric = norm(output,input) = maximum(abs.(output./input .-1)),
+                                            ConvergenceMetricThreshold=1e-5,
+                                            MaxM=50)
     # return r =#
     if ismissing(r.FixedPoint_)
         @warn "Anderson failed to converge"
