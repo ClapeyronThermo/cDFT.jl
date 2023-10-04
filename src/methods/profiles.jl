@@ -36,11 +36,17 @@ function converge_profile!(model,ρ,T,z;damping=0.05)
     r = fixed_point(fX, ln_X0;Algorithm = :Anderson, 
                                             ConvergenceMetric = norm(output,input) = maximum(abs.(output./input .-1)),
                                             ConvergenceMetricThreshold=1e-5,
-                                            MaxM=25)
-    ρ_new = exp.(r.FixedPoint_)
-    ρ_new = reshape(ρ_new,(length(z),length(ρ)))
-    for i in @comps
-        ρ[i] = update_profile!(ρ[i],ρ_new[:,i])
+                                            MaxM=50)
+    
+    if isempty(r.FixedPoint_)
+        # warning("Convergence failed")
+        ρ_new = exp.(r.Outputs_[:,end])
+    else
+        ρ_new = exp.(r.FixedPoint_)
+        ρ_new = reshape(ρ_new,(length(z),length(ρ)))
+        for i in @comps
+            ρ[i] = update_profile!(ρ[i],ρ_new[:,i])
+        end
     end
     return ρ
 end
