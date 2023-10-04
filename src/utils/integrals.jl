@@ -7,13 +7,13 @@ Integrates a collection of points `f`, with constant `dz`, using simpson rule
 """
 ∫(f,dz) = _∫(f,dz)
 ∫(f,dz,lastidx) = _∫(f,dz,lastidx)
-function _∫(f::AbstractArray,dz::Number,lastidx)
-    return 1/3*dz*(f[1]+f[end]+4*sum(@view(f[2:2:end-1]))+2*sum(@view(f[3:2:end-1])))
-end
+#function _∫(f::AbstractArray,dz::Number,lastidx)
+#    return 1/3*dz*(f[1]+f[end]+4*sum(@view(f[2:2:end-1]))+2*sum(@view(f[3:2:end-1])))
+#end
 
 function _∫(f,dz::Number,last = 0)
     ∑f = zero(typeof(dz))
-    for (i,fi) in pairs(f)
+    for (i,fi) in enumerate(f)
         if i == 1 || i == last
             ∑f += fi
         else
