@@ -1,20 +1,34 @@
 function F_res(model::PPCSAFTModel,ρ,T,z,x)
-    nc = length(model)
-    idx = 1:nc
-    # The below should be modified
-    f(x) = f_mp(model,T,@view(x[idx]))
-    Φ_polar = mapslices(f,ρ;dims=2)
-    
-    # return F_res(model::PCSAFTModel,ρ,T,z) + ∫(Φ_polar,dz)
+    # nc = length(model)
+    # idx = 1:nc
+    # # The below should be modified
+    # f(x) = f_mp(model,T,@view(x[idx]))
+    # Φ_polar = mapslices(f,ρ;dims=2)
+    Φ_polar = nothing
+
+    _F_res_PCSAFT = invoke(F_res, Tuple{PCSAFTModel,Any,Any,Any},model,ρ,T,z)
+    return _F_res_PCSAFT + ∫(Φ_polar,dz)
+end
+
+function δFδρ_res(model::PPCSAFTModel,ρ,T,z)
+    _δFδρ_res_PCSAFT = invoke(δFδρ_res, Tuple{PCSAFTModel,Any,Any,Any},model,ρ,T,z)
+    return _δFδρ_res_PCSAFT + δFδρ_mp(model,ρ,T,z)
 end
 
 function δFδρ_mp(model::PPCSAFTModel,ρ,T,z)
-    # The below wouldn't work
-    # return δFδρ_res(model::PCSAFTModel,ρ,T,z)+
-           δFδρ_mp(model,ρ,T,z)
+    ψ = 1.3862
+    HSd = d(model,nothing,T,onevec(model))
+    lim = ψ*HSd
+
+    _, ρ̄, _  = weights_hs(model,ρ,z,lim)
+
+    f(x) = f_mp(model,T,@view(x[@comps]))
+    df(x) = ForwardDiff.gradient(f,x) # Differentiates f_mp wrt x(more specifically \rho)
+
+
 end
 
-function f_mp(model::PPCSAFTModel, T, ρ̄, x)
+function f_mp(model::PPCSAFTModel,T,ρ̄)
     ψ = 1.3862
     HSd = d(model,nothing,T,onevec(model))
     σ = model.params.sigma.values
@@ -32,7 +46,8 @@ function f_mp(model::PPCSAFTModel, T, ρ̄, x)
     return ã
 end
 
-function A_DD(model::PPCSAFTModel,T,ρ̄,η,x)
+# Dipole-Dipole Interaction
+function f_DD(model::PPCSAFTModel,T,ρ̄,η,x)
     x_norm = x ./ sum(x) # NEEDS REVISION necessary?
     
     m = model.params.segment.values
@@ -72,8 +87,9 @@ function A_DD(model::PPCSAFTModel,T,ρ̄,η,x)
         end
     end
     A₃ = -4*(π^2)/3*A₃
+    A_DD = A₂/(1-(A₃/A₂))
 
-    return A₂/(1-(A₃/A₂))
+    return A_DD*ρ̄
 end
 
 function J_DD_2ij(mᵢ,mⱼ,ϵᵢ,ϵⱼ,η,T)
@@ -109,11 +125,6 @@ function J_DD_3ijk(mᵢ,mⱼ,mₖ,η)
         J_DD_3ijk += c_nijk*η^n
     end
     return J_DD_3ijk
-end
-
-function δFδρ_mp(model::PCSAFTModel,ρ,T,z)
-    # See Sauer, Eqn 58
-    return 0
 end
 
 const PPCSAFTconsts = (
