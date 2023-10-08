@@ -34,20 +34,19 @@ function converge_profile!(model,ρ,T,z;damping=0.05)
 
     # ρ_new = Solvers.fixpoint(f!,X0,AndersonFixPoint(memory =50),rtol = 1e-4)
 
-    r = fixed_point(fX, X0;Algorithm = :Anderson, 
+    r = fixed_point(fX, ln_X0;Algorithm = :Anderson, 
                                             ConvergenceMetric = norm(output,input) = maximum(abs.(output./input .-1)),
                                             ConvergenceMetricThreshold=1e-5,
                                             MaxM=50)
-    # return r =#
-    if ismissing(r.FixedPoint_)
-        @warn "Anderson failed to converge"
-        ρ_new = r.Outputs_[:,end]
+    
+    if isempty(r.FixedPoint_)
+        # warning("Convergence failed")
+        ρ_new = exp.(r.Outputs_[:,end])
     else
-        ρ_new = r.FixedPoint_
+        ρ_new = exp.(r.FixedPoint_)
+        ρ_new = reshape(ρ_new,(length(z),length(ρ)))
+        for i in @comps
+            ρ[i] = update_profile!(ρ[i],ρ_new[:,i])
+        end
     end
-    ρ_new = reshape(ρ_new,(length(z),length(ρ)))
-    for i in @comps
-        ρ[i] = update_profile!(ρ[i],ρ_new[:,i])
-    end
-    return ρ
 end
