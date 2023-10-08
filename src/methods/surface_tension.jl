@@ -7,7 +7,7 @@ function surface_tension(model::EoSModel,T,x = [1.0])
     #     ρ,z = initial_interfacial_density_profile(model,T,[-20σ,20σ],201)
     # end
 
-    ρ = converge_profile!(model,ρ,T,z)
+    converge_profile!(model,ρ,T,z)
     F = F_tot(model,ρ,T,z)
     μ = Clapeyron.VT_chemical_potential(model,vl,T,x)
     return F*k_B*T-sum([μ[i]*∫(ρ[i].density,ρ[i].mesh_size) for i in @comps])+p*∫(one.(z),ρ[1].mesh_size)
