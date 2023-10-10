@@ -3,7 +3,7 @@ function interfacial_tension(model::EoSModel,p,T,n;surfactant=nothing,K0=nothing
 
     ρ,z = initial_interfacial_tension_density_profile(model,p,T,n,[-20σ,20σ],201;surfactant=surfactant,K0=K0)
 
-    converge_profile!(model,ρ,T,z;damping=0.01)
+    converge_profile!(model,ρ,T,z;damping=0.001)
 
     return eval_interfacial_tension(model,p,T,ρ,z)
 end
