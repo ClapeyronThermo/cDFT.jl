@@ -73,28 +73,48 @@ function f_DD(model::PPCSAFTModel,T,ρ̄,η,x)
 
     # TODO: Optimize the code below: Too many same calculations
     A₂ = 0
+    A₂_hash = Dict{Set{Int},Any}()
     for i in @comps
         for j in @comps
-            A₂ += x_norm[i]*x_norm[j]*
-                1/T^2*1/σ[i,j]^3*μ̄²[i]*μ̄²[j]*                
-                J_DD_2ij(m[i],m[j],ϵ[i],ϵ[j],η,T)
-        end
-    end
-    A₂ *= -π*ρ̄
-
-    # A₃
-    A₃ = 0
-    for i in @comps
-        for j in @comps
-            for k in @comps
-                A₃ += x_norm[i]*x_norm[j]*x_norm[k]*
-                    1/T^3*1/(σ[i,j]*σ[j,k]*σ[i,k])*μ̄²[i]*μ̄²[j]*μ̄²[k]*
-                    J_DD_3ijk(m[i],m[j],m[k],η)
+            set = Set([i,j])
+            if haskey(A₂_hash,set)
+                A₂ += A₂_hash[set]
+                continue
+            else
+                A₂_ij = x_norm[i]*x_norm[j]*
+                    1/σ[i,j]^3*μ̄²[i]*μ̄²[j]*                
+                    J_DD_2ij(m[i],m[j],ϵ[i],ϵ[j],η,T)
+                A₂_hash[set] = A₂_ij
+                A₂ += A₂_ij
             end
         end
     end
-    A₃ *= -4*(π^2)/3*ρ̄^2
-    
+    A₂_hash = nothing
+    A₂ *= -π*ρ̄/T^2
+
+    # A₃
+    A₃ = 0
+    A₃_hash = Dict{Set{Int},Any}()
+    for i in @comps
+        for j in @comps
+            for k in @comps
+                set = Set([i,j,k])
+                if haskey(A₃_hash,set)
+                    A₃ += A₃_hash[set]
+                    continue
+                else
+                    A₃_ijk = x_norm[i]*x_norm[j]*x_norm[k]*
+                        1/(σ[i,j]*σ[j,k]*σ[i,k])*μ̄²[i]*μ̄²[j]*μ̄²[k]*
+                        J_DD_3ijk(m[i],m[j],m[k],η)
+                    A₃_hash[set] = A₃_ijk
+                    A₃ += A₃_ijk
+                end
+                
+            end
+        end
+    end
+    A₃_hash = nothing
+    A₃ *= -4*(π^2)/3*ρ̄^2/T^3
 
     A_DD = A₂^2/(A₂-A₃)
 
@@ -102,20 +122,21 @@ function f_DD(model::PPCSAFTModel,T,ρ̄,η,x)
 end
 
 function J_DD_2ij(mᵢ,mⱼ,ϵᵢ,ϵⱼ,η,T)
-    ϵ_ij = sqrt(ϵᵢ*ϵⱼ) # NEEDS REVISION minimum 2.0 needed?
+    ϵ_ij = sqrt(ϵᵢ*ϵⱼ)/T # Dimensionless
     m_ij = minimum([sqrt(mᵢ*mⱼ), 2.0])
     corr_a = PPCSAFTconsts[:corr_a]
     corr_b = PPCSAFTconsts[:corr_b]
-    m1 = (m_ij-1)/m_ij
-    m2 = (m_ij-1)/m_ij*(m_ij-2)/m_ij
+    m1 = 1-1/m_ij
+    m2 = m1*(1-2/m_ij)
 
     J_DD_2ij = 0
+
     for n in 0:4
         a0n, a1n, a2n = corr_a[n+1]
         b0n, b1n, b2n = corr_b[n+1]
         a_nij = a0n + a1n*m1 + a2n*m2
         b_nij = b0n + b1n*m1 + b2n*m2
-        J_DD_2ij += (a_nij+b_nij*ϵ_ij/T)*η^n
+        J_DD_2ij += (a_nij+b_nij*ϵ_ij)*η^n
     end
 
     return J_DD_2ij
@@ -124,8 +145,8 @@ end
 function J_DD_3ijk(mᵢ,mⱼ,mₖ,η)
     m_ijk = minimum([cbrt(mᵢ*mⱼ*mₖ), 2.0])
     corr_c = PPCSAFTconsts[:corr_c]
-    m1 = (m_ijk-1)/m_ijk
-    m2 = (m_ijk-1)/m_ijk*(m_ijk-2)/m_ijk
+    m1 = 1-1/m_ijk
+    m2 = m1*(1-2/m_ijk)
 
     J_DD_3ijk = 0
     for n in 0:4
