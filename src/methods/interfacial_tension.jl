@@ -1,9 +1,9 @@
 function interfacial_tension(model::EoSModel,p,T,n;surfactant=nothing,K0=nothing)
     σ = maximum(model.params.sigma.values)
 
-    ρ,z = initial_interfacial_tension_density_profile(model,p,T,n,[-20σ,20σ],201;surfactant=surfactant,K0=K0)
+    ρ,z = initial_interfacial_tension_density_profile(model,p,T,n,[-20σ,20σ],401;surfactant=surfactant,K0=K0)
 
-    converge_profile!(model,ρ,T,z;damping=0.01)
+    converge_profile!(model,ρ,T,z;damping=0.001)
 
     return eval_interfacial_tension(model,p,T,ρ,z)
 end
@@ -38,6 +38,8 @@ function initial_interfacial_tension_density_profile(model::EoSModel,p,T,n,bound
     return ρ, z
 end
 
+
+# ρ(z) = 1/2(ρ1-ρ2)*tanh(a*z/σ+b)+1/2*(ρ1+ρ2)+c^2*exp(-(z/\sigma))
 function _initial_interfacial_tension_density_profile(model::EoSModel,ρ1,ρ2,bounds,z,coef=ones(length(model)),shift=zeros(length(model));surfactant=nothing)
     ρ = DensityProfile[]
     components = model.components
