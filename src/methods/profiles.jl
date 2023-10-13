@@ -37,7 +37,8 @@ function converge_profile!(model,ρ,T,z;damping=0.05)
     r = fixed_point(fX, ln_X0;Algorithm = :Anderson, 
                                 ConvergenceMetric = norm(output,input) = maximum(abs.(output./input .-1)/damping),
                                 ConvergenceMetricThreshold=1e-5,
-                                MaxM=50)
+                                MaxIter=10000,
+                                MaxM=25)
     
     if ismissing(r.FixedPoint_)
         @warn "Convergence failed"
