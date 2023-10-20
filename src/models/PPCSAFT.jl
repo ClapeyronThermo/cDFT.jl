@@ -59,35 +59,37 @@ function f_polar(model::PPCSAFTModel,T,ρ̄)
     ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
     η = π/6*sum(ρ̄.*m.*HSd.^3)
     x = ρ̄ /sum(ρ̄)
-    x_norm = x ./ sum(x)
     ρ̄ = sum(ρ̄)
     nc = length(model)
 
     a_mp_total = zero(T+ρ̄)
-    a_mp_total += has_dp && a_dd(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-    a_mp_total += has_qp && a_qq(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-    a_mp_total += has_dp && has_qp && a_dq(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
+    a_mp_total += has_dp && a_dd(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
+    a_mp_total += has_qp && a_qq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
+    a_mp_total += has_dp && has_qp && a_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
 
     return ρ̄*a_mp_total
 end
 
-function a_polar(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
-    A₂ = A2(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
+function a_polar(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
+    A₂ = A2(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
     iszero(A₂) && return zero(A₂)
-    A₃ = A3(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
+    A₃ = A3(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
     return A₂^2/(A₂-A₃)
 end
-function a_dd(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-    return a_polar(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,:DD)
+function a_dd(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
+    return a_polar(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,:DD)
 end
-function a_qq(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-    return a_polar(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,:QQ)
+function a_qq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
+    return a_polar(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,:QQ)
 end
-function a_dq(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-    return zero(T+first(x_norm))
+function a_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
+    A₂ = A2_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
+    iszero(A₂) && return zero(A₂)
+    A₃ = A3_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
+    return A₂^2/(A₂-A₃)
 end
 
-function A2(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
+function A2(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
     dp_comps, qp_comps = polar_comps(μ̄²,Q̄²,nc)
     
     P̄² = []
@@ -108,28 +110,41 @@ function A2(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
         p = 7
         coeff = 9/16
     end
-    _a_2 = zero(T+first(x_norm))
+    _a_2 = zero(T+first(x))
     @inbounds for (idx, i) ∈ enumerate(p_comps)
         _J2_ii = J2(m[i],m[i],ϵ[i,i],η,T,type)
-        zᵢ = x_norm[i]
+        xᵢ = x[i]
         P̄²ᵢ = P̄²[i]
-        _a_2 +=zᵢ^2*P̄²ᵢ^2/σ[i,i]^p*_J2_ii
+        _a_2 +=xᵢ^2*P̄²ᵢ^2/σ[i,i]^p*_J2_ii
         for j ∈ p_comps[idx+1:end]
             _J2_ij = J2(m[i],m[j],ϵ[i,j],η,T,type)
-            _a_2 += 2*zᵢ*x_norm[j]*P̄²ᵢ*P̄²[j]/σ[i,j]^p*_J2_ij
+            _a_2 += 2*xᵢ*x[j]*P̄²ᵢ*P̄²[j]/σ[i,j]^p*_J2_ij
         end
     end
     _a_2 *= -π*coeff*ρ̄/T^2
     return _a_2
 end
 
-function A3(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
+function A2_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
+    dp_comps, qp_comps = polar_comps(μ̄²,Q̄²,nc)
+    _a_2 = zero(T+first(x))
+    @inbounds for i in dp_comps
+        for j ∈ qp_comps
+            _J2_ij = J2(m[i],m[j],ϵ[i,j],η,T,:DQ)
+            _a_2 += x[i]*x[j]*μ̄²[i]*Q̄²[j]/σ[i,j]^5*_J2_ij
+        end
+    end
+    _a_2 *= -π*9/4*ρ/T^2
+    return _a_2
+end
+
+function A3(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
     dp_comps, qp_comps = polar_comps(μ̄²,Q̄²,nc)
     P̄² = []
     p_comps = []
     p = 0
     coeff = 0.
-    _0 = zero(T+first(x_norm))
+    _0 = zero(T+first(x))
     if type == :DD
         if isempty(dp_comps) return _0 end
         P̄² = μ̄²
@@ -148,22 +163,22 @@ function A3(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
     _a_3 = _0
     @inbounds for (idx_i,i) ∈ enumerate(p_comps)
         _J3_iii = J3(m[i],m[i],m[i],η,type)
-        zi,P̄²i = x_norm[i],P̄²[i]
-        a_3_i = zi*P̄²i/σ[i,i]^p
+        xᵢ,P̄ᵢ² = x[i],P̄²[i]
+        a_3_i = xᵢ*P̄ᵢ²/σ[i,i]^p
         _a_3 += a_3_i^3*_J3_iii
         for (idx_j,j) ∈ enumerate(p_comps[idx_i+1:end])
-            zj,P̄²j = x_norm[j],P̄²[j]
+            xⱼ,P̄ⱼ² = x[j],P̄²[j]
             σij⁻ᵖ = 1/σ[i,j]^p
-            a_3_iij = zi*P̄²i*σij⁻ᵖ
-            a_3_ijj = zj*P̄²j*σij⁻ᵖ
-            a_3_j = zj*P̄²j/σ[j,j]^p
+            a_3_iij = xᵢ*P̄ᵢ²*σij⁻ᵖ
+            a_3_ijj = xⱼ*P̄ⱼ²*σij⁻ᵖ
+            a_3_j = xⱼ*P̄ⱼ²/σ[j,j]^p
             _J3_iij = J3(m[i],m[i],m[j],η,type)
             _J3_ijj = J3(m[i],m[j],m[j],η,type)
             _a_3 += 3*a_3_iij*a_3_ijj*(a_3_i*_J3_iij + a_3_j*_J3_ijj)
             for k ∈ p_comps[idx_i+idx_j+1:end]
-                zk,P̄²k = x_norm[k],P̄²[k]
+                xₖ,P̄ₖ² = x[k],P̄²[k]
                 _J3_ijk = J3(m[i],m[j],m[k],η,type)
-                _a_3 += 6*zi*zj*zk*P̄²i*P̄²j*P̄²k*σij⁻ᵖ/(σ[i,k]*σ[j,k])^p*_J3_ijk
+                _a_3 += 6*xᵢ*xⱼ*xₖ*P̄ᵢ²*P̄ⱼ²*P̄ₖ²*σij⁻ᵖ/(σ[i,k]*σ[j,k])^p*_J3_ijk
             end
         end
     end
@@ -171,9 +186,21 @@ function A3(x_norm,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
     return _a_3
 end
 
-# TODO
-function A3_dq()
-    return 0.
+function A3_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
+    dp_comps, qp_comps = polar_comps(μ̄²,Q̄²,nc)
+    _a_3 = zero(T+first(x))
+    @inbounds for i ∈ dp_comps
+        for j ∈ union(dp_comps, qp_comps)
+            for k ∈ qp_comps
+                _J3_ijk = J3(m[i],m[j],m[k],η,:DQ)
+                _a_3 += x[i]*x[j]*x[k]*σ[i,i]/
+                    (σ[k,k]*(σ[i,j]*σ[i,k]*σ[j,k])^2)*
+                    μ̄²[i]*Q̄²[k]*(σ[j,j]*μ̄²[j]+1.19374/σ[j,j]*Q̄²[j])*_J3_ijk
+            end
+        end
+    end
+    _a_3 *= -ρ̄^2/T^3
+    return _a_3
 end
 
 # Returns [Dipole Comp idxs], [Quadrupole Comp idxs]
@@ -190,31 +217,31 @@ end
 function J2(mᵢ,mⱼ,ϵᵢⱼ,η,T,type)
     corr_consts = NamedTuple()
     ϵᵢⱼT⁻¹ = ϵᵢⱼ/T
-    m_ij = sqrt(mᵢ*mⱼ)
-    i_range = 0:4
+    m̄ = sqrt(mᵢ*mⱼ)
+    n_range = 0:4
 
     if type == :DD
         corr_consts = DD_consts
-        m_ij = minimum([m_ij, 2.0])
+        m̄ = minimum([m̄, 2.0])
     elseif type == :DQ
         corr_consts = DQ_consts
-        i_range = 0:3 # Needs revision
+        n_range = 0:3 # Needs revision
     elseif type == :QQ
         corr_consts = QQ_consts
     end
 
-    m1 = 1. - 1/m_ij
-    m2 = m1 * (1. - 2/m_ij)
+    m1 = 1. - 1/m̄
+    m2 = m1 * (1. - 2/m̄)
     corr_a = corr_consts[:corr_a]
     corr_b = corr_consts[:corr_b]
 
-    J_2ij = 0.
+    J_2ij = zero(η)
 
-    for n ∈ i_range
-        a0n, a1n, a2n = corr_a[n+1]
-        b0n, b1n, b2n = corr_b[n+1]
-        a_nij = a0n + a1n*m1 + a2n*m2
-        b_nij = b0n + b1n*m1 + b2n*m2
+    for n ∈ n_range
+        a0, a1, a2 = corr_a[n+1]
+        b0, b1, b2 = corr_b[n+1]
+        a_nij = a0 + a1*m1 + a2*m2
+        b_nij = b0 + b1*m1 + b2*m2
         J_2ij += (a_nij + b_nij*ϵᵢⱼT⁻¹) * η^n
     end
 
@@ -222,36 +249,36 @@ function J2(mᵢ,mⱼ,ϵᵢⱼ,η,T,type)
 end
 
 function J3(mᵢ,mⱼ,mₖ,η,type)
-    m_ijk = cbrt(mᵢ*mⱼ*mₖ)
+    m̄ = cbrt(mᵢ*mⱼ*mₖ)
     corr_c = ()
-    m1 = 1. - 1/m_ijk
+    m1 = 1. - 1/m̄
     m2 = 0.
-    i_range = 0:4
+    n_range = 0:4
 
     if type == :DD
         corr_c = DD_consts[:corr_c]
-        m_ijk = minimum([m_ijk, 2.0])
-        m1 = 1. - 1/m_ijk
-        m2 = m1 * (1. - 2/m_ijk)
+        m̄ = minimum([m̄, 2.0])
+        m1 = 1. - 1/m̄
+        m2 = m1 * (1. - 2/m̄)
     elseif type == :DQ
         corr_c = DQ_consts[:corr_c]
-        i_range = 0:3
+        n_range = 0:3
     elseif type == :QQ
         corr_c = QQ_consts[:corr_c]
-        m2 = m1 * (1. - 2/m_ijk)
+        m2 = m1 * (1. - 2/m̄)
     end
 
-    J_3ijk = 0.
+    J_3ijk = zero(η)
     if type == :DQ
-        for n ∈ i_range
-            c0n, c1n = corr_c[n+1]
-            c_nijk = c0n + c1n*m1
+        for n ∈ n_range
+            c0, c1 = corr_c[n+1]
+            c_nijk = c0 + c1*m1
             J_3ijk += c_nijk*η^n
         end
     else
-        for n ∈ i_range
-            c0n, c1n, c2n = corr_c[n+1]
-            c_nijk = c0n + c1n*m1 + c2n*m2
+        for n ∈ n_range
+            c0, c1, c2 = corr_c[n+1]
+            c_nijk = c0 + c1*m1 + c2*m2
             J_3ijk += c_nijk*η^n
         end
     end
