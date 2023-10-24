@@ -1,3 +1,5 @@
+using Clapeyron: PCSAFTModel
+
 function F_res(model::PCSAFTModel,ρ,T,z)
     ψ = 1.3862
     HSd = d(model,nothing,T,onevec(model))
@@ -27,6 +29,7 @@ function F_res(model::PCSAFTModel,ρ,T,z)
     Φ_disp = mapslices(f3,ρ̄;dims=2)
     
     Φ = Φ_hc+Φ_disp+Φ_hs_assoc
+
     return ∫(Φ,dz)
 end
 
@@ -94,7 +97,7 @@ function δFδρ_disp(model::PCSAFTModel,ρ,T,z)
         bounds = ρ[i].bounds.+(-lim[i],lim[i])
         ∂f∂n =  DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
     
-        span = range(-lim[i],lim[i],length=101)
+        span = range(-lim[i],lim[i],length=101) # Length = 101? Is it because len(z) = 101?
 
         δFδρ_disp[:,i] = π*∫ρz²dz.(Ref(∂f∂n),z,Ref(span))
     end
@@ -188,7 +191,6 @@ function f_disp(model::PCSAFTModel, T, ρ̄)
 
     m2ϵσ3₁,m2ϵσ3₂ =  Clapeyron.m2ϵσ3(model,zero(T), T, x)
     ρ̄ = sum(ρ̄)
-
     return -2*π*ρ̄^2*I₁*m2ϵσ3₁-π*ρ̄^2*m̄*C₁^-1*I₂*m2ϵσ3₂
 end
 
@@ -339,3 +341,7 @@ function assoc_site_matrix(model,T,n,n₃,nᵥ)
 end
 
 export F_res, δFδρ_res
+
+function length_scale(model::SAFTModel)
+    return maximum(model.params.sigma.values)
+end

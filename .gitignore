@@ -1,3 +1,4 @@
 Manifest.toml
 
-notebooks
+notebook
+.vscode
