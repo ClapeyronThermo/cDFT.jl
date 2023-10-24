@@ -1,3 +1,5 @@
+using Clapeyron: QPPCSAFTModel
+
 function F_res(model::QPPCSAFTModel,ρ,T,z)
   ψ = 1.3862
   HSd = d(model,nothing,T,onevec(model))

@@ -6,7 +6,6 @@ using Clapeyron
 using Clapeyron: d, N_A, k_B, R̄
 using Clapeyron: @comps
 using Clapeyron: Solvers, log, sqrt, log1p, PackedVofV, sparse, SparseMatrixCSC
-using Clapeyron: PCSAFTModel, PPCSAFTModel, QPPCSAFTModel, BasicIdealModel
 using Clapeyron: assoc_similar, assoc_matrix_solve, assoc_options, assoc_pair_length
 using Clapeyron: issite, compute_index, complement_index, indices
 import Clapeyron.Solvers
@@ -26,6 +25,7 @@ include("models/weights.jl")
 include("models/FMT.jl")
 include("models/PCSAFT.jl")
 include("models/PPCSAFT.jl")
+include("models/gcPPCSAFT.jl")
 include("models/QPPCSAFT.jl")
 
 include("methods/profiles.jl")

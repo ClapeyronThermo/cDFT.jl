@@ -1,3 +1,5 @@
+using Clapeyron: PCSAFTModel
+
 function F_res(model::PCSAFTModel,ρ,T,z)
     ψ = 1.3862
     HSd = d(model,nothing,T,onevec(model))
@@ -339,3 +341,7 @@ function assoc_site_matrix(model,T,n,n₃,nᵥ)
 end
 
 export F_res, δFδρ_res
+
+function length_scale(model::SAFTModel)
+    return maximum(model.params.sigma.values)
+end

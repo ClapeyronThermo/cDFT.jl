@@ -1,3 +1,5 @@
+using Clapeyron: BasicIdealModel
+
 function F_ideal(model::BasicIdealModel,ρ,T,z)
     dz = ρ[1].mesh_size
 

@@ -1,3 +1,5 @@
+using Clapeyron: PPCSAFTModel
+
 function F_res(model::PPCSAFTModel,ρ,T,z)
     ψ = 1.3862
     HSd = d(model,nothing,T,onevec(model))
