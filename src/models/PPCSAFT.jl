@@ -1,10 +1,14 @@
-function F_res(model::PPCSAFTModel,ρ,T,z,x)
-    # nc = length(model)
-    # idx = 1:nc
-    # # The below should be modified
-    # f(x) = f_mp(model,T,@view(x[idx]))
-    # Φ_polar = mapslices(f,ρ;dims=2)
-    Φ_polar = nothing
+using Clapeyron: PPCSAFTModel
+
+function F_res(model::PPCSAFTModel,ρ,T,z)
+    ψ = 1.3862
+    HSd = d(model,nothing,T,onevec(model))
+    dz = ρ[1].mesh_size
+    
+    _, ρ̄, _ = weights_hs(model,ρ,z,ψ*HSd)
+
+    f(x) = f_polar(model,T,@view(x[@comps]))
+    Φ_polar = mapslices(f,ρ̄;dims=2)
 
     _F_res_PCSAFT = invoke(F_res, Tuple{PCSAFTModel,Any,Any,Any},model,ρ,T,z)
     return _F_res_PCSAFT + ∫(Φ_polar,dz)
@@ -12,122 +16,147 @@ end
 
 function δFδρ_res(model::PPCSAFTModel,ρ,T,z)
     _δFδρ_res_PCSAFT = invoke(δFδρ_res, Tuple{PCSAFTModel,Any,Any,Any},model,ρ,T,z)
-    return _δFδρ_res_PCSAFT + δFδρ_mp(model,ρ,T,z)
+    return _δFδρ_res_PCSAFT + δFδρ_polar(model,ρ,T,z)
 end
 
-function δFδρ_mp(model::PPCSAFTModel,ρ,T,z)
+function δFδρ_polar(model::PPCSAFTModel,ρ,T,z)
     ψ = 1.3862
     HSd = d(model,nothing,T,onevec(model))
     lim = ψ*HSd
 
-    _, ρ̄, _  = weights_hs(model,ρ,z,lim)
+    _, ρ̄, _ = weights_hs(model,ρ,z,lim)
 
-    f(x) = f_mp(model,T,@view(x[@comps]))
-    df(x) = ForwardDiff.gradient(f,x) # Differentiates f_mp wrt x(more specifically \rho)
+    f(x) = f_polar(model,T,@view(x[@comps]))
+    df(x) = ForwardDiff.gradient(f,x)
+    
+    δfδn0  = mapslices(df,ρ̄;dims=2)
+    ∂f∂n0 = δfδn0[:,@comps]
 
+    δFδρ_polar = zeros(length(z),length(model))
+    for i in @comps 
+        bounds = ρ[i].bounds.+(-lim[i],lim[i])
+        ∂f∂n =  DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
+    
+        span = range(-lim[i],lim[i],length=101) # Length = 101? Is it because len(z) = 101?
 
+        δFδρ_polar[:,i] = π*∫ρz²dz.(Ref(∂f∂n),z,Ref(span))
+    end
+
+    return δFδρ_polar
 end
 
-function f_mp(model::PPCSAFTModel,T,ρ̄)
+function f_polar(model::PPCSAFTModel,T,ρ̄)
+    μ̄² = model.params.dipole2.values
+    has_dp = !all(iszero, μ̄²)
+    if !has_dp return zero(T+first(ρ̄)) end
+
     ψ = 1.3862
     HSd = d(model,nothing,T,onevec(model))
-    σ = model.params.sigma.values
     m = model.params.segment.values
+    ϵ = model.params.epsilon.values
+    σ = model.params.sigma.values
 
     ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
     η = π/6*sum(ρ̄.*m.*HSd.^3)
+    x = ρ̄ /sum(ρ̄)
+    ρ̄ = sum(ρ̄)
 
-    # Gross and Vrabec, 2006, AIChE, 10.1002/aic.10683
-
-    A_DD = A_DD(model,T,ρ̄,η,x)
-
-    ã = 0
-
-    return ã
+    _A₂ = A2(x,m,ϵ,σ,μ̄²,η,ρ̄,T)
+    iszero(_A₂) && return zero(_A₂)
+    _A₃ = A3(x,m,ϵ,σ,μ̄²,η,ρ̄,T)
+    _a_dd = _A₂^2/(_A₂-_A₃)
+    return ρ̄*_a_dd
 end
 
-# Dipole-Dipole Interaction
-function f_DD(model::PPCSAFTModel,T,ρ̄,η,x)
-    x_norm = x ./ sum(x) # NEEDS REVISION necessary?
-    
-    m = model.params.segment.values
-    ϵ = [model.params.epsilon.values[i,i] for i in @comps]
-    σ = model.params.sigma.values
-    μ̄² = model.params.dipole2.values
-
-    μ⭒² = [μ̄²[i]/(m[i]*ϵ[i]*σ[i]^3) for i in @comps]
-
-    # A₂
-    A₂ = 0
-    for i in @comps
-        for j in @comps
-            if i>j continue end
-            A₂ += x_norm[i]*x_norm[j]*ϵ[i]*ϵ[j]/(k_B*T)* # ϵ_ii = ϵ_i
-                (σ[i,i]*σ[j,j]/σ[i,j])^3*μ⭒²[i]*μ⭒²[j] # *n_1,n_2 are equal to unity, hence omitted
-                J_DD_2ij(m[i],m[j],ϵ[i],ϵ[j],η,T)
+function A2(x,m,ϵ,σ,μ̄²,η,ρ̄,T)
+    p_comps = [i for (i, μ²) ∈ enumerate(μ̄²) if !iszero(μ²)]
+    _0 = zero(T+first(x))
+    if isempty(p_comps) return _0 end
+    _a_2 = _0
+    @inbounds for (idx, i) ∈ enumerate(p_comps)
+        _J2_ii = J2(m[i],m[i],ϵ[i,i],η,T)
+        xᵢ = x[i]
+        μ̄²ᵢ = μ̄²[i]
+        _a_2 +=xᵢ^2*μ̄²ᵢ^2/σ[i,i]^3*_J2_ii
+        for j ∈ p_comps[idx+1:end]
+            _J2_ij = J2(m[i],m[j],ϵ[i,j],η,T)
+            _a_2 += 2*xᵢ*x[j]*μ̄²ᵢ*μ̄²[j]/σ[i,j]^3*_J2_ij
         end
     end
-    A₂ = -π*ρ̄ *A₂
-    
-    # A₃
-    A₃ = 0
-    for i in @comps
-        for j in @comps
-            if i>j continue end
-            for k in @comps
-                if j>k continue end
-                σ_ij = (σ[i]+σ[j])/2
-                σ_ik = (σ[i]+σ[k])/2
-                σ_jk = (σ[j]+σ[k])/2
-                A₃ += x_norm[i]*x_norm[j]*x_norm[k]*
-                    ϵ[i]*ϵ[j]*ϵ[k]/(k_B*T)^2* # ϵ_ii = ϵ_i, σ_ii = σ_i
-                    (σ[i]*σ[j]*σ[k])^3/(σ_ij*σ_ik*σ_jk)*μ⭒²[i]*μ⭒²[j]*μ⭒²[k]*
-                    J_DD_3ijk(m[i],m[j],m[k],η)
+    _a_2 *= -π*ρ̄/T^2
+    return _a_2
+end
+
+function A3(x,m,ϵ,σ,μ̄²,η,ρ̄,T)
+    p_comps = [i for (i, μ²) ∈ enumerate(μ̄²) if !iszero(μ²)]
+    _0 = zero(T+first(x))
+    if isempty(p_comps) return _0 end
+
+    _a_3 = _0
+    @inbounds for (idx_i,i) ∈ enumerate(p_comps)
+        _J3_iii = J3(m[i],m[i],m[i],η)
+        xᵢ,μ̄ᵢ² = x[i],μ̄²[i]
+        a_3_i = xᵢ*μ̄ᵢ²/σ[i,i]
+        _a_3 += a_3_i^3*_J3_iii
+        for (idx_j,j) ∈ enumerate(p_comps[idx_i+1:end])
+            xⱼ,μ̄ⱼ² = x[j],μ̄²[j]
+            σij⁻¹ = 1/σ[i,j]
+            a_3_iij = xᵢ*μ̄ᵢ²*σij⁻¹
+            a_3_ijj = xⱼ*μ̄ⱼ²*σij⁻¹
+            a_3_j = xⱼ*μ̄ⱼ²/σ[j,j]
+            _J3_iij = J3(m[i],m[i],m[j],η)
+            _J3_ijj = J3(m[i],m[j],m[j],η)
+            _a_3 += 3*a_3_iij*a_3_ijj*(a_3_i*_J3_iij + a_3_j*_J3_ijj)
+            for k ∈ p_comps[idx_i+idx_j+1:end]
+                xₖ,μ̄ₖ² = x[k],μ̄²[k]
+                _J3_ijk = J3(m[i],m[j],m[k],η)
+                _a_3 += 6*xᵢ*xⱼ*xₖ*μ̄ᵢ²*μ̄ⱼ²*μ̄ₖ²*σij⁻¹/(σ[i,k]*σ[j,k])*_J3_ijk
             end
         end
     end
-    A₃ = -4*(π^2)/3*A₃
-    A_DD = A₂/(1-(A₃/A₂))
-
-    return A_DD*ρ̄
+    _a_3 *= -4*π^2/3*ρ̄^2/T^3
+    return _a_3
 end
 
-function J_DD_2ij(mᵢ,mⱼ,ϵᵢ,ϵⱼ,η,T)
-    ϵ_ij = minimum([sqrt(ϵᵢ*ϵⱼ), 2.0]) # NEEDS REVISION minimum 2.0 needed?
-    m_ij = minimum([sqrt(mᵢ*mⱼ), 2.0])
-    corr_a = PPCSAFTconsts[:corr_a]
-    corr_b = PPCSAFTconsts[:corr_b]
-    m1 = (m_ij-1)/m_ij
-    m2 = (m_ij-1)/m_ij*(m_ij-2)/m_ij
+function J2(mᵢ,mⱼ,ϵᵢⱼ,η,T)
+    ϵᵢⱼT⁻¹ = ϵᵢⱼ/T
+    m̄ = minimum([sqrt(mᵢ*mⱼ), 2.0])
 
-    J_DD_2ij = 0
-    for n in 1:4
-        a0n, a1n, a2n = corr_a[n]
-        b0n, b1n, b2n = corr_b[n]
-        a_nij = a0n + a1n*m1 + a2n*m2
-        b_nij = b0n + b1n*m1 + b2n*m2
-        J_DD_2ij += (a_nij+b_nij*ϵ_ij/(k_B*T))*η^n
+    m1 = 1. - 1/m̄
+    m2 = m1 * (1. - 2/m̄)
+    corr_a = DD_consts[:corr_a]
+    corr_b = DD_consts[:corr_b]
+
+    J_2ij = zero(η)
+
+    for n ∈ 0:4
+        a0, a1, a2 = corr_a[n+1]
+        b0, b1, b2 = corr_b[n+1]
+        a_nij = a0 + a1*m1 + a2*m2
+        b_nij = b0 + b1*m1 + b2*m2
+        J_2ij += (a_nij + b_nij*ϵᵢⱼT⁻¹) * η^n
     end
 
-    return J_DD_2ij
+    return J_2ij
 end
 
-function J_DD_3ijk(mᵢ,mⱼ,mₖ,η)
-    m_ijk = minimum([cbrt(mᵢ*mⱼ*mₖ), 2.0])
-    corr_c = PPCSAFTconsts[:corr_c]
-    m1 = (m_ijk-1)/m_ijk
-    m2 = (m_ijk-1)/m_ijk*(m_ijk-2)/m_ijk
+function J3(mᵢ,mⱼ,mₖ,η)
+    m̄ = minimum([cbrt(mᵢ*mⱼ*mₖ), 2.0])
+    corr_c = DD_consts[:corr_c]
+    m1 = 1. - 1/m̄
+    m2 = m1 * (1. - 2/m̄)
 
-    J_DD_3ijk = 0
-    for n in 1:4
-        c0n, c1n, c2n = corr_c[n]
-        c_nijk = c0n + c1n*m1 + c2n*m2
-        J_DD_3ijk += c_nijk*η^n
+    J_3ijk = zero(η)
+    for n ∈ 0:4
+        c0, c1, c2 = corr_c[n+1]
+        c_nijk = c0 + c1*m1 + c2*m2
+        J_3ijk += c_nijk*η^n
     end
-    return J_DD_3ijk
+
+    return J_3ijk
 end
 
-const PPCSAFTconsts = (
+const DD_consts = (
     corr_a =
     ((0.3043504,0.9534641,-1.161008),
     (-0.1358588,-1.8396383,4.5258607),

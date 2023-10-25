@@ -1,3 +1,5 @@
+using Clapeyron: PCSAFTModel
+
 function F_res(model::PCSAFTModel,ρ,T,z)
     ψ = 1.3862
     HSd = d(model,nothing,T,onevec(model))
@@ -177,10 +179,8 @@ function f_disp(model::PCSAFTModel, T, ρ̄)
     m = model.params.segment.values
 
     ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
-    # println(ρ̄)
 
     x = ρ̄ /sum(ρ̄)
-    # println(ρ̄)
     m̄ = dot(x,m)
 
     η = π/6*sum(ρ̄.*m.*HSd.^3)
@@ -191,8 +191,6 @@ function f_disp(model::PCSAFTModel, T, ρ̄)
 
     m2ϵσ3₁,m2ϵσ3₂ =  Clapeyron.m2ϵσ3(model,zero(T), T, x)
     ρ̄ = sum(ρ̄)
-    # println(ρ̄)
-
     return -2*π*ρ̄^2*I₁*m2ϵσ3₁-π*ρ̄^2*m̄*C₁^-1*I₂*m2ϵσ3₂
 end
 
@@ -343,3 +341,7 @@ function assoc_site_matrix(model,T,n,n₃,nᵥ)
 end
 
 export F_res, δFδρ_res
+
+function length_scale(model::SAFTModel)
+    return maximum(model.params.sigma.values)
+end
