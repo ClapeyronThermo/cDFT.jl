@@ -34,14 +34,21 @@ function converge_profile!(model,ρ,T,z;damping=0.05)
 
     # ρ_new = Solvers.fixpoint(f!,X0,AndersonFixPoint(memory =50),rtol = 1e-4)
 
-    r = fixed_point(fX, ln_X0;Algorithm = :Anderson, 
+    fX(ln_x) = obj(model, copy(ln_x), ρ, T, z, ln_x, μ_res, ρl, 1e-3)
+    r = fixed_point(fX, ln_X0;Algorithm = :Simple, 
                                 ConvergenceMetric = norm(output,input) = maximum(abs.(output./input .-1)/damping),
-                                ConvergenceMetricThreshold=1e-5,
+                                ConvergenceMetricThreshold=1e-4,
+                                MaxIter=100)
+
+    fX(ln_x) = obj(model, copy(ln_x), ρ, T, z, ln_x, μ_res, ρl, damping)
+    r = fixed_point(fX, r;Algorithm = :Anderson, 
+                                ConvergenceMetric = norm(output,input) = maximum(abs.(output./input .-1)/damping),
+                                ConvergenceMetricThreshold=1e-4,
                                 MaxIter=10000,
-                                MaxM=25)
+                                MaxM=50)
     
     if ismissing(r.FixedPoint_)
-        @warn "Convergence failed"
+        throw(error("Convergence failed"))
         ρ_new = exp.(r.Outputs_[:,end])
         ρ_new = reshape(ρ_new,(length(z),length(ρ)))
         for i in @comps
