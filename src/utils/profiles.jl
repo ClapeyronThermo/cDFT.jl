@@ -15,7 +15,7 @@ function DensityProfile(ρ,z,bounds,boundary_conditions)
     update_profile!(prof,prof.density)
 end
 
-function update_profile!(prof,ρnew)
+function update_profile!(prof::DensityProfile,ρnew)
     @assert length(prof.density) == length(ρnew)
     prof.density .= ρnew
     ρ = prof.density
