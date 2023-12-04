@@ -28,6 +28,20 @@ function _initial_eq_surface_tension(model::EoSModel,T,x)
 end
 
 function initial_surface_tension_density_profile(model::EoSModel,T,x,bounds,ngrid::Int64=101)
+    return _initial_surface_tension_density_profile(
+        model,:Cartesian,T,x,bounds,ngrid
+    )
+end
+
+function initial_surface_tension_spherical_density_profile(model::EoSModel,T,x,bounds,ngrid::Int64=101)
+    return _initial_surface_tension_density_profile(
+        model,:Spherical,T,x,bounds,ngrid
+    )
+end
+
+function _initial_surface_tension_density_profile(model::EoSModel,prof_type::Symbol,T,x,bounds,ngrid::Int64=101)
+    DP = prof_type == :Cartesian ? CartesianDensityProfile : SphericalDensityProfile
+    
     z = range(first(bounds),last(bounds),ngrid) |> collect
     L = length_scale(model)
     
@@ -36,12 +50,12 @@ function initial_surface_tension_density_profile(model::EoSModel,T,x,bounds,ngri
     ρl = x./vl
     ρv = y./vv
 
-    ρ = DensityProfile[]
+    ρ = DP[]
     for i in @comps
         boundary_conditions = [ρv[i],ρl[i]]
         ρ_points =@. 1/2*(ρl[i]-ρv[i])*tanh(z/L*(2.4728-2.3625*T/Tc[i]))+1/2*(ρl[i]+ρv[i])
 
-        push!(ρ,DensityProfile(ρ_points,z,bounds,boundary_conditions))
+        push!(ρ,DP(ρ_points,z,bounds,boundary_conditions))
     end
     return ρ, z
 end

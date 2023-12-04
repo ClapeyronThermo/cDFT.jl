@@ -1,6 +1,6 @@
 using Clapeyron: PCSAFTModel
 
-function F_res(model::PCSAFTModel,ρ,T,z)
+function F_res(model::PCSAFTModel,ρ::DP,T,z) where {DP <: DensityProfile}
     ψ = 1.3862
     HSd = d(model,nothing,T,onevec(model))
     dz = ρ[1].mesh_size
@@ -40,7 +40,7 @@ function δFδρ_res(model::PCSAFTModel,ρ,T,z)
            δFδρ_assoc(model,ρ,T,z)
 end
 
-function δFδρ_hc(model::PCSAFTModel,ρ,T,z)
+function δFδρ_hc(model::PCSAFTModel,ρ::DP,T,z) where {DP <: DensityProfile}
     HSd = d(model,nothing,T,onevec(model))
     lim = HSd
 
@@ -63,9 +63,9 @@ function δFδρ_hc(model::PCSAFTModel,ρ,T,z)
     δFδρ_hc = zeros(length(z),length(model))
     for i in @comps 
         bounds = ρ[i].bounds.+(-lim[i],lim[i])
-        ∂f∂ρhc = DensityProfile(@view(∂f∂ρhc0[:,i]),z,bounds,[∂f∂ρhc0[1,i],∂f∂ρhc0[end,i]])
-        ∂f∂ρ̄hc = DensityProfile(@view(∂f∂ρ̄hc0[:,i]),z,bounds,[∂f∂ρ̄hc0[1,i],∂f∂ρ̄hc0[end,i]])
-        ∂f∂λ = DensityProfile(@view(∂f∂λ0[:,i]),z,bounds,[∂f∂λ0[1,i],∂f∂λ0[end,i]])
+        ∂f∂ρhc = DP(@view(∂f∂ρhc0[:,i]),z,bounds,[∂f∂ρhc0[1,i],∂f∂ρhc0[end,i]])
+        ∂f∂ρ̄hc = DP(@view(∂f∂ρ̄hc0[:,i]),z,bounds,[∂f∂ρ̄hc0[1,i],∂f∂ρ̄hc0[end,i]])
+        ∂f∂λ = DP(@view(∂f∂λ0[:,i]),z,bounds,[∂f∂λ0[1,i],∂f∂λ0[end,i]])
     
         span = range(-lim[i],lim[i],length=101)
 
@@ -78,7 +78,7 @@ function δFδρ_hc(model::PCSAFTModel,ρ,T,z)
     return δFδρ_hc
 end
 
-function δFδρ_disp(model::PCSAFTModel,ρ,T,z)
+function δFδρ_disp(model::PCSAFTModel,ρ::DP,T,z) where {DP <: DensityProfile}
     HSd = d(model,nothing,T,onevec(model))
     lim = 1.3862*HSd
 
@@ -95,7 +95,7 @@ function δFδρ_disp(model::PCSAFTModel,ρ,T,z)
     δFδρ_disp = zeros(length(z),length(model))
     for i in @comps 
         bounds = ρ[i].bounds.+(-lim[i],lim[i])
-        ∂f∂n =  DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
+        ∂f∂n =  DP(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
     
         span = range(-lim[i],lim[i],length=101) # Length = 101? Is it because len(z) = 101?
 
@@ -105,7 +105,7 @@ function δFδρ_disp(model::PCSAFTModel,ρ,T,z)
     return δFδρ_disp
 end
 
-function δFδρ_assoc(model::SAFTModel,ρ,T,z)
+function δFδρ_assoc(model::SAFTModel,ρ::DP,T,z) where {DP <: DensityProfile}
     HSd = d(model,nothing,T,onevec(model))
     lim = 1/2*HSd
 
@@ -126,9 +126,9 @@ function δFδρ_assoc(model::SAFTModel,ρ,T,z)
     δFδρ_assoc = zeros(length(z),length(model))
     for i in @comps 
         bounds = ρ[i].bounds.+(-lim[i],lim[i])
-        ∂f∂n = DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
-        ∂f∂n₃ = DensityProfile(∂f∂n₃0[:,i],z,bounds,[∂f∂n₃0[1,i],∂f∂n₃0[end,i]])
-        ∂f∂nᵥ = DensityProfile(∂f∂nᵥ0[:,i],z,bounds,[∂f∂nᵥ0[1,i],∂f∂nᵥ0[end,i]])
+        ∂f∂n = DP(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
+        ∂f∂n₃ = DP(∂f∂n₃0[:,i],z,bounds,[∂f∂n₃0[1,i],∂f∂n₃0[end,i]])
+        ∂f∂nᵥ = DP(∂f∂nᵥ0[:,i],z,bounds,[∂f∂nᵥ0[1,i],∂f∂nᵥ0[end,i]])
     
         span = range(-lim[i],lim[i],length=101)
 

@@ -23,48 +23,60 @@ function _∫(f,dz::Number,last = 0)
     return ∑f*dz/3
 end
 
-function ∫ρdz(ρ::DensityProfile,z_eval::Float64,span::StepRangeLen)
+function ∫ρdz(ρ::CartesianDensityProfile,z_eval::Float64,span::StepRangeLen)
     dz = step(span)*one(eltype(ρ.density))
     z = z_eval.+span
     I = (ρ(zi) for zi in z)
     return ∫(I,dz,length(z))
 end
 
-function ∫ρzdz(ρ::DensityProfile,z_eval::Float64,span::StepRangeLen)
+function ∫ρzdz(ρ::CartesianDensityProfile,z_eval::Float64,span::StepRangeLen)
     dz = step(span)*one(eltype(ρ.density))
     z = z_eval.+span
     I = (ρ(zi) * (zi - z_eval) for zi in z)
     return  ∫(I,dz,length(z))
 end
 
-function ∫ρz²dz(ρ::DensityProfile,z_eval::Float64,span::StepRangeLen)
+function ∫ρz²dz(ρ::CartesianDensityProfile,z_eval::Float64,span::StepRangeLen)
     dz = step(span)
     z = z_eval.+span
     I = (ρ(zi)*(span[end]^2 - (zi - z_eval)^2) for zi in z)
     return ∫(I,dz,length(z))
 end
-#=
-function ∫fdz(model::FunctionalModel,f::Vector,z::Vector{Float64},z_eval::Float64,lim::Float64)
-    ϵerr = sqrt(eps(lim))
-    idx = @. z_eval-lim-ϵerr<=z && z<=z_eval+lim+ϵerr
-    dz = model.domain.mesh_size
 
-    return ∫(f[idx[:]],dz)
+##### Spherical Density Profiles
+## 10.1063/1.1520530
+## Yu and Wu, J. Chem. Phys. 117, 10156 (2002)
+
+function ∫ρdz(ρ::SphericalDensityProfile,z_eval::Float64,span::StepRangeLen)
+    return 1. /z_eval * ∫ρrdr(ρ,z_eval,span)
+end
+function ∫ρzdz(ρ::SphericalDensityProfile,z_eval::Float64,span::StepRangeLen)
+    return 1. /(z_eval*z_eval) * ∫ρrr²dr_vector(ρ,z_eval,span)
+end
+function ∫ρz²dz(ρ::SphericalDensityProfile,z_eval::Float64,span::StepRangeLen)
+    return 1. /z_eval * ∫ρrr²dr_scalar(ρ,z_eval,span)
 end
 
-function ∫fzdz(model::FunctionalModel,f::Vector,z::Vector{Float64},z_eval::Float64,lim::Float64)
-    ϵerr = sqrt(eps(lim))
-    idx = @. z_eval-lim-ϵerr<=z && z<=z_eval+lim+ϵerr
-    dz = model.domain.mesh_size
-
-    return ∫(f[vec(idx)].*(z[vec(idx)].-z_eval),dz)
+function ∫ρrdr(ρ::SphericalDensityProfile,r_eval::Float64,span::StepRangeLen)
+    dr = step(span)*one(eltype(ρ.density))
+    r = r_eval.+span
+    I = (ρ(ri) * ri for ri in r)
+    return ∫(I,dr,length(r))
 end
 
+# for n3
+function ∫ρrr²dr_scalar(ρ::SphericalDensityProfile,r_eval::Float64,span::StepRangeLen)
+    dr = step(span)*one(eltype(ρ.density))
+    r = r_eval.+span
+    I = (ρ(ri) * ri * (span[end]^2 - (r_eval - ri)^2) for ri in r)
+    return  ∫(I,dr,length(r))
+end
 
-function ∫fz²dz(model::FunctionalModel,f::Vector,z::Vector{Float64},z_eval::Float64,lim::Float64)
-    ϵerr = sqrt(eps(lim))
-    idx = @. z_eval-lim-ϵerr<=z && z<=z_eval+lim+ϵerr
-    dz = model.domain.mesh_size
-
-    return ∫(f[idx[:]].*(lim^2 .-(z[idx[:]].-z_eval).^2),dz)
-end=#
+# for n2_vec & n3_vec
+function ∫ρrr²dr_vector(ρ::SphericalDensityProfile,r_eval::Float64,span::StepRangeLen)
+    dr = step(span)*one(eltype(ρ.density))
+    r = r_eval.+span
+    I = (ρ(ri) * ri * (r_eval^2 - ri^2 + span[end]^2) for ri in r)
+    return  ∫(I,dr,length(r))
+end

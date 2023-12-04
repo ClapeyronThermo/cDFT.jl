@@ -1,9 +1,9 @@
 function interfacial_tension(model::EoSModel,p,T,n;surfactant=nothing,K0=nothing)
-    L = length_scale(model)
+    σ = maximum(model.params.sigma.values)
 
-    ρ,z = initial_interfacial_tension_density_profile(model,p,T,n,[-10L,10L],201;surfactant=surfactant,K0=K0)
+    ρ,z = initial_interfacial_tension_density_profile(model,p,T,n,[-10σ,10σ],201;surfactant=surfactant,K0=K0)
 
-    converge_profile!(model,ρ,T,z;damping=1e-2)
+    converge_profile!(model,ρ,T,z;damping=0.01)
 
     return eval_interfacial_tension(model,p,T,ρ,z)
 end
@@ -17,6 +17,7 @@ function initial_interfacial_tension_density_profile(model::EoSModel,p,T,n,bound
     z = range(first(bounds),last(bounds),ngrid) |> collect
 
     (x,N,G) = tp_flash(model,p,T,n,RRTPFlash(equilibrium=:lle))
+    println(x)
 
     v1 = volume(model,p,T,x[1,:])
     v2 = volume(model,p,T,x[2,:])
@@ -42,16 +43,16 @@ end
 # ρ(z) = 1/2(ρ1-ρ2)*tanh(a*z/σ+b)+1/2*(ρ1+ρ2)+c^2*exp(-(z/\sigma))
 function _initial_interfacial_tension_density_profile(model::EoSModel,ρ1,ρ2,bounds,z,coef=ones(length(model)),shift=zeros(length(model));surfactant=nothing)
     ρ = DensityProfile[]
-    L = length_scale(model)
     components = model.components
     icomponents = 1:length(model)
     isurf = icomponents[components.==surfactant]
     for i in @comps
         boundary_conditions = [ρ2[i],ρ1[i]]
+        σ = model.params.sigma[i]
         if i in isurf
-            ρ_points =@. 1/2*(ρ1[i]-ρ2[i])*tanh(z/L)+1/2*(ρ1[i]+ρ2[i])+maximum([ρ1[i],ρ2[i]])[1]*shift[i]^2*exp(-(z/L)^2/coef[i]^2)
+            ρ_points =@. 1/2*(ρ1[i]-ρ2[i])*tanh(z/σ)+1/2*(ρ1[i]+ρ2[i])+maximum([ρ1[i],ρ2[i]])[1]*shift[i]^2*exp(-(z/σ)^2/coef[i]^2)
         else
-            ρ_points =@. 1/2*(ρ1[i]-ρ2[i])*tanh(z/L*coef[i]+shift[i])+1/2*(ρ1[i]+ρ2[i])
+            ρ_points =@. 1/2*(ρ1[i]-ρ2[i])*tanh(z/σ*coef[i]+shift[i])+1/2*(ρ1[i]+ρ2[i])
         end
 
         push!(ρ,DensityProfile(ρ_points,z,bounds,boundary_conditions))

@@ -8,7 +8,7 @@ Hard-Sphere Functional derived using Fundamental Measure Theory as presented by 
 1. Yu, Y-X., & Wu, J. (2002). Structures of hard-sphere fluids from a modified fundamental-measure theory. The Journal of Chemical Physics, 117(22), 10156-10164. [doi:10.1063/1.1520530](https://doi.org/10.1063/1.1520530)
 """
 
-function F_hs(model::SAFTModel,ρ,T,z)
+function F_hs(model::SAFTModel,ρ::DP,T,z) where {DP <: DensityProfile}
     HSd = d(model,[],T,ones(length(model)))
     dz = ρ[1].mesh_size
 
@@ -52,7 +52,7 @@ function δfδρ_hs(model::SAFTModel ,T ,n, n₃, nᵥ)
     return (∂f∂n, ∂f∂n₃, ∂f∂nᵥ)
 end
 
-function δFδρ_hs(model::SAFTModel,ρ,T,z)
+function δFδρ_hs(model::SAFTModel,ρ::DP,T,z) where {DP <: DensityProfile}
     HSd = d(model,[],T,ones(length(model)))
     lim = 1/2*HSd
 
@@ -62,12 +62,12 @@ function δFδρ_hs(model::SAFTModel,ρ,T,z)
     δFδρ_hs = zeros(length(z),length(model))
     for i in @comps 
         bounds = ρ[i].bounds.+[-lim[i],lim[i]]
-        ∂f∂n = DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
-        ∂f∂n₃ = DensityProfile(∂f∂n₃0[:,i],z,bounds,[∂f∂n₃0[1,i],∂f∂n₃0[end,i]])
-        ∂f∂nᵥ = DensityProfile(∂f∂nᵥ0[:,i],z,bounds,[∂f∂nᵥ0[1,i],∂f∂nᵥ0[end,i]])
+        ∂f∂n = DP(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
+        ∂f∂n₃ = DP(∂f∂n₃0[:,i],z,bounds,[∂f∂n₃0[1,i],∂f∂n₃0[end,i]])
+        ∂f∂nᵥ = DP(∂f∂nᵥ0[:,i],z,bounds,[∂f∂nᵥ0[1,i],∂f∂nᵥ0[end,i]])
     
         span = range(-lim[i],lim[i],length=101)
-
+        
         δFδρ_hs_1 = ∫ρdz.(Ref(∂f∂n),z,Ref(span))
         δFδρ_hs_2 = π*∫ρz²dz.(Ref(∂f∂n₃),z,Ref(span))
         δFδρ_hs_3 = -∫ρzdz.(Ref(∂f∂nᵥ),z,Ref(span))
