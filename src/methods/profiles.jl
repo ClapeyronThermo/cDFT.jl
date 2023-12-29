@@ -83,7 +83,10 @@ function converge_profile!(
             ρ_new = exp.(@view(ln_x[:,i]))
             ρ_lb = ρ_new[1] # bound condition at 1
             ρ_ub = ρ_new[end] # boundary condition at end
+
+            # flag
             idx_gds = _find_idx_gibbs_dividing_surface(ρ_new, z)
+
             Δidx = idx_gds - interface_idx
             if Δidx > 0
                 ρ_new = vcat(ρ_new[Δidx+1:end], ρ_ub*ones(Δidx))
@@ -137,7 +140,54 @@ function converge_profile!(
     end
 end
 
-function _find_idx_gibbs_dividing_surface(ρ_new, z)
-    len = length(z)
-    return round(Int, len/2)
+# assumes the surface excess is zero.
+# uses trapezoidal area
+# for cartesian profiles, for now
+# for now, assumes monotonically decreasing density function
+# TODO: add support for non-monotonic density function
+function _find_z_gibbs_dividing_surface(ρ_new, z)
+    area_left = 0.
+    area_right = 0.
+    
+    left = 1
+    right = length(z)
+
+    # ρ bulk
+    ρb_left = ρ_new[1]
+    ρb_right = ρ_new[end]
+
+    while true
+        if abs(area_left) < abs(area_right)
+            left += 1
+            area_left += (z[left] - z[left-1])/2 * (2 * ρb_left - ρ_new[left] - ρ_new[left-1])
+        else
+            right -= 1
+            area_right += (z[right+1] - z[right])/2 * (ρ_new[right] + ρ_new[right+1] - 2 * ρb_right)
+        end
+        if left == right
+            if abs(area_left) < abs(area_right)
+                right += 1
+            else
+                left -= 1
+            end
+            break
+        end
+    end
+
+    # now the target z is somewhere in between z[left] and z[right]
+    # use linear interpolation to find the exact z
+    ΔA = area_left - area_right
+    z_gds = _calc_z_gds(ΔA, z[right], z[left], ρb_right, ρb_left, ρ_new[right], ρ_new[left])
+    return z_gds
+end
+
+function _calc_z_gds(ΔA, zr, zl, ρbr, ρbl, ρr, ρl)
+    m = (ρr-ρl)/(zr-zl)
+    term1 = ρl*(zr-zl)
+    term2 = (ρr-2*ρbr)*zr
+    term3 = (2*ρbl-ρl)*zl
+    term4 = m*zl*(zl-zr)
+    denom = m*(zr-zl) - ρr + ρl + 2*ρbr - 2*ρbl
+    numer = 2*ΔA - term1 - term2 - term3 - term4
+    return numer/denom
 end
