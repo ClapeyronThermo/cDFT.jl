@@ -8,7 +8,7 @@ Hard-Sphere Functional derived using Fundamental Measure Theory as presented by 
 1. Yu, Y-X., & Wu, J. (2002). Structures of hard-sphere fluids from a modified fundamental-measure theory. The Journal of Chemical Physics, 117(22), 10156-10164. [doi:10.1063/1.1520530](https://doi.org/10.1063/1.1520530)
 """
 
-function F_hs(model::SAFTModel,ρ::DP,T,z) where {DP <: DensityProfile}
+function F_hs(model::SAFTModel,ρ::Vector{DP},T,z) where {DP <: DensityProfile}
     HSd = d(model,[],T,ones(length(model)))
     dz = ρ[1].mesh_size
 
@@ -52,7 +52,7 @@ function δfδρ_hs(model::SAFTModel ,T ,n, n₃, nᵥ)
     return (∂f∂n, ∂f∂n₃, ∂f∂nᵥ)
 end
 
-function δFδρ_hs(model::SAFTModel,ρ::DP,T,z) where {DP <: DensityProfile}
+function δFδρ_hs(model::SAFTModel,ρ::Vector{DP},T,z) where {DP <: DensityProfile}
     HSd = d(model,[],T,ones(length(model)))
     lim = 1/2*HSd
 

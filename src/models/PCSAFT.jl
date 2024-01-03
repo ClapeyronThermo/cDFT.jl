@@ -1,6 +1,6 @@
 using Clapeyron: PCSAFTModel
 
-function F_res(model::PCSAFTModel,ρ::DP,T,z) where {DP <: DensityProfile}
+function F_res(model::PCSAFTModel,ρ::Vector{DP},T,z) where {DP <: DensityProfile}
     ψ = 1.3862
     HSd = d(model,nothing,T,onevec(model))
     dz = ρ[1].mesh_size
@@ -40,7 +40,7 @@ function δFδρ_res(model::PCSAFTModel,ρ,T,z)
            δFδρ_assoc(model,ρ,T,z)
 end
 
-function δFδρ_hc(model::PCSAFTModel,ρ::DP,T,z) where {DP <: DensityProfile}
+function δFδρ_hc(model::PCSAFTModel,ρ::Vector{DP},T,z) where {DP <: DensityProfile}
     HSd = d(model,nothing,T,onevec(model))
     lim = HSd
 
@@ -78,7 +78,7 @@ function δFδρ_hc(model::PCSAFTModel,ρ::DP,T,z) where {DP <: DensityProfile}
     return δFδρ_hc
 end
 
-function δFδρ_disp(model::PCSAFTModel,ρ::DP,T,z) where {DP <: DensityProfile}
+function δFδρ_disp(model::PCSAFTModel,ρ::Vector{DP},T,z) where {DP <: DensityProfile}
     HSd = d(model,nothing,T,onevec(model))
     lim = 1.3862*HSd
 
@@ -105,7 +105,7 @@ function δFδρ_disp(model::PCSAFTModel,ρ::DP,T,z) where {DP <: DensityProfile
     return δFδρ_disp
 end
 
-function δFδρ_assoc(model::SAFTModel,ρ::DP,T,z) where {DP <: DensityProfile}
+function δFδρ_assoc(model::SAFTModel,ρ::Vector{DP},T,z) where {DP <: DensityProfile}
     HSd = d(model,nothing,T,onevec(model))
     lim = 1/2*HSd
 
