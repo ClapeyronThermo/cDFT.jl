@@ -140,11 +140,8 @@ function converge_profile!(
     end
 end
 
-# assumes the surface excess is zero.
 # uses trapezoidal area
 # for cartesian profiles, for now
-# for now, assumes monotonically decreasing density function
-# TODO: add support for non-monotonic density function
 function _find_z_gibbs_dividing_surface(ρ_new, z)
     area_left = 0.
     area_right = 0.

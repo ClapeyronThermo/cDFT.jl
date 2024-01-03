@@ -38,6 +38,31 @@ function update_profile!(prof::DensityProfile,ρnew)
     return prof
 end
 
+
+# shifts the profile by z_shift to the right
+# put -z_gds to shift the profile so that z_gds places at the center
+function shift_profile!(prof::DensityProfile,z_shift)
+    coords = prof.coords
+    len = length(coords)
+    new_coords = coords .- z_shift
+    ρ_l = prof.boundary_conditions[1]
+    ρ_r = prof.boundary_conditions[2]
+    z_max = coords[end]
+    z_min = coords[1]
+    ρ_new = zeros(len)
+    for i in 1:len
+        if new_coords[i] < z_min
+            ρ_new[i] = ρ_l
+        elseif new_coords[i] > z_max
+            ρ_new[i] = ρ_r
+        else
+            ρ_new[i] = prof(new_coords[i])
+        end
+    end
+    update_profile!(prof,ρ_new)
+    return prof
+end
+
 function (ρ::DensityProfile)(z)
     # Value sits on upper interval border
     @inbounds begin
