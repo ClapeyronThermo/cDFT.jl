@@ -1,6 +1,6 @@
 using Clapeyron: QPPCSAFTModel
 
-function F_res(model::QPPCSAFTModel,ρ,T,z)
+function F_res(model::QPPCSAFTModel,ρ::Vector{DP},T,z) where {DP <: DensityProfile}
   ψ = 1.3862
   HSd = d(model,nothing,T,onevec(model))
   dz = ρ[1].mesh_size
@@ -14,12 +14,12 @@ function F_res(model::QPPCSAFTModel,ρ,T,z)
   return _F_res_PCSAFT + ∫(Φ_polar,dz)
 end
 
-function δFδρ_res(model::QPPCSAFTModel,ρ,T,z)
+function δFδρ_res(model::QPPCSAFTModel,ρ::Vector{DP},T,z) where {DP <: DensityProfile}
   _δFδρ_res_PCSAFT = invoke(δFδρ_res, Tuple{PCSAFTModel,Any,Any,Any},model,ρ,T,z)
   return _δFδρ_res_PCSAFT + δFδρ_polar(model,ρ,T,z)
 end
 
-function δFδρ_polar(model::QPPCSAFTModel,ρ,T,z)
+function δFδρ_polar(model::QPPCSAFTModel,ρ::Vector{DP},T,z) where {DP <: DensityProfile}
   ψ = 1.3862
   HSd = d(model,nothing,T,onevec(model))
   lim = ψ*HSd
@@ -35,7 +35,7 @@ function δFδρ_polar(model::QPPCSAFTModel,ρ,T,z)
   δFδρ_polar = zeros(length(z),length(model))
   for i in @comps 
       bounds = ρ[i].bounds.+(-lim[i],lim[i])
-      ∂f∂n =  DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
+      ∂f∂n =  DP(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
   
       span = range(-lim[i],lim[i],length=101)
 
