@@ -1,8 +1,8 @@
-function surface_tension(model::EoSModel,T,x = [1.0])
+function surface_tension(model::EoSModel,T,x = [1.0];ngrid = 101)
     L = length_scale(model)
     (p,vl,vv,y) = bubble_pressure(model,T,x) #on single component, returns just the saturation pressure.
     # if T<0.75Tc
-        ρ,z = initial_surface_tension_density_profile(model,T,x,[-10L,10L],101)
+        ρ,z = initial_surface_tension_density_profile(model,T,x,[-10L,10L],ngrid)
     # else
     #     ρ,z = initial_interfacial_density_profile(model,T,[-20σ,20σ],201)
     # end
@@ -10,7 +10,13 @@ function surface_tension(model::EoSModel,T,x = [1.0])
     converge_profile!(model,ρ,T,z)
     F = F_tot(model,ρ,T,z)
     μ = Clapeyron.VT_chemical_potential(model,vl,T,x)
-    return F*k_B*T-sum([μ[i]*∫(ρ[i].density,ρ[i].mesh_size) for i in @comps])+p*∫(one.(z),ρ[1].mesh_size)
+    γ = F*k_B*T
+    ∑x = sum(x)
+    for i in @comps
+        dz = ρ[i].mesh_size
+        γ -= μ[i]*∫(ρ[i].density,dz) + p*∫(one.(z),dz)*x[i]/∑x
+    end
+    return γ
 end
 
 function _initial_eq_surface_tension(model::EoSModel,T,x::SingleComp)
@@ -27,7 +33,7 @@ function _initial_eq_surface_tension(model::EoSModel,T,x)
     return Tc,vl,vv,x,y 
 end
 
-function initial_surface_tension_density_profile(model::EoSModel,T,x,bounds,ngrid::Int64=101)
+function initial_surface_tension_density_profile(model::EoSModel,T,x,bounds,ngrid::Int64=100)
     z = range(first(bounds),last(bounds),ngrid) |> collect
     L = length_scale(model)
     

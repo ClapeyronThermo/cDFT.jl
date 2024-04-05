@@ -1,4 +1,4 @@
-function converge_profile!(model,ρ,T,z;damping=0.05)
+function converge_profile!(model,ρ,T,z;damping=1e-3)
     ρl =[ρ[i].boundary_conditions[2] for i in @comps]
     Vl = 1/sum(ρl)
     X = ρl./sum(ρl)
@@ -23,22 +23,18 @@ function converge_profile!(model,ρ,T,z;damping=0.05)
     end
 
     ln_X0 = zeros(length(z),length(ρ))
-    ln_GX0 = copy(ln_X0)
-    fX(ln_x) = obj(model, copy(ln_x), ρ, T, z, ln_x, μ_res, ρl, damping)
-    
+    ln_GX0 = copy(ln_X0)    
     for i in @comps
         ln_X0[:,i] = log.(ρ[i].density)
     end
-
     ln_X0 = vec(ln_X0)
-
     # ρ_new = Solvers.fixpoint(f!,X0,AndersonFixPoint(memory =50),rtol = 1e-4)
-
-    fX(ln_x) = obj(model, copy(ln_x), ρ, T, z, ln_x, μ_res, ρl, 1e-3)
+    #=
+    fX(ln_x) = obj(model, copy(ln_x), ρ, T, z, ln_x, μ_res, ρl, damping)
     r = fixed_point(fX, ln_X0;Algorithm = :Simple, 
                                 ConvergenceMetric = norm(output,input) = maximum(abs.(output./input .-1)/damping),
                                 ConvergenceMetricThreshold=1e-4,
-                                MaxIter=100)
+                                MaxIter=100) =#
 
     fX(ln_x) = obj(model, copy(ln_x), ρ, T, z, ln_x, μ_res, ρl, damping)
     r = fixed_point(fX, r;Algorithm = :Anderson, 

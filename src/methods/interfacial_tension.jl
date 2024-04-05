@@ -1,14 +1,11 @@
-function interfacial_tension(model::EoSModel,p,T,n;surfactant=nothing,K0=nothing)
+function interfacial_tension(model::EoSModel,p,T,n;surfactant = nothing,K0 = nothing,ngrid = 101)
     L = length_scale(model)
-
-    ρ,z = initial_interfacial_tension_density_profile(model,p,T,n,[-10L,10L],201;surfactant=surfactant,K0=K0)
-
+    ρ,z = initial_interfacial_tension_density_profile(model,p,T,n,[-10L,10L],2*ngrid - 1;surfactant=surfactant,K0=K0)
     converge_profile!(model,ρ,T,z;damping=1e-2)
-
     return eval_interfacial_tension(model,p,T,ρ,z)
 end
 
-function initial_interfacial_tension_density_profile(model::EoSModel,p,T,n,bounds,ngrid::Int64=101;surfactant=nothing,K0=nothing)
+function initial_interfacial_tension_density_profile(model::EoSModel,p,T,n,bounds,ngrid=101;surfactant=nothing,K0=nothing)
     nc = length(model)    
     components = model.components
     icomponents = 1:length(model)
