@@ -1,6 +1,6 @@
-using Clapeyron: PPCSAFTModel
+using Clapeyron: PCPSAFTModel
 
-function F_res(model::PPCSAFTModel,ρ,T,z)
+function F_res(model::PCPSAFTModel,ρ,T,z)
     ψ = 1.3862
     HSd = d(model,nothing,T,onevec(model))
     dz = ρ[1].mesh_size
@@ -14,12 +14,12 @@ function F_res(model::PPCSAFTModel,ρ,T,z)
     return _F_res_PCSAFT + ∫(Φ_polar,dz)
 end
 
-function δFδρ_res(model::PPCSAFTModel,ρ,T,z)
+function δFδρ_res(model::PCPSAFTModel,ρ,T,z)
     _δFδρ_res_PCSAFT = invoke(δFδρ_res, Tuple{PCSAFTModel,Any,Any,Any},model,ρ,T,z)
     return _δFδρ_res_PCSAFT + δFδρ_polar(model,ρ,T,z)
 end
 
-function δFδρ_polar(model::PPCSAFTModel,ρ,T,z)
+function δFδρ_polar(model::PCPSAFTModel,ρ,T,z)
     ψ = 1.3862
     HSd = d(model,nothing,T,onevec(model))
     lim = ψ*HSd
@@ -37,7 +37,7 @@ function δFδρ_polar(model::PPCSAFTModel,ρ,T,z)
         bounds = ρ[i].bounds.+(-lim[i],lim[i])
         ∂f∂n =  DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
     
-        span = range(-lim[i],lim[i],length=101) # Length = 101? Is it because len(z) = 101?
+        span = range(-lim[i],lim[i],length=length(∂f∂n))
 
         δFδρ_polar[:,i] = π*∫ρz²dz.(Ref(∂f∂n),z,Ref(span))
     end
@@ -45,7 +45,7 @@ function δFδρ_polar(model::PPCSAFTModel,ρ,T,z)
     return δFδρ_polar
 end
 
-function f_polar(model::PPCSAFTModel,T,ρ̄)
+function f_polar(model::PCPSAFTModel,T,ρ̄)
     μ̄² = model.params.dipole2.values
     has_dp = !all(iszero, μ̄²)
     if !has_dp return zero(T+first(ρ̄)) end

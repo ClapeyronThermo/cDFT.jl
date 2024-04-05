@@ -1,4 +1,4 @@
-function initial_uniform_density_profile(model::EoSModel,ρ_val,bounds,ngrid::Int64=101)
+function initial_uniform_density_profile(model::EoSModel,ρ_val,bounds,ngrid=101)
     z = range(first(bounds),last(bounds),ngrid) |> collect
 
     ρ = DensityProfile[]

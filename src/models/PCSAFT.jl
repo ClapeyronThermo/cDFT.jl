@@ -67,7 +67,7 @@ function δFδρ_hc(model::PCSAFTModel,ρ,T,z)
         ∂f∂ρ̄hc = DensityProfile(@view(∂f∂ρ̄hc0[:,i]),z,bounds,[∂f∂ρ̄hc0[1,i],∂f∂ρ̄hc0[end,i]])
         ∂f∂λ = DensityProfile(@view(∂f∂λ0[:,i]),z,bounds,[∂f∂λ0[1,i],∂f∂λ0[end,i]])
     
-        span = range(-lim[i],lim[i],length=101)
+        span = range(-lim[i],lim[i],length=length(∂f∂ρhc))
 
         δFδρ_hc_1 = ∫ρdz.(Ref(∂f∂λ),z,Ref(span))
         δFδρ_hc_2 = π*∫ρz²dz.(Ref(∂f∂ρ̄hc),z,Ref(span))
@@ -95,10 +95,8 @@ function δFδρ_disp(model::PCSAFTModel,ρ,T,z)
     δFδρ_disp = zeros(length(z),length(model))
     for i in @comps 
         bounds = ρ[i].bounds.+(-lim[i],lim[i])
-        ∂f∂n =  DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
-    
-        span = range(-lim[i],lim[i],length=101) # Length = 101? Is it because len(z) = 101?
-
+        ∂f∂n =  DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])    
+        span = range(-lim[i],lim[i],length=length(∂f∂n))
         δFδρ_disp[:,i] = π*∫ρz²dz.(Ref(∂f∂n),z,Ref(span))
     end
 
@@ -130,7 +128,7 @@ function δFδρ_assoc(model::SAFTModel,ρ,T,z)
         ∂f∂n₃ = DensityProfile(∂f∂n₃0[:,i],z,bounds,[∂f∂n₃0[1,i],∂f∂n₃0[end,i]])
         ∂f∂nᵥ = DensityProfile(∂f∂nᵥ0[:,i],z,bounds,[∂f∂nᵥ0[1,i],∂f∂nᵥ0[end,i]])
     
-        span = range(-lim[i],lim[i],length=101)
+        span = range(-lim[i],lim[i],length=length(∂f∂n))
 
         for k in eachindex(z)
             zk = z[k]

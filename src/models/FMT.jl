@@ -66,7 +66,7 @@ function δFδρ_hs(model::SAFTModel,ρ,T,z)
         ∂f∂n₃ = DensityProfile(∂f∂n₃0[:,i],z,bounds,[∂f∂n₃0[1,i],∂f∂n₃0[end,i]])
         ∂f∂nᵥ = DensityProfile(∂f∂nᵥ0[:,i],z,bounds,[∂f∂nᵥ0[1,i],∂f∂nᵥ0[end,i]])
     
-        span = range(-lim[i],lim[i],length=101)
+        span = range(-lim[i],lim[i],length=length(∂f∂n))
 
         δFδρ_hs_1 = ∫ρdz.(Ref(∂f∂n),z,Ref(span))
         δFδρ_hs_2 = π*∫ρz²dz.(Ref(∂f∂n₃),z,Ref(span))

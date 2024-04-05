@@ -37,8 +37,7 @@ function δFδρ_polar(model::QPPCSAFTModel,ρ,T,z)
       bounds = ρ[i].bounds.+(-lim[i],lim[i])
       ∂f∂n =  DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
   
-      span = range(-lim[i],lim[i],length=101) # Length = 101? Is it because len(z) = 101?
-
+      span = range(-lim[i],lim[i],length=length(∂f∂n))
       δFδρ_polar[:,i] = π*∫ρz²dz.(Ref(∂f∂n),z,Ref(span))
   end
 
