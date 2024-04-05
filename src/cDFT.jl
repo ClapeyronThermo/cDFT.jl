@@ -9,12 +9,13 @@ using Clapeyron: Solvers, log, sqrt, log1p, PackedVofV, sparse, SparseMatrixCSC
 using Clapeyron: assoc_similar, assoc_matrix_solve, assoc_options, assoc_pair_length
 using Clapeyron: issite, compute_index, complement_index, indices
 import Clapeyron.Solvers
+import Clapeyron.NLSolvers
 using Clapeyron: SingleComp
 using StaticArrays
 
 include("utils/types.jl")
 include("utils/base.jl")
-include("utils/profiles.jl")
+include("utils/profiles/profiles.jl")
 include("utils/initial.jl")
 include("utils/integrals.jl")
 include("utils/anderson.jl") #TODO, port this to Clapeyron
