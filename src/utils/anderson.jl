@@ -99,7 +99,7 @@ function Solvers._fixpoint(f::F,
 
         # Check for convergence
         if mod(k,10) == 0
-            println(rtol_anderson(fval,x))
+            # println(rtol_anderson(fval,x))
         end
         if rtol_anderson(fval,x) < rtol || !finite_check
             # println(k)
