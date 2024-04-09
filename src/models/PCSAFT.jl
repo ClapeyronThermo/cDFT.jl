@@ -106,7 +106,7 @@ function δFδρ_disp(model::PCSAFTModel,ρ,T,z)
 end
 
 function δFδρ_assoc(model::SAFTModel,ρ,T,z)
-    HSd = d(model,nothing,T,onevec(model))
+    HSd = d(model,1e-3,T,onevec(model))
     lim = 1/2*HSd
 
     (n, n₃, nᵥ)  = weights_hs(model,ρ,z,lim)
@@ -282,7 +282,7 @@ function X(model::EoSModel,T,n,n₃,nᵥ)
 end
 
 function assoc_site_matrix(model,T,n,n₃,nᵥ)
-    HSd = d(model,nothing,T,onevec(model))
+    HSd = d(model,1e-3,T,onevec(model))
 
     n₀ = n./HSd
     n₂ = π.*HSd.*n
