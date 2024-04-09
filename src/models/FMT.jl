@@ -9,7 +9,7 @@ Hard-Sphere Functional derived using Fundamental Measure Theory as presented by 
 """
 
 function F_hs(model::SAFTModel,ρ,T,z)
-    HSd = d(model,[],T,ones(length(model)))
+    HSd = d(model,1e-3,T,ones(length(model)))
     dz = ρ[1].mesh_size
 
     lim = 1/2*HSd
@@ -26,7 +26,7 @@ end
 
 function f_hs(model::SAFTModel, T, n, n₃, nᵥ)
     m = model.params.segment.values
-    HSd = d(model,[],T,ones(length(n)))
+    HSd = d(model,1e-3,T,ones(length(n)))
 
     n₀ = sum(n.*m./HSd)
     n₁ = sum(n.*m./2)
@@ -53,7 +53,7 @@ function δfδρ_hs(model::SAFTModel ,T ,n, n₃, nᵥ)
 end
 
 function δFδρ_hs(model::SAFTModel,ρ,T,z)
-    HSd = d(model,[],T,ones(length(model)))
+    HSd = d(model,1e-3,T,ones(length(model)))
     lim = 1/2*HSd
 
     (n, n₃, nᵥ)  = weights_hs(model,ρ,z,lim)
