@@ -23,8 +23,8 @@ function converge_profile!(model,ρ,T,z;damping=0.05)
     end
 
     ln_X0 = zeros(length(z),length(ρ))
-    ln_GX0 = copy(ln_X0)
-    fX(ln_x) = obj(model, copy(ln_x), ρ, T, z, ln_x, μ_res, ρl, damping)
+    # ln_GX0 = copy(ln_X0)
+    # fX(ln_x) = obj(model, copy(ln_x), ρ, T, z, ln_x, μ_res, ρl, damping)
     
     for i in @comps
         ln_X0[:,i] = log.(ρ[i].density)
@@ -34,17 +34,19 @@ function converge_profile!(model,ρ,T,z;damping=0.05)
 
     # ρ_new = Solvers.fixpoint(f!,X0,AndersonFixPoint(memory =50),rtol = 1e-4)
 
-    fX(ln_x) = obj(model, copy(ln_x), ρ, T, z, ln_x, μ_res, ρl, 1e-3)
-    r = fixed_point(fX, ln_X0;Algorithm = :Simple, 
-                                ConvergenceMetric = norm(output,input) = maximum(abs.(output./input .-1)/damping),
+    norm(output,input) = maximum(abs.(output./input .-1)/damping)
+
+    gX(ln_x) = obj(model, copy(ln_x), ρ, T, z, ln_x, μ_res, ρl, 1e-4)
+    r = fixed_point(gX, ln_X0;Algorithm = :Simple, 
+                                ConvergenceMetric = norm,
                                 ConvergenceMetricThreshold=1e-4,
                                 MaxIter=100)
 
     fX(ln_x) = obj(model, copy(ln_x), ρ, T, z, ln_x, μ_res, ρl, damping)
     r = fixed_point(fX, r;Algorithm = :Anderson, 
-                                ConvergenceMetric = norm(output,input) = maximum(abs.(output./input .-1)/damping),
+                                ConvergenceMetric = norm,
                                 ConvergenceMetricThreshold=1e-4,
-                                MaxIter=10000,
+                                MaxIter=100000,
                                 MaxM=50)
     
     if ismissing(r.FixedPoint_)
