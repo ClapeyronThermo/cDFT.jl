@@ -1,5 +1,6 @@
 using Clapeyron: SAFTVRMieModel
 using Clapeyron: aS_1, B, KHS, Cλ, f123456
+using Clapeyron: KHS_fdf, aS_1_fdf, B_fdf, g_HS
 using Clapeyron: SAFTVRMieconsts
 
 function F_res(model::SAFTVRMieModel,ρ,T,z)
@@ -23,26 +24,26 @@ function F_res(model::SAFTVRMieModel,ρ,T,z)
 )
     Φ_hs_assoc = mapslices(f1,[n n₃ nᵥ];dims=2)
 
-#     f2(x) = f_chain(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
-# )
-#     Φ_chain = mapslices(f2,[ρhc ρ̄hc λ];dims=2)
+    f2(x) = f_chain(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
+)
+    Φ_chain = mapslices(f2,[ρhc ρ̄hc λ];dims=2)
     
     f3(x) = f_disp(model,T,@view(x[idx]))
     Φ_disp = mapslices(f3,ρ̄;dims=2)
     
-    Φ = Φ_disp+Φ_hs_assoc#+Φ_chain
+    Φ = Φ_disp+Φ_hs_assoc+Φ_chain
 
     return ∫(Φ,dz)
 end
 
 function δFδρ_res(model::SAFTVRMieModel,ρ,T,z)
     return δFδρ_hs(model,ρ,T,z)+
-           δFδρ_hc(model,ρ,T,z)+
+           δFδρ_chain(model,ρ,T,z)+
            δFδρ_disp(model,ρ,T,z)+
            δFδρ_assoc(model,ρ,T,z)
 end
 
-function δFδρ_hc(model::SAFTVRMieModel,ρ,T,z)
+function δFδρ_chain(model::SAFTVRMieModel,ρ,T,z)
     HSd = d(model,1e-3,T,onevec(model))
     lim = HSd
 
@@ -54,7 +55,7 @@ function δFδρ_hc(model::SAFTVRMieModel,ρ,T,z)
 
     nc = length(model)
     idx = 1:nc
-    f(x) = f_hc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc]))
+    f(x) = f_chain(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc]))
     df(x) = ForwardDiff.gradient(f,x)
 
     δfδn  = mapslices(df,[ρhc ρ̄hc λ];dims=2)
@@ -107,29 +108,100 @@ function δFδρ_disp(model::SAFTVRMieModel,ρ,T,z)
     return δFδρ_disp
 end
 
-function f_hc(model::SAFTVRMieModel, T, ρhc, ρ̄hc, _λ)
-    HSd = d(model,1e-3,T,onevec(model))
-    m = model.params.segment.values
-    ζ₃ = zero(eltype(HSd)) + zero(eltype(ρ̄hc))
-    ζ₂ = zero(ζ₃)
-    for i in @comps
-        mi,ρ̄hci,HSdi = m[i],ρ̄hc[i],HSd[i]
-        ζ₃ += mi*ρ̄hci
-        ζ₂ += mi*ρ̄hci/HSdi
+function f_chain(model::SAFTVRMieModel, T, ρhc, ρ̄hc, _λ)
+    V = 1e-3
+    _d = d(model,V,T,onevec(model))
+    m = model.params.segment
+    _ϵ = model.params.epsilon
+    _λr = model.params.lambda_r
+    _λa = model.params.lambda_a
+    _σ = model.params.sigma
+
+    ρ̄hc = ρ̄hc*3 ./(4 .*_d.^3)/π
+
+    z = ρ̄hc /sum(ρ̄hc)
+    m̄ = dot(z,m)
+    m̄inv = 1/m̄
+
+    ρS = sum(ρ̄hc.*m)
+
+    _ζ_X = zero(T+first(ρ̄hc)+one(eltype(model)))
+    kρS = ρS* π/6/8
+    σ3_x = _ζ_X
+
+    for i ∈ @comps
+        x_Si = z[i]*m[i]*m̄inv
+        σ3_x += x_Si*x_Si*(_σ[i,i]^3)
+        di =_d[i]
+        r1 = kρS*x_Si*x_Si*(2*di)^3
+        _ζ_X += r1
+        for j ∈ 1:(i-1)
+            x_Sj = z[j]*m[j]*m̄inv
+            σ3_x += 2*x_Si*x_Sj*(_σ[i,j]^3)
+            dij = (di + _d[j])
+            r1 = kρS*x_Si*x_Sj*dij^3
+            _ζ_X += 2*r1
+        end
     end
-    ζ₃ *= 0.125
-    ζ₂ *= 0.125
-    #ζ₃ = 1/8*dot(m,ρ̄hc)
-    #ζ₂ = sum(1/8*m.*ρ̄hc./HSd)
-    ∑f = zero(ζ₃)
-    for i in @comps
-        λ = _λ[i]/(2*HSd[i])
-        yᵈᵈ = 1/(1-ζ₃) + 1.5*HSd[i]*ζ₂/(1-ζ₃)^2+0.5*HSd[i]^2*ζ₂^2/(1-ζ₃)^3
-        fi = -ρhc[i]*(m[i]-1)*log(yᵈᵈ*λ/ρhc[i])
-        ∑f += fi
+
+    _ζst = σ3_x*ρS*π/6
+
+    fchain = zero(V+T+first(z)+one(eltype(model)))
+    _KHS,_∂KHS = @f(KHS_fdf,_ζ_X,ρS)
+    for i ∈ @comps
+        ϵ = _ϵ[i,i]
+        λa = _λa[i,i]
+        λr = _λr[i,i]
+        σ = _σ[i,i]
+        _C = @f(Cλ,λa,λr)
+        dij = _d[i]
+        x_0ij = σ/dij
+        x_0ij = σ/dij
+        #calculations for a1 - diagonal
+        aS_1_a,∂aS_1∂ρS_a = @f(aS_1_fdf,λa,_ζ_X,ρS)
+        aS_1_r,∂aS_1∂ρS_r = @f(aS_1_fdf,λr,_ζ_X,ρS)
+        B_a,∂B∂ρS_a = @f(B_fdf,λa,x_0ij,_ζ_X,ρS)
+        B_r,∂B∂ρS_r = @f(B_fdf,λr,x_0ij,_ζ_X,ρS)
+
+        #calculations for a2 - diagonal
+        aS_1_2a,∂aS_1∂ρS_2a = @f(aS_1_fdf,2*λa,_ζ_X,ρS)
+        aS_1_2r,∂aS_1∂ρS_2r = @f(aS_1_fdf,2*λr,_ζ_X,ρS)
+        aS_1_ar,∂aS_1∂ρS_ar = @f(aS_1_fdf,λa+λr,_ζ_X,ρS)
+        B_2a,∂B∂ρS_2a = @f(B_fdf,2*λa,x_0ij,_ζ_X,ρS)
+        B_2r,∂B∂ρS_2r = @f(B_fdf,2*λr,x_0ij,_ζ_X,ρS)
+        B_ar,∂B∂ρS_ar = @f(B_fdf,λr+λa,x_0ij,_ζ_X,ρS)
+        α = _C*(1/(λa-3)-1/(λr-3))
+        g_HSi = @f(g_HS,x_0ij,_ζ_X)
+        #@show (g_HSi,i)
+        ∂a_1∂ρ_S = _C*(x_0ij^λa*(∂aS_1∂ρS_a+∂B∂ρS_a)
+                      - x_0ij^λr*(∂aS_1∂ρS_r+∂B∂ρS_r))
+        #@show (∂a_1∂ρ_S,1)
+
+        g_1_ = 3*∂a_1∂ρ_S-_C*(λa*x_0ij^λa*(aS_1_a+B_a)-λr*x_0ij^λr*(aS_1_r+B_r))
+        #@show (g_1_,i)
+        θ = exp(ϵ/T)-1
+        γc = 10 * (-tanh(10*(0.57-α))+1) * _ζst*θ*exp(-6.7*_ζst-8*_ζst^2)
+        ∂a_2∂ρ_S = 0.5*_C^2 *
+            (ρS*_∂KHS*(x_0ij^(2*λa)*(aS_1_2a+B_2a)
+            - 2*x_0ij^(λa+λr)*(aS_1_ar+B_ar)
+            + x_0ij^(2*λr)*(aS_1_2r+B_2r))
+            + _KHS*(x_0ij^(2*λa)*(∂aS_1∂ρS_2a+∂B∂ρS_2a)
+            - 2*x_0ij^(λa+λr)*(∂aS_1∂ρS_ar+∂B∂ρS_ar)
+            + x_0ij^(2*λr)*(∂aS_1∂ρS_2r+∂B∂ρS_2r)))
+
+        gMCA2 = 3*∂a_2∂ρ_S-_KHS*_C^2 *
+        (λr*x_0ij^(2*λr)*(aS_1_2r+B_2r)-
+            (λa+λr)*x_0ij^(λa+λr)*(aS_1_ar+B_ar)+
+            λa*x_0ij^(2*λa)*(aS_1_2a+B_2a))
+        g_2_ = (1+γc)*gMCA2
+        #@show (g_2_,i)
+        g_Mie_ = g_HSi*exp(ϵ/T*g_1_/g_HSi+(ϵ/T)^2*g_2_/g_HSi)
+        #@show (g_Mie_,i)
+        λ = _λ[i]/(2*_d[i])
+        fchain +=  ρhc[i]*(log(g_Mie_*λ/ρhc[i])*(m[i]-1))
     end
     
-    return ∑f
+    return -fchain
     #λ = _λ./(2*HSd) 
     #yᵈᵈ = @. 1/(1-ζ₃)+1.5*HSd*ζ₂/(1-ζ₃)^2+0.5*HSd^2*ζ₂^2/(1-ζ₃)^3
     #f = @. -ρhc*(m-1)*log(yᵈᵈ*λ/ρhc)
