@@ -100,4 +100,3 @@ function center_profile!(ρ)
         end
     end
 end
-

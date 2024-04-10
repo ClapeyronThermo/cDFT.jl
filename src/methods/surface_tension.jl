@@ -1,4 +1,4 @@
-function surface_tension(model::EoSModel,T,x = [1.0];ngrid = 101)
+function surface_tension(model::EoSModel,T,x = SA[1.0];ngrid = 101)
     L = length_scale(model)
     (p,vl,vv,y) = bubble_pressure(model,T,x) #on single component, returns just the saturation pressure.
     # if T<0.75Tc
