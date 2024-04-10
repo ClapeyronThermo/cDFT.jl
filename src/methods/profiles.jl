@@ -1,4 +1,4 @@
-function converge_profile!(model,ρ,T,z,method=AndersonFixPoint(picard_damping=1e-2,damping=1e-2,memory=50,delay=100,drop_tol=1e3))
+function converge_profile!(model,ρ,T,z,method=AndersonFixPoint(picard_damping=1e-3,damping=5e-2,memory=50,delay=100,drop_tol=Inf))
     ρl =[ρ[i].boundary_conditions[2] for i in @comps]
     Vl = 1/sum(ρl)
     X = ρl./sum(ρl)
@@ -35,7 +35,7 @@ function converge_profile!(model,ρ,T,z,method=AndersonFixPoint(picard_damping=1
 
     ln_X0 = vec(ln_X0)
 
-    ρ_new = Solvers.fixpoint(f,ln_X0,method,rtol = 1e-5, max_iters = 10000)
+    ρ_new = Solvers.fixpoint(f,ln_X0,method,rtol = 1e-4, max_iters = 10000)
 
     ρ_new = exp.(ρ_new)
     ρ_new = reshape(ρ_new,(length(z),length(ρ)))
