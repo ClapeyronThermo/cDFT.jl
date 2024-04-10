@@ -28,6 +28,7 @@ include("models/PCSAFT.jl")
 include("models/PPCSAFT.jl")
 include("models/gcPPCSAFT.jl")
 include("models/QPPCSAFT.jl")
+include("models/SAFTVRMie.jl")
 
 include("methods/profiles.jl")
 include("methods/inhomogeneous_free_energy.jl")

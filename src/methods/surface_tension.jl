@@ -2,7 +2,7 @@ function surface_tension(model::EoSModel,T,x = [1.0];ngrid = 101)
     L = length_scale(model)
     (p,vl,vv,y) = bubble_pressure(model,T,x) #on single component, returns just the saturation pressure.
     # if T<0.75Tc
-        ρ,z = initial_surface_tension_density_profile(model,T,x,[-10L,10L],ngrid)
+        ρ,z = initial_surface_tension_density_profile(model,T,x,[-15L,15L],201)
     # else
     #     ρ,z = initial_interfacial_density_profile(model,T,[-20σ,20σ],201)
     # end
