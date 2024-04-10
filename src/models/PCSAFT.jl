@@ -2,7 +2,7 @@ using Clapeyron: PCSAFTModel
 
 function F_res(model::PCSAFTModel,ρ,T,z)
     ψ = 1.3862
-    HSd = d(model,nothing,T,onevec(model))
+    HSd = d(model,1e-3,T,onevec(model))
     dz = ρ[1].mesh_size
 
     (n, n₃,nᵥ)  = weights_hs(model,ρ,z,1/2*HSd)
@@ -41,7 +41,7 @@ function δFδρ_res(model::PCSAFTModel,ρ,T,z)
 end
 
 function δFδρ_hc(model::PCSAFTModel,ρ,T,z)
-    HSd = d(model,nothing,T,onevec(model))
+    HSd = d(model,1e-3,T,onevec(model))
     lim = HSd
 
     (λ, ρ̄hc,_)  = weights_hs(model,ρ,z,lim)
@@ -67,7 +67,7 @@ function δFδρ_hc(model::PCSAFTModel,ρ,T,z)
         ∂f∂ρ̄hc = DensityProfile(@view(∂f∂ρ̄hc0[:,i]),z,bounds,[∂f∂ρ̄hc0[1,i],∂f∂ρ̄hc0[end,i]])
         ∂f∂λ = DensityProfile(@view(∂f∂λ0[:,i]),z,bounds,[∂f∂λ0[1,i],∂f∂λ0[end,i]])
     
-        span = range(-lim[i],lim[i],length=length(∂f∂ρhc))
+        span = range(-lim[i],lim[i],length=length(z))
 
         δFδρ_hc_1 = ∫ρdz.(Ref(∂f∂λ),z,Ref(span))
         δFδρ_hc_2 = π*∫ρz²dz.(Ref(∂f∂ρ̄hc),z,Ref(span))
@@ -79,7 +79,7 @@ function δFδρ_hc(model::PCSAFTModel,ρ,T,z)
 end
 
 function δFδρ_disp(model::PCSAFTModel,ρ,T,z)
-    HSd = d(model,nothing,T,onevec(model))
+    HSd = d(model,1e-3,T,onevec(model))
     lim = 1.3862*HSd
 
     (_, ρ̄,_)  = weights_hs(model,ρ,z,lim)
@@ -96,7 +96,7 @@ function δFδρ_disp(model::PCSAFTModel,ρ,T,z)
     for i in @comps 
         bounds = ρ[i].bounds.+(-lim[i],lim[i])
         ∂f∂n =  DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])    
-        span = range(-lim[i],lim[i],length=length(∂f∂n))
+        span = range(-lim[i],lim[i],length=length(z))
         δFδρ_disp[:,i] = π*∫ρz²dz.(Ref(∂f∂n),z,Ref(span))
     end
 
@@ -104,7 +104,7 @@ function δFδρ_disp(model::PCSAFTModel,ρ,T,z)
 end
 
 function δFδρ_assoc(model::SAFTModel,ρ,T,z)
-    HSd = d(model,nothing,T,onevec(model))
+    HSd = d(model,1e-3,T,onevec(model))
     lim = 1/2*HSd
 
     (n, n₃, nᵥ)  = weights_hs(model,ρ,z,lim)
@@ -128,7 +128,7 @@ function δFδρ_assoc(model::SAFTModel,ρ,T,z)
         ∂f∂n₃ = DensityProfile(∂f∂n₃0[:,i],z,bounds,[∂f∂n₃0[1,i],∂f∂n₃0[end,i]])
         ∂f∂nᵥ = DensityProfile(∂f∂nᵥ0[:,i],z,bounds,[∂f∂nᵥ0[1,i],∂f∂nᵥ0[end,i]])
     
-        span = range(-lim[i],lim[i],length=length(∂f∂n))
+        span = range(-lim[i],lim[i],length=length(z))
 
         for k in eachindex(z)
             zk = z[k]
@@ -142,7 +142,7 @@ function δFδρ_assoc(model::SAFTModel,ρ,T,z)
 end
 
 function f_hc(model::PCSAFTModel, T, ρhc, ρ̄hc, _λ)
-    HSd = d(model,nothing,T,onevec(model))
+    HSd = d(model,1e-3,T,onevec(model))
     m = model.params.segment.values
     ζ₃ = zero(eltype(HSd)) + zero(eltype(ρ̄hc))
     ζ₂ = zero(ζ₃)
@@ -172,24 +172,26 @@ end
 
 function f_disp(model::PCSAFTModel, T, ρ̄)
     ψ = 1.3862
-    HSd = d(model,nothing,T,onevec(model))
+    HSd = d(model,1e-3,T,onevec(model))
     σ = model.params.sigma.values
     m = model.params.segment.values
 
     ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
-
-    x = ρ̄ /sum(ρ̄)
+    ∑ρ̄ = sum(ρ̄)
+    x = ρ̄ /∑ρ̄
     m̄ = dot(x,m)
-
-    η = π/6*sum(ρ̄.*m.*HSd.^3)
-
+    η = zero(first(m) + ∑ρ̄ + first(HSd))
+    for i in 1:length(m)
+        η += m[i]*ρ̄[i]*HSd[i]^3
+    end
+    η = π/6*η
     C₁ = 1+m̄*(8*η-2*η^2)/(1-η)^4+(1-m̄)*(20*η-27*η^2+12*η^3-2*η^4)/((1-η)^2*(2-η)^2)
     I₁ = I(model,m̄,η,1)
     I₂ = I(model,m̄,η,2)
 
     m2ϵσ3₁,m2ϵσ3₂ =  Clapeyron.m2ϵσ3(model,zero(T), T, x)
-    ρ̄ = sum(ρ̄)
-    return -2*π*ρ̄^2*I₁*m2ϵσ3₁-π*ρ̄^2*m̄*C₁^-1*I₂*m2ϵσ3₂
+    
+    return -2*π*∑ρ̄^2*I₁*m2ϵσ3₁-π*∑ρ̄^2*m̄*C₁^-1*I₂*m2ϵσ3₂
 end
 
 function I(model::PCSAFTModel,m̄,n₃,n)
@@ -209,7 +211,7 @@ function I(model::PCSAFTModel,m̄,n₃,n)
 end
 
 function f_assoc(model::PCSAFTModel, T, n, n₃, nᵥ)
-    HSd = d(model,nothing,T,onevec(model))
+    HSd = d(model,1e-3,T,onevec(model))
     _0 = zero(T+first(n)+first(n₃)+first(nᵥ))
     nn = assoc_pair_length(model)
     iszero(nn) && return _0
@@ -246,20 +248,28 @@ function Δ(model::PCSAFTModel, T, n, n₃, nᵥ, i, j, a, b)
     ϵ_assoc = model.params.epsilon_assoc.values
     κ = model.params.bondvol.values
     κijab = κ[i,j][a,b] 
+    _0 = zero(T+first(n)+first(n₃)+first(nᵥ)+first(κijab))
     iszero(κijab) && return _0
 
     σ = model.params.sigma.values[i,j]
     m = model.params.segment.values
-    HSd = d(model,nothing,T,onevec(model))
+    HSd = d(model,1e-3,T,onevec(model))
     dij = (HSd[i]*HSd[j])/(HSd[i]+HSd[j])
-
-    n₂ = sum(π.*HSd.*n.*m)
-    nᵥ₂ = sum(-2π.*nᵥ.*m)
-    n₃  = sum(n₃.*m)
+    
+    n₂, nᵥ₂, n₃₃ = _0,_0,_0
+    for i in 1:length(n)
+        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[i],HSd[i]
+        n₂ += π*HSdᵢ*nᵢ*mᵢ
+        nᵥ₂ += -2π*nᵥᵢ*mᵢ
+        n₃₃ += n₃[i]*mᵢ
+    end
+    #n₂ = sum(π.*HSd.*n.*m)
+    #nᵥ₂ = sum(-2π.*nᵥ.*m)
+    #n₃  = sum(n₃.*m)
 
     ξ = 1-nᵥ₂^2/n₂^2
-    g_hs = 1/(1-n₃)+dij*ξ*n₂/(2*(1-n₃)^2)+dij^2*n₂^2*ξ/(18*(1-n₃)^3)
-    return g_hs*σ^3*(exp(ϵ_assoc[i,j][a,b]/T)-1)*κijab
+    g_hs = 1/(1-n₃₃)+dij*ξ*n₂/(2*(1-n₃₃)^2)+dij^2*n₂^2*ξ/(18*(1-n₃₃)^3)
+    return g_hs*σ^3*expm1(ϵ_assoc[i,j][a,b]/T)*κijab
 end
 
 function Δ(model::EoSModel, T, n, n₃, nᵥ)
@@ -280,17 +290,10 @@ function X(model::EoSModel,T,n,n₃,nᵥ)
 end
 
 function assoc_site_matrix(model,T,n,n₃,nᵥ)
-    HSd = d(model,nothing,T,onevec(model))
-
-    n₀ = n./HSd
-    n₂ = π.*HSd.*n
-
-    nᵥ₂ = -2π.*nᵥ
-
-    ξ = 1 .-nᵥ₂.^2 ./ n₂.^2
-
+    HSd = d(model,1e-3,T,onevec(model))
     delta = Δ(model,T,n,n₃,nᵥ)
-    _sites = model.sites.n_sites
+    sitesparam = Clapeyron.getsites(model)
+    _sites = sitesparam.n_sites
     p = _sites.p
     _ii::Vector{Tuple{Int,Int}} = delta.outer_indices
     _aa::Vector{Tuple{Int,Int}} = delta.inner_indices
@@ -298,23 +301,14 @@ function assoc_site_matrix(model,T,n,n₃,nᵥ)
     _Δ= delta.values
     TT = eltype(_Δ)
     count = 0
-    @inbounds for i ∈ 1:length(n) #for i ∈ comps
-        sitesᵢ = 1:(p[i+1] - p[i]) #sites are normalized, with independent indices for each component
-        for a ∈ sitesᵢ #for a ∈ sites(comps(i))
-            #ia = compute_index(pack_indices,i,a)
-            for idx ∈ _idx #iterating for all sites
-                ij = _ii[idx]
-                ab = _aa[idx]
-                issite(i,a,ij,ab) && (count += 1)
-            end
-        end
-    end
-    c1 = zeros(Int,count)
-    c2 = zeros(Int,count)
-    val = zeros(TT,count)
-    _n = model.sites.n_sites.v
+    _n = sitesparam.n_sites.v
+
+    nn = length(_n)
+    K  = zeros(TT,nn,nn)
     count = 0
-    @inbounds for i ∈ 1:length(n) #for i ∈ comps
+    options = assoc_options(model)
+    combining = options.combining
+    @inbounds for i ∈ 1:length(model) #for i ∈ comps
         sitesᵢ = 1:(p[i+1] - p[i]) #sites are normalized, with independent indices for each component
         for a ∈ sitesᵢ #for a ∈ sites(comps(i))
             ia = compute_index(p,i,a)
@@ -326,15 +320,15 @@ function assoc_site_matrix(model,T,n,n₃,nᵥ)
                     b = complement_index(a,ab)
                     jb = compute_index(p,j,b)
                     njb = _n[jb]
-                    count += 1
-                    c1[count] = ia
-                    c2[count] = jb
-                    val[count] = n₀[j]*ξ[j]*njb*_Δ[idx]
+                    n₀ = n[j]/HSd[j]
+                    n₂ = π*HSd[j]*n[j]
+                    nᵥ₂ = -2π*nᵥ[j]
+                    ξ = 1 -nᵥ₂^2/n₂^2
+                    K[ia,jb]  = n₀*ξ*njb*_Δ[idx]
                 end
             end
         end
     end
-    K::SparseMatrixCSC{TT,Int} = sparse(c1,c2,val)
     return K
 end
 

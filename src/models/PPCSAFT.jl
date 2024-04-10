@@ -2,7 +2,7 @@ using Clapeyron: PCPSAFTModel
 
 function F_res(model::PCPSAFTModel,ρ,T,z)
     ψ = 1.3862
-    HSd = d(model,nothing,T,onevec(model))
+    HSd = d(model,1e-3,T,onevec(model))
     dz = ρ[1].mesh_size
     
     _, ρ̄, _ = weights_hs(model,ρ,z,ψ*HSd)
@@ -21,7 +21,7 @@ end
 
 function δFδρ_polar(model::PCPSAFTModel,ρ,T,z)
     ψ = 1.3862
-    HSd = d(model,nothing,T,onevec(model))
+    HSd = d(model,1e-3,T,onevec(model))
     lim = ψ*HSd
 
     _, ρ̄, _ = weights_hs(model,ρ,z,lim)
@@ -37,7 +37,7 @@ function δFδρ_polar(model::PCPSAFTModel,ρ,T,z)
         bounds = ρ[i].bounds.+(-lim[i],lim[i])
         ∂f∂n =  DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
     
-        span = range(-lim[i],lim[i],length=length(∂f∂n))
+        span = range(-lim[i],lim[i],length=length(z))
 
         δFδρ_polar[:,i] = π*∫ρz²dz.(Ref(∂f∂n),z,Ref(span))
     end
@@ -51,21 +51,24 @@ function f_polar(model::PCPSAFTModel,T,ρ̄)
     if !has_dp return zero(T+first(ρ̄)) end
 
     ψ = 1.3862
-    HSd = d(model,nothing,T,onevec(model))
+    HSd = d(model,1e-3,T,onevec(model))
     m = model.params.segment.values
     ϵ = model.params.epsilon.values
     σ = model.params.sigma.values
 
     ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
-    η = π/6*sum(ρ̄.*m.*HSd.^3)
-    x = ρ̄ /sum(ρ̄)
-    ρ̄ = sum(ρ̄)
-
-    _A₂ = A2(x,m,ϵ,σ,μ̄²,η,ρ̄,T)
+    ∑ρ̄ = sum(ρ̄)
+    η = zero(first(m) + ∑ρ̄ + first(HSd))
+    for i in 1:length(m)
+        η += m[i]*ρ̄[i]*HSd[i]^3
+    end
+    η = π/6*η
+    x = ρ̄ /∑ρ̄
+    _A₂ = A2(x,m,ϵ,σ,μ̄²,η,∑ρ̄,T)
     iszero(_A₂) && return zero(_A₂)
-    _A₃ = A3(x,m,ϵ,σ,μ̄²,η,ρ̄,T)
+    _A₃ = A3(x,m,ϵ,σ,μ̄²,η,∑ρ̄,T)
     _a_dd = _A₂^2/(_A₂-_A₃)
-    return ρ̄*_a_dd
+    return ∑ρ̄*_a_dd
 end
 
 function A2(x,m,ϵ,σ,μ̄²,η,ρ̄,T)

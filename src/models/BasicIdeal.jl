@@ -16,6 +16,11 @@ function F_ideal(model::BasicIdealModel,ρ,T,z)
 end
 
 function f_ideal(model::BasicIdealModel, T, ρ)
-    f = @. N_A*ρ*(log(ρ*T^-1.5)-1)
-    return sum(f)
+    ∑f = zero(T + first(ρ))
+    lnT = 1.5*log(T)
+    for i in 1:length(ρ)
+        ρᵢ = ρ[i]
+        ∑f += N_A*ρᵢ*(log(ρᵢ)  - lnT - 1)
+    end
+    return ∑f
 end

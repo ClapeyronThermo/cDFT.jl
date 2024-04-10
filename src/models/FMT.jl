@@ -9,7 +9,7 @@ Hard-Sphere Functional derived using Fundamental Measure Theory as presented by 
 """
 
 function F_hs(model::SAFTModel,ρ,T,z)
-    HSd = d(model,[],T,ones(length(model)))
+    HSd = d(model,1e-3,T,onevec(model))
     dz = ρ[1].mesh_size
 
     lim = 1/2*HSd
@@ -26,16 +26,28 @@ end
 
 function f_hs(model::SAFTModel, T, n, n₃, nᵥ)
     m = model.params.segment.values
-    HSd = d(model,[],T,ones(length(n)))
-
+    HSd = d(model,1e-3,T,ones(length(n)))
+    
+    n₀ = zero(first(n) + first(m) + first(HSd))
+    n₁,n₂,nᵥ₁,nᵥ₂,n₃₃ = zero(n₀), zero(n₀), zero(n₀), zero(n₀), zero(n₀)
+    for i in 1:length(n)
+        mᵢ,HSdᵢ,nᵥᵢ = m[i],HSd[i],nᵥ[i]
+        nᵢmᵢ = n[i]*mᵢ
+        n₀ += nᵢmᵢ/HSdᵢ
+        n₁ += 0.5nᵢmᵢ
+        n₂ += π*nᵢmᵢ*HSdᵢ
+        nᵥ₁ += nᵥᵢ*mᵢ/HSdᵢ
+        nᵥ₂ += -2π*nᵥᵢ*mᵢ
+        n₃₃ += n₃[i]*mᵢ
+    end
+    #=
     n₀ = sum(n.*m./HSd)
     n₁ = sum(n.*m./2)
     n₂ = sum(π.*HSd.*n.*m)
-
     nᵥ₁ = sum(-nᵥ.*m./HSd)
     nᵥ₂ = sum(-2π.*nᵥ.*m)
-    n₃  = sum(n₃.*m)
-    return -n₀*log(1-n₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃)/(12*π*n₃^2)+1/(12*π*n₃*(1-n₃)^2))
+    n₃₃  = sum(n₃.*m) =#
+    return -n₀*log(1-n₃₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃₃)/(12*π*n₃₃^2)+1/(12*π*n₃₃*(1-n₃₃)^2))
 end
 
 function δfδρ_hs(model::SAFTModel ,T ,n, n₃, nᵥ)    
@@ -53,7 +65,7 @@ function δfδρ_hs(model::SAFTModel ,T ,n, n₃, nᵥ)
 end
 
 function δFδρ_hs(model::SAFTModel,ρ,T,z)
-    HSd = d(model,[],T,ones(length(model)))
+    HSd = d(model,1e-3,T,onevec(model))
     lim = 1/2*HSd
 
     (n, n₃, nᵥ)  = weights_hs(model,ρ,z,lim)
@@ -66,7 +78,7 @@ function δFδρ_hs(model::SAFTModel,ρ,T,z)
         ∂f∂n₃ = DensityProfile(∂f∂n₃0[:,i],z,bounds,[∂f∂n₃0[1,i],∂f∂n₃0[end,i]])
         ∂f∂nᵥ = DensityProfile(∂f∂nᵥ0[:,i],z,bounds,[∂f∂nᵥ0[1,i],∂f∂nᵥ0[end,i]])
     
-        span = range(-lim[i],lim[i],length=length(∂f∂n))
+        span = range(-lim[i],lim[i],length=length(z))
 
         δFδρ_hs_1 = ∫ρdz.(Ref(∂f∂n),z,Ref(span))
         δFδρ_hs_2 = π*∫ρz²dz.(Ref(∂f∂n₃),z,Ref(span))

@@ -2,7 +2,7 @@ using Clapeyron: QPPCSAFTModel
 
 function F_res(model::QPPCSAFTModel,ρ,T,z)
   ψ = 1.3862
-  HSd = d(model,nothing,T,onevec(model))
+  HSd = d(model,1e-3,T,onevec(model))
   dz = ρ[1].mesh_size
   
   _, ρ̄, _ = weights_hs(model,ρ,z,ψ*HSd)
@@ -21,7 +21,7 @@ end
 
 function δFδρ_polar(model::QPPCSAFTModel,ρ,T,z)
   ψ = 1.3862
-  HSd = d(model,nothing,T,onevec(model))
+  HSd = d(model,1e-3,T,onevec(model))
   lim = ψ*HSd
 
   _, ρ̄, _ = weights_hs(model,ρ,z,lim)
@@ -37,7 +37,7 @@ function δFδρ_polar(model::QPPCSAFTModel,ρ,T,z)
       bounds = ρ[i].bounds.+(-lim[i],lim[i])
       ∂f∂n =  DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
   
-      span = range(-lim[i],lim[i],length=length(∂f∂n))
+      span = range(-lim[i],lim[i],length=length(z))
       δFδρ_polar[:,i] = π*∫ρz²dz.(Ref(∂f∂n),z,Ref(span))
   end
 
@@ -52,23 +52,25 @@ function f_polar(model::QPPCSAFTModel,T,ρ̄)
   if !has_dp && !has_qp return zero(T+first(ρ̄)) end
 
   ψ = 1.3862
-  HSd = d(model,nothing,T,onevec(model))
+  HSd = d(model,1e-3,T,onevec(model))
   m = model.params.segment.values
   ϵ = model.params.epsilon.values
   σ = model.params.sigma.values
 
   ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
-  η = π/6*sum(ρ̄.*m.*HSd.^3)
-  x = ρ̄ /sum(ρ̄)
-  ρ̄ = sum(ρ̄)
+  η = zero(first(m) + ∑ρ̄ + first(HSd))
+  for i in 1:length(m)
+      η += m[i]*ρ̄[i]*HSd[i]^3
+  end
+  η = π/6*η
+  ∑ρ̄ = sum(ρ̄)
+  x = ρ̄ /∑ρ̄
   nc = length(model)
-
-  a_mp_total = zero(T+ρ̄)
-  a_mp_total += has_dp && a_dd(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-  a_mp_total += has_qp && a_qq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-  a_mp_total += has_dp && has_qp && a_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-
-  return ρ̄*a_mp_total
+  a_mp_total = zero(T+∑ρ̄)
+  a_mp_total += has_dp && a_dd(x,m,ϵ,σ,μ̄²,Q̄²,η,∑ρ̄,T,nc)
+  a_mp_total += has_qp && a_qq(x,m,ϵ,σ,μ̄²,Q̄²,η,∑ρ̄,T,nc)
+  a_mp_total += has_dp && has_qp && a_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,∑ρ̄,T,nc)
+  return ∑ρ̄*a_mp_total
 end
 
 function a_polar(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
