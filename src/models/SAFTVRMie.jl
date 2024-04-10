@@ -392,6 +392,7 @@ function Δ(model::SAFTVRMieModel, T, n, n₃, nᵥ, i, j, a, b)
         x_Si = z[i]*m[i]*m̄inv
         σ3_x += x_Si*x_Si*(_σ[i,i]^3)
         for j ∈ 1:(i-1)
+            x_Sj = z[j]*m[j]*m̄inv
             σ3_x += 2*x_Si*x_Sj*(_σ[i,j]^3)
         end
     end
