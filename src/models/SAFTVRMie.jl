@@ -8,29 +8,28 @@ function F_res(model::SAFTVRMieModel,ρ,T,z)
     HSd = d(model,1e-3,T,onevec(model))
     dz = ρ[1].mesh_size
 
-    (n, n₃,nᵥ)  = weights_hs(model,ρ,z,1/2*HSd)
-    (λ, ρ̄hc,_)    = weights_hs(model,ρ,z,HSd)
-    (_, ρ̄,_)    = weights_hs(model,ρ,z,ψ*HSd)
+    (n, n₃,nᵥ) = weights_hs(model,ρ,z,1/2*HSd)
+    (λ, ρ̄hc,_) = weights_hs(model,ρ,z,HSd)
+    (_, ρ̄,_) = weights_hs(model,ρ,z,ψ*HSd)
     ρhc = zeros(length(z),length(ρ))
     for i in @comps
         ρhc[:,i] = ρ[i].density*N_A
     end
-
     nc = length(model)
     idx = 1:nc
 
     f1(x) = f_hs(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
-)+f_assoc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
-)
+)+f_assoc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc]),HSd)
+
     Φ_hs_assoc = mapslices(f1,[n n₃ nᵥ];dims=2)
 
     f2(x) = f_chain(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
 )
     Φ_chain = mapslices(f2,[ρhc ρ̄hc λ];dims=2)
-    
+
     f3(x) = f_disp(model,T,@view(x[idx]))
     Φ_disp = mapslices(f3,ρ̄;dims=2)
-    
+
     Φ = Φ_disp+Φ_hs_assoc+Φ_chain
 
     return ∫(Φ,dz)
@@ -64,12 +63,12 @@ function δFδρ_chain(model::SAFTVRMieModel,ρ,T,z)
     ∂f∂λ0 = δfδn[:,idx.+2*nc]
 
     δFδρ_hc = zeros(length(z),length(model))
-    for i in @comps 
+    for i in @comps
         bounds = ρ[i].bounds.+(-lim[i],lim[i])
         ∂f∂ρhc = DensityProfile(@view(∂f∂ρhc0[:,i]),z,bounds,[∂f∂ρhc0[1,i],∂f∂ρhc0[end,i]])
         ∂f∂ρ̄hc = DensityProfile(@view(∂f∂ρ̄hc0[:,i]),z,bounds,[∂f∂ρ̄hc0[1,i],∂f∂ρ̄hc0[end,i]])
         ∂f∂λ = DensityProfile(@view(∂f∂λ0[:,i]),z,bounds,[∂f∂λ0[1,i],∂f∂λ0[end,i]])
-    
+
         span = range(-lim[i],lim[i],length=101)
 
         δFδρ_hc_1 = ∫ρdz.(Ref(∂f∂λ),z,Ref(span))
@@ -96,10 +95,10 @@ function δFδρ_disp(model::SAFTVRMieModel,ρ,T,z)
     ∂f∂n0 = δfδn0[:,idx]
 
     δFδρ_disp = zeros(length(z),length(model))
-    for i in @comps 
+    for i in @comps
         bounds = ρ[i].bounds.+(-lim[i],lim[i])
         ∂f∂n =  DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
-    
+
         span = range(-lim[i],lim[i],length=101) # Length = 101? Is it because len(z) = 101?
 
         δFδρ_disp[:,i] = π*∫ρz²dz.(Ref(∂f∂n),z,Ref(span))
@@ -200,9 +199,9 @@ function f_chain(model::SAFTVRMieModel, T, ρhc, ρ̄hc, _λ)
         λ = _λ[i]/(2*_d[i])
         fchain +=  ρhc[i]*(log(g_Mie_*λ/ρhc[i])*(m[i]-1))
     end
-    
+
     return -fchain
-    #λ = _λ./(2*HSd) 
+    #λ = _λ./(2*HSd)
     #yᵈᵈ = @. 1/(1-ζ₃)+1.5*HSd*ζ₂/(1-ζ₃)^2+0.5*HSd^2*ζ₂^2/(1-ζ₃)^3
     #f = @. -ρhc*(m-1)*log(yᵈᵈ*λ/ρhc)
     #return sum(f)
@@ -247,7 +246,7 @@ function f_disp(model::SAFTVRMieModel, T, ρ̄)
     end
 
     _ζst = σ3_x*ρS*π/6
-    
+
     a₁ = zero(V+T+first(z)+one(eltype(model)))
     a₂ = a₁
     a₃ = a₁
@@ -336,40 +335,6 @@ function f_disp(model::SAFTVRMieModel, T, ρ̄)
     return ρ̄*adisp
 end
 
-function f_assoc(model::SAFTVRMieModel, T, n, n₃, nᵥ)
-    HSd = d(model,1e-3,T,onevec(model))
-    _0 = zero(T+first(n)+first(n₃)+first(nᵥ))
-    nn = assoc_pair_length(model)
-    iszero(nn) && return _0
-
-    n₀ = n./HSd
-    n₂ = π.*HSd.*n
-
-    nᵥ₂ = -2π.*nᵥ
-
-    ξ = 1 .-nᵥ₂.^2 ./ n₂.^2
-
-    X_ = X(model,T,n,n₃,nᵥ)
-    _0 = zero(first(X_.v))
-
-    ns = model.sites.n_sites
-    res = _0
-    resᵢₐ = _0
-    for i ∈ @comps
-        ni = ns[i]
-        iszero(length(ni)) && continue
-        Xᵢ = X_[i]
-        resᵢₐ = _0
-        for (a,nᵢₐ) ∈ pairs(ni)
-            Xᵢₐ = Xᵢ[a]
-            nᵢₐ = ni[a]
-            resᵢₐ +=  nᵢₐ* (log(Xᵢₐ) - Xᵢₐ/2 + 0.5)
-        end
-        res += resᵢₐ*n₀[i]*ξ[i]
-    end
-    return res
-end
-
 function Δ(model::SAFTVRMieModel, T, n, n₃, nᵥ, i, j, a, b)
     _d = d(model,1e-3,T,onevec(model))
     _σ = model.params.sigma.values
@@ -398,11 +363,11 @@ function Δ(model::SAFTVRMieModel, T, n, n₃, nᵥ, i, j, a, b)
     end
 
     ρr  = ρS*σ3_x
-    
+
     ϵ = model.params.epsilon
     Tr = T/ϵ[i,j]
     _I = I(model,Tr,ρr)
-    
+
     F = expm1(ϵ_assoc[i,j][a,b]/T)
 
     return F*K*_I

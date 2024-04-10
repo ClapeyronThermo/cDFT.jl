@@ -12,4 +12,3 @@ function initial_uniform_density_profile(model::EoSModel,ρ_val,bounds,ngrid=101
     end
     return ρ, z
 end
-

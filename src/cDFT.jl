@@ -1,7 +1,7 @@
 module cDFT
 
 using LinearAlgebra
-using ForwardDiff, Optim, FixedPointAcceleration, NLSolvers
+using ForwardDiff, NLSolvers
 using Clapeyron
 using Clapeyron: d, N_A, k_B, R̄
 using Clapeyron: @comps
@@ -12,6 +12,12 @@ import Clapeyron.Solvers
 import Clapeyron.NLSolvers
 using Clapeyron: SingleComp
 using StaticArrays
+
+if !isdefined(Clapeyron,Symbol("@sum"))
+    include("utils/sum.jl")
+else
+    using Clapeyron: @sum
+end
 
 include("utils/types.jl")
 include("utils/base.jl")
@@ -24,6 +30,7 @@ include("models/BasicIdeal.jl")
 
 include("models/weights.jl")
 include("models/FMT.jl")
+include("models/association.jl")
 include("models/PCSAFT.jl")
 include("models/PPCSAFT.jl")
 include("models/gcPPCSAFT.jl")

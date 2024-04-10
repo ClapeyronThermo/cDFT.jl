@@ -17,8 +17,8 @@ function F_res(model::PCSAFTModel,ρ,T,z)
     idx = 1:nc
 
     f1(x) = f_hs(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
-)+f_assoc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
-)
+)+f_assoc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc]),HSd)
+
     Φ_hs_assoc = mapslices(f1,[n n₃ nᵥ];dims=2)
 
     f2(x) = f_hc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
@@ -127,9 +127,7 @@ function δFδρ_assoc(model::SAFTModel,ρ,T,z)
         ∂f∂n = DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
         ∂f∂n₃ = DensityProfile(∂f∂n₃0[:,i],z,bounds,[∂f∂n₃0[1,i],∂f∂n₃0[end,i]])
         ∂f∂nᵥ = DensityProfile(∂f∂nᵥ0[:,i],z,bounds,[∂f∂nᵥ0[1,i],∂f∂nᵥ0[end,i]])
-    
         span = range(-lim[i],lim[i],length=length(z))
-
         for k in eachindex(z)
             zk = z[k]
             δFδρ_assoc_1 = ∫ρdz(∂f∂n,zk,span)
@@ -210,40 +208,6 @@ function I(model::PCSAFTModel,m̄,n₃,n)
     return res
 end
 
-function f_assoc(model::PCSAFTModel, T, n, n₃, nᵥ)
-    HSd = d(model,1e-3,T,onevec(model))
-    _0 = zero(T+first(n)+first(n₃)+first(nᵥ))
-    nn = assoc_pair_length(model)
-    iszero(nn) && return _0
-
-    n₀ = n./HSd
-    n₂ = π.*HSd.*n
-
-    nᵥ₂ = -2π.*nᵥ
-
-    ξ = 1 .-nᵥ₂.^2 ./ n₂.^2
-
-    X_ = X(model,T,n,n₃,nᵥ)
-    _0 = zero(first(X_.v))
-
-    ns = model.sites.n_sites
-    res = _0
-    resᵢₐ = _0
-    for i ∈ @comps
-        ni = ns[i]
-        iszero(length(ni)) && continue
-        Xᵢ = X_[i]
-        resᵢₐ = _0
-        for (a,nᵢₐ) ∈ pairs(ni)
-            Xᵢₐ = Xᵢ[a]
-            nᵢₐ = ni[a]
-            resᵢₐ +=  nᵢₐ* (log(Xᵢₐ) - Xᵢₐ/2 + 0.5)
-        end
-        res += resᵢₐ*n₀[i]*ξ[i]
-    end
-    return res
-end
-
 function Δ(model::PCSAFTModel, T, n, n₃, nᵥ, i, j, a, b)
     ϵ_assoc = model.params.epsilon_assoc.values
     κ = model.params.bondvol.values
@@ -276,60 +240,9 @@ function Δ(model::EoSModel, T, n, n₃, nᵥ)
     Δout = assoc_similar(model,typeof(T+first(n₃)+first(n)+first(nᵥ)))
     Δout.values .= false
     for (idx,(i,j),(a,b)) in indices(Δout)
-        Δout[idx] =Δ(model,T,n, n₃, nᵥ,i,j,a,b)
+        Δout[idx] = Δ(model,T,n, n₃, nᵥ,i,j,a,b)
     end
     return Δout
-end
-
-function X(model::EoSModel,T,n,n₃,nᵥ)
-    options = assoc_options(model)
-    K = assoc_site_matrix(model,T,n,n₃,nᵥ)
-    idxs = model.sites.n_sites.p
-    Xsol = assoc_matrix_solve(K,options)
-    return PackedVofV(idxs,Xsol)
-end
-
-function assoc_site_matrix(model,T,n,n₃,nᵥ)
-    HSd = d(model,1e-3,T,onevec(model))
-    delta = Δ(model,T,n,n₃,nᵥ)
-    sitesparam = Clapeyron.getsites(model)
-    _sites = sitesparam.n_sites
-    p = _sites.p
-    _ii::Vector{Tuple{Int,Int}} = delta.outer_indices
-    _aa::Vector{Tuple{Int,Int}} = delta.inner_indices
-    _idx = 1:length(_ii)
-    _Δ= delta.values
-    TT = eltype(_Δ)
-    count = 0
-    _n = sitesparam.n_sites.v
-
-    nn = length(_n)
-    K  = zeros(TT,nn,nn)
-    count = 0
-    options = assoc_options(model)
-    combining = options.combining
-    @inbounds for i ∈ 1:length(model) #for i ∈ comps
-        sitesᵢ = 1:(p[i+1] - p[i]) #sites are normalized, with independent indices for each component
-        for a ∈ sitesᵢ #for a ∈ sites(comps(i))
-            ia = compute_index(p,i,a)
-            for idx ∈ _idx #iterating for all sites
-                ij = _ii[idx]
-                ab = _aa[idx]
-                if issite(i,a,ij,ab)
-                    j = complement_index(i,ij)
-                    b = complement_index(a,ab)
-                    jb = compute_index(p,j,b)
-                    njb = _n[jb]
-                    n₀ = n[j]/HSd[j]
-                    n₂ = π*HSd[j]*n[j]
-                    nᵥ₂ = -2π*nᵥ[j]
-                    ξ = 1 -nᵥ₂^2/n₂^2
-                    K[ia,jb]  = n₀*ξ*njb*_Δ[idx]
-                end
-            end
-        end
-    end
-    return K
 end
 
 export F_res, δFδρ_res
