@@ -3,7 +3,7 @@ function interfacial_tension(model::EoSModel,p,T,n)
 
     ρ,z = initial_interfacial_tension_density_profile(model,p,T,n,[-10L,10L],201)
 
-    converge_profile!(model,ρ,T,z,Anderson(delay=100,memory=50,damping=1e-2,picard_damping=1e-3,drop_tol=1e3))
+    converge_profile!(model,ρ,T,z,AndersonFixPoint(delay=100,memory=50,damping=1e-2,picard_damping=1e-3,drop_tol=Inf))
 
     return eval_interfacial_tension(model,p,T,ρ,z)
 end
