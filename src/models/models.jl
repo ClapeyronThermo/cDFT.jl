@@ -32,12 +32,15 @@ function δFδρ_res(system::DFTSystem)
     df(x) = ForwardDiff.gradient(f,x)
 
     δf = zeros(nf,nc,ngrid)
-
+    
+    dx = similar(n,nf)
     Threads.@threads for i in 1:ngrid
-        δf[:,:,i] = df(n[:,:,i])
+        ForwardDiff.gradient!(dx, f, n[:,:,i], ForwardDiff.GradientConfig(f, n[:,:,i], ForwardDiff.Chunk(nf*nc), nothing))
+        δf[:,:,i] = dx
     end 
 
     δFδρ_res = zeros(nc,ngrid)
+
     for j in 1:nf
         ∂f = DensityProfile[]
         for i in @comps
@@ -47,6 +50,7 @@ function δFδρ_res(system::DFTSystem)
         end        
         δFδρ_res += integrate_field(system,fields[j],∂f)
     end
+
     return δFδρ_res
 end
 
