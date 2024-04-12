@@ -35,21 +35,19 @@ function ∫ρdz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float6
     if idx1 == 0
         I += ρ.boundary_conditions[1]*(ρ.coords[1]-z1)
     else
-        I += evalpoly(ρ.coords[idx1+1]-ρ.coords[idx1],append!([0.],ρ.coeffs[idx1]./[1,2,3,4]))
-        I -= evalpoly(z1-ρ.coords[idx1],append!([0.],ρ.coeffs[idx1]./[1,2,3,4]))
+        I += evalpoly(ρ.coords[idx1+1]-ρ.coords[idx1],(0.0,(ρ.coeffs[idx1]./(1,2,3,4))...))
+        I -= evalpoly(z1-ρ.coords[idx1],(0.0,(ρ.coeffs[idx1]./(1,2,3,4))...))
     end
 
     if idx2 == structure.ngrid
         I += ρ.boundary_conditions[2]*(z2-ρ.coords[end])
     else
-        I += evalpoly(z2-ρ.coords[idx2],append!([0.],ρ.coeffs[idx2]./[1,2,3,4]))
+        I += evalpoly(z2-ρ.coords[idx2],(0.0,(ρ.coeffs[idx2]./(1,2,3,4))...))
     end
 
     for i in idx1+1:idx2-1
-        I += evalpoly(ρ.coords[i+1]-ρ.coords[i],append!([0.],ρ.coeffs[i]./[1,2,3,4]))
+        I += evalpoly(ρ.coords[i+1]-ρ.coords[i],(0.0,(ρ.coeffs[i]./(1,2,3,4))...))
     end
-
-    # println(I)
 
     return I
 
