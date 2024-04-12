@@ -1,7 +1,7 @@
 module cDFT
 
 using LinearAlgebra
-using ForwardDiff, Optim, FixedPointAcceleration, NLSolvers
+using ForwardDiff, Optim, NLSolvers
 using Clapeyron
 using Clapeyron: d, N_A, k_B, R̄
 using Clapeyron: @comps
