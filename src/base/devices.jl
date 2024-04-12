@@ -1,5 +1,10 @@
 abstract type Device end
 
+struct DFTOptions
+    device::Device
+    solver::Solvers.AbstractFixPoint
+end
+
 struct CPU <: Device 
     ncpu::Int
     pinning::Bool
@@ -12,7 +17,8 @@ struct GPU <: Device
 end
 
 function CPU() 
-    return CPU(1,false,[])
+    ncpu = Threads.nthreads()
+    return CPU(ncpu,false,[])
 end
 
 function CPU(ncpu::Int) 

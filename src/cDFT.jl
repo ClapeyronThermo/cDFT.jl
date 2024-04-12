@@ -12,6 +12,11 @@ import Clapeyron.Solvers
 using Clapeyron: SingleComp
 using StaticArrays
 
+include("base/base.jl")
+include("fields/fields.jl")
+include("models/models.jl")
+include("structure/structure.jl")
+
 include("utils/types.jl")
 include("utils/base.jl")
 include("utils/profiles.jl")
