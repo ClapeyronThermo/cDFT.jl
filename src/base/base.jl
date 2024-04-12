@@ -18,9 +18,11 @@ function DFTSystem(model::EoSModel,structure::DFTStructure,profile::Vector{DFTPr
     return DFTSystem(model,species,structure,profile,fields,options)
 end
 
-function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions(CPU(),AndersonFixPoint()))
+function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
     profiles = initialize_profiles(model,structure)
     fields = get_fields(model)
     species = get_species(model, structure)
     return DFTSystem(model, species, structure, profiles, fields, options)
 end
+
+export DFTSystem

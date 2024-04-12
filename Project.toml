@@ -11,5 +11,11 @@ NLSolvers = "337daf1e-9722-11e9-073e-8b9effe078ba"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
+[weakdeps]
+ThreadPinning = "811555cd-349b-4f26-b7bc-1f208b848042"
+
+[extensions]
+ThreadPinningcDFTExt = "ThreadPinning"
+
 [compat]
 Clapeyron = "0.4,0.5"
