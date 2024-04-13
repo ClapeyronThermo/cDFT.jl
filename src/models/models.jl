@@ -33,10 +33,9 @@ function δFδρ_res(system::DFTSystem)
 
     δf = zeros(nf,nc,ngrid)
     
-    dx = similar(n,nf)
-    Threads.@threads for i in 1:ngrid
-        ForwardDiff.gradient!(dx, f, n[:,:,i], ForwardDiff.GradientConfig(f, n[:,:,i], ForwardDiff.Chunk(nf*nc), nothing))
-        δf[:,:,i] = dx
+    # dx = similar(n,nf)
+    for i in 1:ngrid
+        δf[:,:,i] = df(n[:,:,i])
     end 
 
     δFδρ_res = zeros(nc,ngrid)
