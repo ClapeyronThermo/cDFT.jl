@@ -34,7 +34,7 @@ function δFδρ_res(system::DFTSystem)
     δf = zeros(nf,nc,ngrid)
     
     # dx = similar(n,nf)
-    for i in 1:ngrid
+    Threads.@threads for i in 1:ngrid
         δf[:,:,i] = df(n[:,:,i])
     end 
 
