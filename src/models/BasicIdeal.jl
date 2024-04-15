@@ -14,13 +14,13 @@ function F_ideal(system::DFTSystem)
     
     f(x) = f_ideal(system,model.idealmodel,x)    
 
-    ϕ = 0.
+    ϕ = zeros(ngrid)
     
     Threads.@threads for i in 1:ngrid
-        ϕ += f(n[i,:])
+        ϕ[i] = f(n[i,:])
     end
 
-    return ϕ*dz
+    return ∫(ϕ,dz)
 end
 
 function f_ideal(system::DFTSystem,model::BasicIdealModel,n)

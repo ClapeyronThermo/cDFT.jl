@@ -3,7 +3,7 @@ function surface_tension(model::EoSModel, T,x = [1.0])
 
     (p, vl, vv, y) = bubble_pressure(model, T, x)
 
-    structure = SurfaceTension1DCart((p, T, x),(-20L,20L), 201)
+    structure = SurfaceTension1DCart((p, T, x),(-10L,10L), 101)
 
     system = DFTSystem(model, structure)
 
