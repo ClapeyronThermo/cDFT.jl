@@ -26,7 +26,6 @@ include("utils/anderson.jl") #TODO, port this to Clapeyron
 
 include("models/BasicIdeal.jl")
 
-include("models/weights.jl")
 include("models/FMT.jl")
 include("models/PCSAFT.jl")
 include("models/PPCSAFT.jl")
