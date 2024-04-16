@@ -25,8 +25,10 @@ function initial_interfacial_tension_density_profile(model::EoSModel,p,T,n,bound
     k0 = ones(nc)
     c0 = zeros(nc)
     z0 = vcat(k0,c0)
-    res =  optimize(f,z0,Optim.NelderMead(),Optim.Options())
-    x_sol = Optim.minimizer(res)
+    scalarobj = NLSolvers.ScalarObjective(f = f)
+    optprob = NLSolvers.OptimizationProblem(obj = scalarobj,inplace = false,bounds = nothing)
+    res = NLSolvers.solve(optprob,z0,NLSolvers.NelderMead(),NLSolvers.OptimizationOptions())
+    x_sol = Solvers.x_sol(res)
     k = x_sol[1:nc]
     c = x_sol[nc+1:2*nc]
     ρ,z = _initial_interfacial_tension_density_profile(model,ρ1,ρ2,bounds,z,k,c)        
