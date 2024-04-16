@@ -1,6 +1,6 @@
 using Clapeyron: QPPCSAFTModel
 
-function f_res(system::DFTSystem, model::PPCSAFTModel,n)
+function f_res(system::DFTSystem, model::QPPCSAFTModel,n)
     return f_hs(system,model,n[2,:],n[3,:],n[4,:]) + f_hc(system,model,n[1,:],n[5,:],n[6,:]) + f_disp(system,model,n[7,:]) + f_polar(system,model,n[7,:]) + f_assoc(system,model,n[2,:],n[3,:],n[4,:])
 end
 
@@ -20,17 +20,17 @@ function f_polar(system::DFTSystem, model::PPCSAFTModel, ρ̄)
   σ = model.params.sigma.values
 
   ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
-  η = π/6*sum(ρ̄.*m.*HSd.^3)
-  x = ρ̄ /sum(ρ̄)
-  ρ̄ = sum(ρ̄)
+  η = π/6*@sum(ρ̄[i]*m[i]*HSd[i]^3)
+  ∑ρ̄ = sum(ρ̄)
+  x = ρ̄ /∑ρ̄
   nc = length(model)
 
   a_mp_total = zero(T+ρ̄)
-  a_mp_total += has_dp && a_dd(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-  a_mp_total += has_qp && a_qq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-  a_mp_total += has_dp && has_qp && a_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
+  a_mp_total += has_dp && a_dd(x,m,ϵ,σ,μ̄²,Q̄²,η,∑ρ̄,T,nc)
+  a_mp_total += has_qp && a_qq(x,m,ϵ,σ,μ̄²,Q̄²,η,∑ρ̄,T,nc)
+  a_mp_total += has_dp && has_qp && a_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,∑ρ̄,T,nc)
 
-  return ρ̄*a_mp_total
+  return ∑ρ̄*a_mp_total
 end
 
 function a_polar(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)

@@ -18,15 +18,14 @@ function f_polar(system::DFTSystem, model::PPCSAFTModel, ρ̄)
     σ = model.params.sigma.values
 
     ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
-    η = π/6*sum(ρ̄.*m.*HSd.^3)
-    x = ρ̄ /sum(ρ̄)
-    ρ̄ = sum(ρ̄)
-
-    _A₂ = A2(x,m,ϵ,σ,μ̄²,η,ρ̄,T)
+    η = π/6*@sum(ρ̄[i]*m[i]*HSd[i]^3)
+    ∑ρ̄ = sum(ρ̄)
+    x = ρ̄ /∑ρ̄
+    _A₂ = A2(x,m,ϵ,σ,μ̄²,η,∑ρ̄,T)
     iszero(_A₂) && return zero(_A₂)
-    _A₃ = A3(x,m,ϵ,σ,μ̄²,η,ρ̄,T)
+    _A₃ = A3(x,m,ϵ,σ,μ̄²,η,∑ρ̄,T)
     _a_dd = _A₂^2/(_A₂-_A₃)
-    return ρ̄*_a_dd
+    return ∑ρ̄*_a_dd
 end
 
 function A2(x,m,ϵ,σ,μ̄²,η,ρ̄,T)

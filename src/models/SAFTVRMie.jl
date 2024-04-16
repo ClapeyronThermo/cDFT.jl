@@ -28,7 +28,8 @@ function get_species(model::SAFTVRMieModel,structure::DFTStructure)
 end
 
 function f_res(system::DFTSystem, model::SAFTVRMieModel, n)
-    return f_hs(system,model,n[2,:],n[3,:],n[4,:]) + f_chain(system,model,n[1,:],n[5,:],n[6,:]) + f_disp(system,model,n[7,:]) + f_assoc(system,model,n[2,:],n[3,:],n[4,:])
+    n1,n2,n3,n4,n5,n6,n7 = @view(n[:,1]),@view(n[:,2]),@view(n[:,3]),@view(n[:,4]),@view(n[:,5]),@view(n[:,6]),@view(n[:,7])
+    return f_hs(system,model,n2,n3,n4) + f_chain(system,model,n1,n5,n6) + f_disp(system,model,n7) + f_assoc(system,model,n2,n3,n4)
 end
 
 function f_chain(system::DFTSystem, model::SAFTVRMieModel, ρhc, ρ̄hc, _λ)
@@ -47,7 +48,7 @@ function f_chain(system::DFTSystem, model::SAFTVRMieModel, ρhc, ρ̄hc, _λ)
     m̄ = dot(z,m)
     m̄inv = 1/m̄
 
-    ρS = sum(ρ̄hc.*m)
+    ρS = dot(ρ̄hc,m)
 
     _ζ_X = zero(T+first(ρ̄hc)+one(eltype(model)))
     kρS = ρS* π/6/8
@@ -144,13 +145,13 @@ function f_disp(system::DFTSystem, model::SAFTVRMieModel, ρ̄)
     _σ = model.params.sigma
 
     ρ̄ = ρ̄*3 ./(4*ψ^3 .*_d.^3)/π
-
-    z = ρ̄ /sum(ρ̄)
+    ∑ρ̄ = sum(ρ̄)
+    z = ρ̄ /∑ρ̄
     m̄ = dot(z,m)
     m̄inv = 1/m̄
     ∑z = sum(z)
 
-    ρS = sum(ρ̄.*m)
+    ρS = dot(ρ̄,m)
 
     _ζ_X = zero(T+first(ρ̄)+one(eltype(model)))
     kρS = ρS* π/6/8
@@ -257,8 +258,7 @@ function f_disp(system::DFTSystem, model::SAFTVRMieModel, ρ̄)
     a₃ = a₃*m̄/(T*T*T)/∑z  #/sum(z)
     #@show (a₁,a₂,a₃)
     adisp = a₁ + a₂ + a₃
-    ρ̄ = sum(ρ̄)
-    return ρ̄*adisp
+    return ∑ρ̄*adisp
 end
 
 function Δ(model::SAFTVRMieModel, T, n, n₃, nᵥ, i, j, a, b)
@@ -275,7 +275,7 @@ function Δ(model::SAFTVRMieModel, T, n, n₃, nᵥ, i, j, a, b)
     m̄ = dot(z,m)
     m̄inv = 1/m̄
 
-    ρS = sum(ρ̄.*m)
+    ρS = dot(ρ̄,m)
 
     σ3_x = zero(T+first(z)+one(eltype(model)))
 

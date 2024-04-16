@@ -1,6 +1,6 @@
 using Clapeyron: PCSAFTModel
 
-struct PCSAFTSpecies <: DFTSpecies 
+struct PCSAFTSpecies <: DFTSpecies
     nbeads::Vector{Int64}
     size::Vector{Float64}
 end
@@ -25,7 +25,8 @@ function get_species(model::PCSAFTModel,structure::DFTStructure)
 end
 
 function f_res(system::DFTSystem, model::PCSAFTModel,n)
-    return f_hs(system,model,n[2,:],n[3,:],n[4,:]) + f_hc(system,model,n[1,:],n[5,:],n[6,:]) + f_disp(system,model,n[7,:]) + f_assoc(system,model,n[2,:],n[3,:],n[4,:])
+    n1,n2,n3,n4,n5,n6,n7 = @view(n[:,1]),@view(n[:,2]),@view(n[:,3]),@view(n[:,4]),@view(n[:,5]),@view(n[:,6]),@view(n[:,7])
+    return f_hs(system,model,n2,n3,n4) + f_hc(system,model,n1,n5,n6) + f_disp(system,model,n7) + f_assoc(system,model,n2,n3,n4)
 end
 
 function f_hc(system::DFTSystem, model::PCSAFTModel, ρhc, ρ̄hc, _λ)
@@ -60,19 +61,22 @@ function f_disp(system::DFTSystem, model::PCSAFTModel, ρ̄)
     m = model.params.segment.values
 
     ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
-
-    x = ρ̄ /sum(ρ̄)
+    ∑ρ̄ = sum(ρ̄)
+    x = ρ̄ /∑ρ̄
     m̄ = dot(x,m)
 
-    η = π/6*sum(ρ̄.*m.*HSd.^3)
+    η = zero(first(m) + ∑ρ̄ + first(HSd))
+    for i in 1:length(m)
+        η += m[i]*ρ̄[i]*HSd[i]^3
+    end
+    η = π/6*η
 
     C₁ = 1+m̄*(8*η-2*η^2)/(1-η)^4+(1-m̄)*(20*η-27*η^2+12*η^3-2*η^4)/((1-η)^2*(2-η)^2)
     I₁ = I(model,m̄,η,1)
     I₂ = I(model,m̄,η,2)
 
     m2ϵσ3₁,m2ϵσ3₂ =  Clapeyron.m2ϵσ3(model,zero(T), T, x)
-    ρ̄ = sum(ρ̄)
-    return -2*π*ρ̄^2*I₁*m2ϵσ3₁-π*ρ̄^2*m̄*C₁^-1*I₂*m2ϵσ3₂
+    return -2*π*∑ρ̄^2*I₁*m2ϵσ3₁-π*∑ρ̄^2*m̄*C₁^-1*I₂*m2ϵσ3₂
 end
 
 function I(model::PCSAFTModel,m̄,n₃,n)
@@ -83,7 +87,7 @@ function I(model::PCSAFTModel,m̄,n₃,n)
     end
     res = zero(n₃)
     @inbounds for i ∈ 1:7
-        ii = i-1 
+        ii = i-1
         corr1,corr2,corr3 = corr[i]
         ki = corr1 + (m̄-1)/m̄*corr2 + (m̄-1)/m̄*(m̄-2)/m̄*corr3
         res += ki*n₃^ii
@@ -94,21 +98,29 @@ end
 function Δ(model::PCSAFTModel, T, n, n₃, nᵥ, i, j, a, b)
     ϵ_assoc = model.params.epsilon_assoc.values
     κ = model.params.bondvol.values
-    κijab = κ[i,j][a,b] 
+    κijab = κ[i,j][a,b]
+    _0 = zero(T+first(n)+first(n₃)+first(nᵥ)+first(κijab))
     iszero(κijab) && return _0
 
     σ = model.params.sigma.values[i,j]
     m = model.params.segment.values
-    HSd = d(model,nothing,T,onevec(model))
+    HSd = d(model,1e-3,T,onevec(model))
     dij = (HSd[i]*HSd[j])/(HSd[i]+HSd[j])
 
-    n₂ = sum(π.*HSd.*n.*m)
-    nᵥ₂ = sum(-2π.*nᵥ.*m)
-    n₃  = sum(n₃.*m)
+    n₂, nᵥ₂, n₃₃ = _0,_0,_0
+    for i in 1:length(n)
+        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[i],HSd[i]
+        n₂ += π*HSdᵢ*nᵢ*mᵢ
+        nᵥ₂ += -2π*nᵥᵢ*mᵢ
+        n₃₃ += n₃[i]*mᵢ
+    end
+    #n₂ = sum(π.*HSd.*n.*m)
+    #nᵥ₂ = sum(-2π.*nᵥ.*m)
+    #n₃  = sum(n₃.*m)
 
     ξ = 1-nᵥ₂^2/n₂^2
-    g_hs = 1/(1-n₃)+dij*ξ*n₂/(2*(1-n₃)^2)+dij^2*n₂^2*ξ/(18*(1-n₃)^3)
-    return g_hs*σ^3*(exp(ϵ_assoc[i,j][a,b]/T)-1)*κijab
+    g_hs = 1/(1-n₃₃)+dij*ξ*n₂/(2*(1-n₃₃)^2)+dij^2*n₂^2*ξ/(18*(1-n₃₃)^3)
+    return g_hs*σ^3*expm1(ϵ_assoc[i,j][a,b]/T)*κijab
 end
 
 function length_scale(model::SAFTModel)
