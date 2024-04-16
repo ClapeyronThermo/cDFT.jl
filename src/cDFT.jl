@@ -35,7 +35,6 @@ include("models/QPPCSAFT.jl")
 include("models/SAFTVRMie.jl")
 
 include("methods/profiles.jl")
-include("methods/inhomogeneous_free_energy.jl")
 include("methods/surface_tension.jl")
 include("methods/interfacial_tension.jl")
 

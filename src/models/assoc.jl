@@ -1,3 +1,38 @@
+function f_assoc(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
+    HSd = system.species.size
+    (_, T, _) = system.structure.conditions
+    _0 = zero(T+first(n)+first(n₃)+first(nᵥ))
+    nn = assoc_pair_length(model)
+    iszero(nn) && return _0
+
+    n₀ = n./HSd
+    n₂ = π.*HSd.*n
+
+    nᵥ₂ = -2π.*nᵥ
+
+    ξ = 1 .-nᵥ₂.^2 ./ n₂.^2
+
+    X_ = X(model,T,n,n₃,nᵥ)
+    _0 = zero(first(X_.v))
+
+    ns = model.sites.n_sites
+    res = _0
+    resᵢₐ = _0
+    for i ∈ @comps
+        ni = ns[i]
+        iszero(length(ni)) && continue
+        Xᵢ = X_[i]
+        resᵢₐ = _0
+        for (a,nᵢₐ) ∈ pairs(ni)
+            Xᵢₐ = Xᵢ[a]
+            nᵢₐ = ni[a]
+            resᵢₐ +=  nᵢₐ* (log(Xᵢₐ) - Xᵢₐ/2 + 0.5)
+        end
+        res += resᵢₐ*n₀[i]*ξ[i]
+    end
+    return res
+end
+
 function Δ(model::EoSModel, T, n, n₃, nᵥ)
     Δout = assoc_similar(model,typeof(T+first(n₃)+first(n)+first(nᵥ)))
     Δout.values .= false

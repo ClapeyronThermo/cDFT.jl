@@ -49,7 +49,6 @@ function f_hc(system::DFTSystem, model::PCSAFTModel, ρhc, ρ̄hc, _λ)
         fi = -ρhc[i]*(m[i]-1)*log(yᵈᵈ*λ/ρhc[i])
         ∑f += fi
     end
-    
     return ∑f
 end
 
@@ -92,41 +91,6 @@ function I(model::PCSAFTModel,m̄,n₃,n)
     return res
 end
 
-function f_assoc(system::DFTSystem, model::PCSAFTModel, n, n₃, nᵥ)
-    HSd = system.species.size
-    (_, T, _) = system.structure.conditions
-    _0 = zero(T+first(n)+first(n₃)+first(nᵥ))
-    nn = assoc_pair_length(model)
-    iszero(nn) && return _0
-
-    n₀ = n./HSd
-    n₂ = π.*HSd.*n
-
-    nᵥ₂ = -2π.*nᵥ
-
-    ξ = 1 .-nᵥ₂.^2 ./ n₂.^2
-
-    X_ = X(model,T,n,n₃,nᵥ)
-    _0 = zero(first(X_.v))
-
-    ns = model.sites.n_sites
-    res = _0
-    resᵢₐ = _0
-    for i ∈ @comps
-        ni = ns[i]
-        iszero(length(ni)) && continue
-        Xᵢ = X_[i]
-        resᵢₐ = _0
-        for (a,nᵢₐ) ∈ pairs(ni)
-            Xᵢₐ = Xᵢ[a]
-            nᵢₐ = ni[a]
-            resᵢₐ +=  nᵢₐ* (log(Xᵢₐ) - Xᵢₐ/2 + 0.5)
-        end
-        res += resᵢₐ*n₀[i]*ξ[i]
-    end
-    return res
-end
-
 function Δ(model::PCSAFTModel, T, n, n₃, nᵥ, i, j, a, b)
     ϵ_assoc = model.params.epsilon_assoc.values
     κ = model.params.bondvol.values
@@ -146,8 +110,6 @@ function Δ(model::PCSAFTModel, T, n, n₃, nᵥ, i, j, a, b)
     g_hs = 1/(1-n₃)+dij*ξ*n₂/(2*(1-n₃)^2)+dij^2*n₂^2*ξ/(18*(1-n₃)^3)
     return g_hs*σ^3*(exp(ϵ_assoc[i,j][a,b]/T)-1)*κijab
 end
-
-export F_res, δFδρ_res
 
 function length_scale(model::SAFTModel)
     return maximum(model.params.sigma.values)

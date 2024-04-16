@@ -1,13 +1,13 @@
-using Clapeyron: gcPCPSAFTModel
+using Clapeyron: HomogcPCPSAFTModel
 
-function F_res(model::gcPCPSAFTModel,ρ,T,z)
-    return F_res(model.ppcmodel,ρ,T,z)
+function get_species(model::HomogcPCPSAFTModel,structure::DFTStructure)
+    return get_species(model.ppcmodel,structure)
 end
 
-function δFδρ_res(model::gcPCPSAFTModel,ρ,T,z)
-    return δFδρ_res(model.ppcmodel,ρ,T,z)
+function f_res(system::DFTSystem, model::HomogcPCPSAFTModel,n)
+    return f_res(system,model.ppcmodel,n)
 end
 
-function length_scale(model::gcPCPSAFTModel)
+function length_scale(model::HomogcPCPSAFTModel)
     return length_scale(model.ppcmodel)
 end
