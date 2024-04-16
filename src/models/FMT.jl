@@ -11,13 +11,18 @@ function f_hs(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
     m = model.params.segment.values
     HSd = system.species.size
 
-    n₀ = sum(n.*m./HSd)
-    n₁ = sum(n.*m./2)
-    n₂ = sum(π.*HSd.*n.*m)
-
-    nᵥ₁ = sum(-nᵥ.*m./HSd)
-    nᵥ₂ = sum(-2π.*nᵥ.*m)
-    n₃  = sum(n₃.*m)
+    n₀ = zero(first(n) + first(m) + first(HSd))
+    n₁,n₂,nᵥ₁,nᵥ₂,n₃₃ = zero(n₀), zero(n₀), zero(n₀), zero(n₀), zero(n₀)
+    for i in 1:length(n)
+        mᵢ,HSdᵢ,nᵥᵢ = m[i],HSd[i],nᵥ[i]
+        nᵢmᵢ = n[i]*mᵢ
+        n₀ += nᵢmᵢ/HSdᵢ
+        n₁ += 0.5nᵢmᵢ
+        n₂ += π*nᵢmᵢ*HSdᵢ
+        nᵥ₁ += nᵥᵢ*mᵢ/HSdᵢ
+        nᵥ₂ += -2π*nᵥᵢ*mᵢ
+        n₃₃ += n₃[i]*mᵢ
+    end
     return -n₀*log(1-n₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃)/(12*π*n₃^2)+1/(12*π*n₃*(1-n₃)^2))
 end
 
@@ -28,9 +33,9 @@ function δfδρ_hs(model::SAFTModel ,T ,n, n₃, nᵥ)
     df(x) = ForwardDiff.gradient(f,x)
 
     δfδn  = mapslices(df,hcat([n n₃ nᵥ]);dims=2)
-    ∂f∂n = δfδn[:,idx]
-    ∂f∂n₃ = δfδn[:,idx.+nc]
-    ∂f∂nᵥ = δfδn[:,idx.+2*nc]
+    ∂f∂n = @view δfδn[:,idx]
+    ∂f∂n₃ = @view δfδn[:,idx.+nc]
+    ∂f∂nᵥ = @view δfδn[:,idx.+2*nc]
     
     return (∂f∂n, ∂f∂n₃, ∂f∂nᵥ)
 end
