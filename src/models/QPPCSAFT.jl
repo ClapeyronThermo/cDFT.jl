@@ -5,7 +5,7 @@ function f_res(system::DFTSystem, model::QPPCSAFTModel,n)
 end
 
 
-function f_polar(system::DFTSystem, model::PPCSAFTModel, ρ̄)
+function f_polar(system::DFTSystem, model::QPPCSAFTModel, ρ̄)
   (_, T, _) = system.structure.conditions
   μ̄² = model.params.dipole2.values
   Q̄² = model.params.quadrupole2.values

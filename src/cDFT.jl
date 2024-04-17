@@ -12,11 +12,11 @@ import Clapeyron.Solvers
 using Clapeyron: SingleComp
 using StaticArrays
 
-if !isdefined(Clapeyron,Symbol("@sum"))
+#if !isdefined(Clapeyron,Symbol("@sum"))
     include("utils/sum.jl")
-else
-    using Clapeyron: @sum
-end
+#else
+    #using Clapeyron: @sum
+#end
 
 include("base/base.jl")
 include("fields/fields.jl")

@@ -45,6 +45,8 @@ macro sum(expr)
     end  |> esc
 end
 
+__sum_add_variables(cache,expr::Number) = nothing
+
 function __sum_add_variables(cache,expr::Symbol)
     vars,_,_ = cache
     push!(vars,expr)
