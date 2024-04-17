@@ -6,10 +6,10 @@ function evaluate_field(system::DFTSystem)
     nc = length(system.model)
     ngrid = system.structure.ngrid
 
-    n = zeros(nf,nc,ngrid)
+    n = zeros(ngrid,nf,nc)
 
     for i in 1:nf
-        n[i,:,:] = evaluate_field(system,fields[i])
+        n[:,i,:] = evaluate_field(system,fields[i])
     end
     
     return n

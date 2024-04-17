@@ -10,7 +10,7 @@ function F_res(system::DFTSystem)
     ϕ = zeros(ngrid)
 
     Threads.@threads for i in 1:ngrid
-        ϕ[i] = f(@view n[:,:,i])
+        ϕ[i] = f(@view n[i,:,:])
     end
 
     return ∫(ϕ,dz)
@@ -31,21 +31,21 @@ function δFδρ_res(system::DFTSystem)
     f(x) = f_res(system,model,x)
     df(x) = ForwardDiff.gradient(f,x)
 
-    δf = zeros(nf,nc,ngrid)
+    δf = zeros(ngrid,nf,nc)
 
     # dx = similar(n,nf)
     Threads.@threads for i in 1:ngrid
-        δf[:,:,i] = df(n[:,:,i])
+        δf[i,:,:] = df(n[i,:,:])
     end
 
-    δFδρ_res = zeros(nc,ngrid)
+    δFδρ_res = zeros(ngrid,nc)
 
     for j in 1:nf
         ∂f = DensityProfile[]
         for i in @comps
             lim = system.species.size[i]
             bounds = ρ[i].bounds.+(-lim,lim)
-            push!(∂f, DensityProfile(@view(δf[j,i,:]),z,bounds,[δf[j,i,1],δf[j,i,end]]))
+            push!(∂f, DensityProfile(@view(δf[:,j,i]),z,bounds,[δf[1,j,i],δf[end,j,i]]))
         end
         δFδρ_res += integrate_field(system,fields[j],∂f)
     end

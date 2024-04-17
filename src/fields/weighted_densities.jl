@@ -8,7 +8,7 @@ function evaluate_field(system::DFTSystem,field::WeightedDensity)
     structure = system.structure
     ngrid = structure.ngrid
     model = system.model
-    n = zeros(length(ρ),length(ρ[1].coords))
+    n = zeros(length(ρ[1].coords),length(ρ))
     width = field.width 
     type = field.type
     size = system.species.size
@@ -21,7 +21,7 @@ function evaluate_field(system::DFTSystem,field::WeightedDensity)
         integral_method = ∫ρz²dz
     elseif type == :ρ
         for i in @comps
-            n[i,:] .= ρ[i].density*N_A
+            n[:,i] .= ρ[i].density*N_A
         end
         return n
     else
@@ -34,7 +34,7 @@ function evaluate_field(system::DFTSystem,field::WeightedDensity)
         span = range(-width[i],width[i],length=41).*size[i]
 
         Threads.@threads for j in 1:ngrid
-            n[i,j] = integral_method(structure,ρ[i],z[j],span)*N_A
+            n[j,i] = integral_method(structure,ρ[i],z[j],span)*N_A
         end
     end
     return n
@@ -49,7 +49,7 @@ function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
     width = field.width 
     type = field.type
 
-    ∫field = zeros(nc,ngrid)
+    ∫field = zeros(ngrid,nc)
     z = profile[1].coords
 
     if type == :∫ρdz
@@ -63,7 +63,7 @@ function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
         prefactor = 1
     elseif type == :ρ
         for i in @comps
-            ∫field[i,:] .= profile[i].(z)
+            ∫field[:,i] .= profile[i].(z)
         end
         return ∫field
     else
@@ -76,7 +76,7 @@ function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
         span = range(-width[i],width[i],length=41).*size[i]
 
         Threads.@threads for j in 1:ngrid
-            ∫field[i,j] = prefactor*integral_method(structure,profile[i],z[j],span)
+            ∫field[j,i] = prefactor*integral_method(structure,profile[i],z[j],span)
         end
     end
     return ∫field
