@@ -18,8 +18,6 @@ function surface_tension(model::EoSModel, T,x = [1.0])
     return F*k_B*T-sum([μ[i]*∫(ρ[i].density,ρ[i].mesh_size) for i in @comps])+p*∫(ones(ngrid),ρ[1].mesh_size)
 end
 
-
-
 function surface_tension(system::DFTSystem)
     model = system.model
     ρ = system.profiles
@@ -30,6 +28,7 @@ function surface_tension(system::DFTSystem)
     (p, T, x) = system.structure.conditions
 
     ρl =[ρ[i].boundary_conditions[2] for i in @comps]
+    x = ρl/sum(ρl)
     vl = 1/sum(ρl)
 
     μ = Clapeyron.VT_chemical_potential(model,vl,T,x)

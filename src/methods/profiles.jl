@@ -21,7 +21,7 @@ function converge!(system::DFTSystem)
         δfδρ_res = δFδρ_res(system)
         for i in @comps
             Threads.@threads for j in 1:ngrid
-                ln_Gx[j,i] = ln_ρl[i].+(μ_res[i] .- δfδρ_res[i,j])
+                ln_Gx[j,i] = ln_ρl[i].+(μ_res[i] .- δfδρ_res[j,i])
             end
         end
 
@@ -40,7 +40,7 @@ function converge!(system::DFTSystem)
 
     ln_X0 = vec(ln_X0)
 
-    ρ_new = Solvers.fixpoint(f,ln_X0, method; rtol = 1e-6, max_iters = 10000)
+    ρ_new = Solvers.fixpoint(f,ln_X0, method; rtol = 1e-4, max_iters = 10000)
 
     ρ_new = exp.(ρ_new)
     ρ_new = reshape(ρ_new,(ngrid,length(ρ)))

@@ -28,7 +28,7 @@ function get_species(model::SAFTVRMieModel,structure::DFTStructure)
 end
 
 function f_res(system::DFTSystem, model::SAFTVRMieModel, n)
-    n1,n2,n3,n4,n5,n6,n7 = @view(n[:,1]),@view(n[:,2]),@view(n[:,3]),@view(n[:,4]),@view(n[:,5]),@view(n[:,6]),@view(n[:,7])
+    n1,n2,n3,n4,n5,n6,n7 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4,:]),@view(n[5,:]),@view(n[6,:]),@view(n[7,:])
     return f_hs(system,model,n2,n3,n4) + f_chain(system,model,n1,n5,n6) + f_disp(system,model,n7) + f_assoc(system,model,n2,n3,n4)
 end
 
