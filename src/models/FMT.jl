@@ -23,7 +23,7 @@ function f_hs(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
         nᵥ₂ += -2π*nᵥᵢ*mᵢ
         n₃₃ += n₃[i]*mᵢ
     end
-    return -n₀*log(1-n₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃)/(12*π*n₃^2)+1/(12*π*n₃*(1-n₃)^2))
+    return -n₀*log(1-n₃₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃₃)/(12*π*n₃₃^2)+1/(12*π*n₃₃*(1-n₃₃)^2))
 end
 
 function δfδρ_hs(model::SAFTModel ,T ,n, n₃, nᵥ)    
