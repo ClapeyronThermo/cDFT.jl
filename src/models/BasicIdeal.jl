@@ -25,7 +25,7 @@ end
 
 function f_ideal(system::DFTSystem,model::BasicIdealModel,n)
     T = system.structure.conditions[2]
-    ∑f = zero(T + first(ρ))
+    ∑f = zero(T + first(n))
     lnT = log(T)
-    return @sum(N_A*n[i]*(log(n[i]) - 1.5*lnT) - 1)
+    return @sum(N_A*n[i]*(log(n[i]) - 1.5*lnT-1))
 end

@@ -1,3 +1,5 @@
+import Clapeyron: getsites
+
 function f_assoc(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
     HSd = system.species.size
     (_, T, _) = system.structure.conditions
@@ -106,8 +108,8 @@ function assoc_site_matrix(model::EoSModel,T,n,n₃,nᵥ,n₀,ξ)
     return K
 end
 
-function f_assoc_exact_1(model, V, T, n, n₃, nᵥ, n₀, ξ)
-    xia,xjb,i,j,a,b,_n,idxs = _X_exact1(model, V, T, n, n₃, nᵥ, n₀, ξ)
+function f_assoc_exact_1(model, T, n, n₃, nᵥ, n₀, ξ)
+    xia,xjb,i,j,a,b,_n,idxs = _X_exact1(model, T, n, n₃, nᵥ, n₀, ξ)
     _0 = zero(xia)
     sites = getsites(model)
     nn = sites.n_sites
