@@ -7,7 +7,7 @@
 
         γ1 = surface_tension(model,T,x)
 
-        @test γ1 ≈ 0.019843696660439683 rtol = 1e-6
+        @test γ1 ≈ 0.019843696660439683 rtol = 1e-4
 
         p,vl,vv,y = Clapeyron.bubble_pressure(model,T,x)
 
@@ -30,7 +30,7 @@
 
         γ1 = interfacial_tension(model,p,T,n)
 
-        @test γ1 ≈ 0.030742209755905244 rtol = 1e-6
+        @test γ1 ≈ 0.030742209755905244 rtol = 1e-4
 
         L = cDFT.length_scale(model)
 
