@@ -2,7 +2,7 @@ struct DensityProfile{ℂ,ρ} <: DFTProfile #spline density profile. parametrize
     coords::ℂ
     density::ρ
     bounds::Vector{Float64}
-    boundary_conditions::Vector{Float64}
+    boundary_conditions::Vector{BoundaryCondition}
     coeffs::Vector{NTuple{4,Float64}} #spline coefficients
     mesh_size::Float64
 end
