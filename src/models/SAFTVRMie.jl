@@ -3,114 +3,39 @@ using Clapeyron: aS_1, B, KHS, Cλ, f123456
 using Clapeyron: KHS_fdf, aS_1_fdf, B_fdf, g_HS
 using Clapeyron: SAFTVRMieconsts
 
-function F_res(model::SAFTVRMieModel,ρ,T,z)
-    ψ = 1.3862
-    HSd = d(model,1e-3,T,onevec(model))
-    dz = ρ[1].mesh_size
+struct SAFTVRMieSpecies <: DFTSpecies 
+    nbeads::Vector{Int64}
+    size::Vector{Float64}
+end
 
-    (n, n₃,nᵥ)  = weights_hs(model,ρ,z,1/2*HSd)
-    (λ, ρ̄hc,_)    = weights_hs(model,ρ,z,HSd)
-    (_, ρ̄,_)    = weights_hs(model,ρ,z,ψ*HSd)
-    ρhc = zeros(length(z),length(ρ))
-    for i in @comps
-        ρhc[:,i] = ρ[i].density*N_A
-    end
-
+function get_fields(model::SAFTVRMieModel)
     nc = length(model)
-    idx = 1:nc
-
-    f1(x) = f_hs(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
-)+f_assoc(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
-)
-    Φ_hs_assoc = mapslices(f1,[n n₃ nᵥ];dims=2)
-
-    f2(x) = f_chain(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc])
-)
-    Φ_chain = mapslices(f2,[ρhc ρ̄hc λ];dims=2)
-    
-    f3(x) = f_disp(model,T,@view(x[idx]))
-    Φ_disp = mapslices(f3,ρ̄;dims=2)
-    
-    Φ = Φ_disp+Φ_hs_assoc+Φ_chain
-
-    return ∫(Φ,dz)
+    return [WeightedDensity(:ρ,zeros(nc)),
+            WeightedDensity(:∫ρdz,0.5*ones(nc)),
+            WeightedDensity(:∫ρz²dz,0.5*ones(nc)),
+            WeightedDensity(:∫ρzdz,0.5*ones(nc)),
+            WeightedDensity(:∫ρz²dz,ones(nc)),
+            WeightedDensity(:∫ρdz,ones(nc)),
+            WeightedDensity(:∫ρz²dz,1.3862*ones(nc))]
 end
 
-function δFδρ_res(model::SAFTVRMieModel,ρ,T,z)
-    return δFδρ_hs(model,ρ,T,z)+
-           δFδρ_chain(model,ρ,T,z)+
-           δFδρ_disp(model,ρ,T,z)+
-           δFδρ_assoc(model,ρ,T,z)
-end
-
-function δFδρ_chain(model::SAFTVRMieModel,ρ,T,z)
-    HSd = d(model,1e-3,T,onevec(model))
-    lim = HSd
-
-    (λ, ρ̄hc,_)  = weights_hs(model,ρ,z,lim)
-    ρhc = zeros(length(z),length(ρ))
-    for i in @comps
-        ρhc[:,i] = ρ[i].density*N_A
-    end
-
+function get_species(model::SAFTVRMieModel,structure::DFTStructure)
+    (p,T,z) = structure.conditions
     nc = length(model)
-    idx = 1:nc
-    f(x) = f_chain(model,T,@view(x[idx]),@view(x[idx.+nc]),@view(x[idx.+2*nc]))
-    df(x) = ForwardDiff.gradient(f,x)
-
-    δfδn  = mapslices(df,[ρhc ρ̄hc λ];dims=2)
-    ∂f∂ρhc0 = δfδn[:,idx]
-    ∂f∂ρ̄hc0 = δfδn[:,idx.+nc]
-    ∂f∂λ0 = δfδn[:,idx.+2*nc]
-
-    δFδρ_hc = zeros(length(z),length(model))
-    for i in @comps 
-        bounds = ρ[i].bounds.+(-lim[i],lim[i])
-        ∂f∂ρhc = DensityProfile(@view(∂f∂ρhc0[:,i]),z,bounds,[∂f∂ρhc0[1,i],∂f∂ρhc0[end,i]])
-        ∂f∂ρ̄hc = DensityProfile(@view(∂f∂ρ̄hc0[:,i]),z,bounds,[∂f∂ρ̄hc0[1,i],∂f∂ρ̄hc0[end,i]])
-        ∂f∂λ = DensityProfile(@view(∂f∂λ0[:,i]),z,bounds,[∂f∂λ0[1,i],∂f∂λ0[end,i]])
-    
-        span = range(-lim[i],lim[i],length=101)
-
-        δFδρ_hc_1 = ∫ρdz.(Ref(∂f∂λ),z,Ref(span))
-        δFδρ_hc_2 = π*∫ρz²dz.(Ref(∂f∂ρ̄hc),z,Ref(span))
-        δFδρ_hc_3 = ∂f∂ρhc.(z)
-
-        δFδρ_hc[:,i] = δFδρ_hc_1+δFδρ_hc_2+δFδρ_hc_3
-    end
-    return δFδρ_hc
+    nbeads = ones(nc)
+    size = d(model,1e-3,T,z)
+    return SAFTVRMieSpecies(nbeads,size)
 end
 
-function δFδρ_disp(model::SAFTVRMieModel,ρ,T,z)
-    HSd = d(model,1e-3,T,onevec(model))
-    lim = 1.3862*HSd
-
-    (_, ρ̄,_)  = weights_hs(model,ρ,z,lim)
-
-    nc = length(model)
-    idx = 1:nc
-    f(x) = f_disp(model,T,@view(x[idx]))
-    df(x) = ForwardDiff.gradient(f,x)
-
-    δfδn0  = mapslices(df,ρ̄;dims=2)
-    ∂f∂n0 = δfδn0[:,idx]
-
-    δFδρ_disp = zeros(length(z),length(model))
-    for i in @comps 
-        bounds = ρ[i].bounds.+(-lim[i],lim[i])
-        ∂f∂n =  DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
-    
-        span = range(-lim[i],lim[i],length=101) # Length = 101? Is it because len(z) = 101?
-
-        δFδρ_disp[:,i] = π*∫ρz²dz.(Ref(∂f∂n),z,Ref(span))
-    end
-
-    return δFδρ_disp
+function f_res(system::DFTSystem, model::SAFTVRMieModel, n)
+    n1,n2,n3,n4,n5,n6,n7 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4,:]),@view(n[5,:]),@view(n[6,:]),@view(n[7,:])
+    return f_hs(system,model,n2,n3,n4) + f_chain(system,model,n1,n5,n6) + f_disp(system,model,n7) + f_assoc(system,model,n2,n3,n4)
 end
 
-function f_chain(model::SAFTVRMieModel, T, ρhc, ρ̄hc, _λ)
-    V = 1e-3
-    _d = d(model,V,T,onevec(model))
+function f_chain(system::DFTSystem, model::SAFTVRMieModel, ρhc, ρ̄hc, _λ)
+    V = nothing
+    (_, T, _) = system.structure.conditions
+    _d = system.species.size
     m = model.params.segment
     _ϵ = model.params.epsilon
     _λr = model.params.lambda_r
@@ -123,7 +48,7 @@ function f_chain(model::SAFTVRMieModel, T, ρhc, ρ̄hc, _λ)
     m̄ = dot(z,m)
     m̄inv = 1/m̄
 
-    ρS = sum(ρ̄hc.*m)
+    ρS = dot(ρ̄hc,m)
 
     _ζ_X = zero(T+first(ρ̄hc)+one(eltype(model)))
     kρS = ρS* π/6/8
@@ -146,7 +71,7 @@ function f_chain(model::SAFTVRMieModel, T, ρhc, ρ̄hc, _λ)
 
     _ζst = σ3_x*ρS*π/6
 
-    fchain = zero(V+T+first(z)+one(eltype(model)))
+    fchain = zero(T+first(z)+one(eltype(model)))
     _KHS,_∂KHS = @f(KHS_fdf,_ζ_X,ρS)
     for i ∈ @comps
         ϵ = _ϵ[i,i]
@@ -208,10 +133,11 @@ function f_chain(model::SAFTVRMieModel, T, ρhc, ρ̄hc, _λ)
     #return sum(f)
 end
 
-function f_disp(model::SAFTVRMieModel, T, ρ̄)
-    V = 1e-3
+function f_disp(system::DFTSystem, model::SAFTVRMieModel, ρ̄)
+    V = nothing
     ψ = 1.3862
-    _d = d(model,V,T,onevec(model))
+    _d = system.species.size
+    (_, T, _) = system.structure.conditions
     m = model.params.segment
     _ϵ = model.params.epsilon
     _λr = model.params.lambda_r
@@ -219,13 +145,13 @@ function f_disp(model::SAFTVRMieModel, T, ρ̄)
     _σ = model.params.sigma
 
     ρ̄ = ρ̄*3 ./(4*ψ^3 .*_d.^3)/π
-
-    z = ρ̄ /sum(ρ̄)
+    ∑ρ̄ = sum(ρ̄)
+    z = ρ̄ /∑ρ̄
     m̄ = dot(z,m)
     m̄inv = 1/m̄
     ∑z = sum(z)
 
-    ρS = sum(ρ̄.*m)
+    ρS = dot(ρ̄,m)
 
     _ζ_X = zero(T+first(ρ̄)+one(eltype(model)))
     kρS = ρS* π/6/8
@@ -248,7 +174,7 @@ function f_disp(model::SAFTVRMieModel, T, ρ̄)
 
     _ζst = σ3_x*ρS*π/6
     
-    a₁ = zero(V+T+first(z)+one(eltype(model)))
+    a₁ = zero(T+first(z)+one(eltype(model)))
     a₂ = a₁
     a₃ = a₁
     _ζst5 = _ζst^5
@@ -332,42 +258,7 @@ function f_disp(model::SAFTVRMieModel, T, ρ̄)
     a₃ = a₃*m̄/(T*T*T)/∑z  #/sum(z)
     #@show (a₁,a₂,a₃)
     adisp = a₁ + a₂ + a₃
-    ρ̄ = sum(ρ̄)
-    return ρ̄*adisp
-end
-
-function f_assoc(model::SAFTVRMieModel, T, n, n₃, nᵥ)
-    HSd = d(model,1e-3,T,onevec(model))
-    _0 = zero(T+first(n)+first(n₃)+first(nᵥ))
-    nn = assoc_pair_length(model)
-    iszero(nn) && return _0
-
-    n₀ = n./HSd
-    n₂ = π.*HSd.*n
-
-    nᵥ₂ = -2π.*nᵥ
-
-    ξ = 1 .-nᵥ₂.^2 ./ n₂.^2
-
-    X_ = X(model,T,n,n₃,nᵥ)
-    _0 = zero(first(X_.v))
-
-    ns = model.sites.n_sites
-    res = _0
-    resᵢₐ = _0
-    for i ∈ @comps
-        ni = ns[i]
-        iszero(length(ni)) && continue
-        Xᵢ = X_[i]
-        resᵢₐ = _0
-        for (a,nᵢₐ) ∈ pairs(ni)
-            Xᵢₐ = Xᵢ[a]
-            nᵢₐ = ni[a]
-            resᵢₐ +=  nᵢₐ* (log(Xᵢₐ) - Xᵢₐ/2 + 0.5)
-        end
-        res += resᵢₐ*n₀[i]*ξ[i]
-    end
-    return res
+    return ∑ρ̄*adisp
 end
 
 function Δ(model::SAFTVRMieModel, T, n, n₃, nᵥ, i, j, a, b)
@@ -384,7 +275,7 @@ function Δ(model::SAFTVRMieModel, T, n, n₃, nᵥ, i, j, a, b)
     m̄ = dot(z,m)
     m̄inv = 1/m̄
 
-    ρS = sum(ρ̄.*m)
+    ρS = dot(ρ̄,m)
 
     σ3_x = zero(T+first(z)+one(eltype(model)))
 
@@ -421,5 +312,3 @@ function I(model::SAFTVRMieModel, Tr,ρr)
     end
     return res
 end
-
-export F_res, δFδρ_res

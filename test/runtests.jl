@@ -1,7 +1,9 @@
-using Test, cDFT
+using Test
+t1 = @elapsed using cDFT
 using cDFT.Clapeyron
+@info "Loading cDFT took $(round(t1,digits = 2)) seconds"
 
 @testset "cDFT" begin
-    model = PCSAFT(["water"])
-    surface_tension(model,372.9) ≈ 0.07633680532414205 rtol = 1e-6
+    include("test_models.jl")
+    include("test_methods.jl")
 end
