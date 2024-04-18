@@ -26,3 +26,5 @@ function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions
 end
 
 export DFTSystem
+
+include("show.jl")
