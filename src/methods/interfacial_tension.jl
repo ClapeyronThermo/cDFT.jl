@@ -12,7 +12,7 @@ function interfacial_tension(model::EoSModel,p,T,n)
 
     F = free_energy(system)
 
-    ρl =[ρ[i].boundary_conditions[2] for i in @comps]
+    ρl =[ρ[i].boundary_conditions[2].value for i in @comps]
     x = ρl/sum(ρl)
     vl = 1/sum(ρl)
 

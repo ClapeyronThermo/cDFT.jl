@@ -5,7 +5,7 @@ function converge!(system::DFTSystem)
     method = system.options.solver
     ρ = system.profiles
 
-    ρl =[ρ[i].boundary_conditions[2] for i in @comps]
+    ρl =[ρ[i].boundary_conditions[2].value for i in @comps]
     Vl = 1/sum(ρl)
     X = ρl./sum(ρl)
     μ_res = Clapeyron.VT_chemical_potential_res(model,Vl,T,X)/R̄/T

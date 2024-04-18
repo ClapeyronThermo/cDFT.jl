@@ -27,7 +27,7 @@ function surface_tension(system::DFTSystem)
 
     (p, T, x) = system.structure.conditions
 
-    ρl =[ρ[i].boundary_conditions[2] for i in @comps]
+    ρl =[ρ[i].boundary_conditions[2].value for i in @comps]
     x = ρl/sum(ρl)
     vl = 1/sum(ρl)
 

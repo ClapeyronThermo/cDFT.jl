@@ -45,7 +45,10 @@ function δFδρ_res(system::DFTSystem)
         for i in @comps
             lim = system.species.size[i]
             bounds = ρ[i].bounds.+(-lim,lim)
-            push!(∂f, DensityProfile(@view(δf[:,j,i]),z,bounds,[δf[1,j,i],δf[end,j,i]]))
+            boundary_conditions = ρ[i].boundary_conditions
+            bc1 = typeof(boundary_conditions[1])(δf[1,j,i],-1)
+            bc2 = typeof(boundary_conditions[1])(δf[end,j,i],1)
+            push!(∂f, DensityProfile(@view(δf[:,j,i]),z,bounds,(bc1,bc2)))
         end
         δFδρ_res += integrate_field(system,fields[j],∂f)
     end

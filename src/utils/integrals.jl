@@ -29,18 +29,18 @@ function ∫ρdz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float6
     z1 = z_eval-span
     z2 = z_eval+span
 
-    idx1 = _binary_search_interval(ρ.coords, z1)
-    idx2 = _binary_search_interval(ρ.coords, z2)
+    idx1 = _binary_search_interval(ρ, z1)
+    idx2 = _binary_search_interval(ρ, z2)
 
     if idx1 == 0
-        I += ρ.boundary_conditions[1]*(ρ.coords[1]-z1)
+        I += ρ.boundary_conditions[1].value*(ρ.coords[1]-z1)
     else
         I += evalpoly(ρ.coords[idx1+1]-ρ.coords[idx1],(0.0,(ρ.coeffs[idx1]./(1,2,3,4))...))
         I -= evalpoly(z1-ρ.coords[idx1],(0.0,(ρ.coeffs[idx1]./(1,2,3,4))...))
     end
 
     if idx2 == structure.ngrid
-        I += ρ.boundary_conditions[2]*(z2-ρ.coords[end])
+        I += ρ.boundary_conditions[2].value*(z2-ρ.coords[end])
     else
         I += evalpoly(z2-ρ.coords[idx2],(0.0,(ρ.coeffs[idx2]./(1,2,3,4))...))
     end
@@ -58,11 +58,11 @@ function ∫ρzdz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float
     z1 = z_eval-span
     z2 = z_eval+span
 
-    idx1 = _binary_search_interval(ρ.coords, z1)
-    idx2 = _binary_search_interval(ρ.coords, z2)
+    idx1 = _binary_search_interval(ρ, z1)
+    idx2 = _binary_search_interval(ρ, z2)
 
     if idx1 == 0
-        I += ((ρ.coords[1]^2 - z1^2)/2 - z_eval*(ρ.coords[1]-z1))*ρ.boundary_conditions[1]
+        I += ((ρ.coords[1]^2 - z1^2)/2 - z_eval*(ρ.coords[1]-z1))*ρ.boundary_conditions[1].value
     else
         coeff1 = ((ρ.coeffs[idx1].*(z_eval-ρ.coords[idx1]))...,0.0)
         coeff2 = (0.0,(ρ.coeffs[idx1])...)
@@ -76,7 +76,7 @@ function ∫ρzdz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float
     end
 
     if idx2 == structure.ngrid
-        I += ((z2^2-ρ.coords[end]^2)/2 - z_eval*(z2-ρ.coords[end]))*ρ.boundary_conditions[2]
+        I += ((z2^2-ρ.coords[end]^2)/2 - z_eval*(z2-ρ.coords[end]))*ρ.boundary_conditions[2].value
     else
         coeff1 = ((ρ.coeffs[idx2].*(z_eval-ρ.coords[idx2]))...,0.0)
         coeff2 = (0.0,(ρ.coeffs[idx2])...)
@@ -106,13 +106,13 @@ function ∫ρz²dz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Flo
     z1 = z_eval-span
     z2 = z_eval+span
 
-    idx1 = _binary_search_interval(ρ.coords, z1)
-    idx2 = _binary_search_interval(ρ.coords, z2)
+    idx1 = _binary_search_interval(ρ, z1)
+    idx2 = _binary_search_interval(ρ, z2)
 
     if idx1 == 0
         I += ((span^2-z_eval^2)*((ρ.coords[1]-z1))
            + 2*z_eval*(ρ.coords[1]^2 - z1^2)/2
-           - (ρ.coords[1]^3 - z1^3)/3)*ρ.boundary_conditions[1]
+           - (ρ.coords[1]^3 - z1^3)/3)*ρ.boundary_conditions[1].value
     else
         coeff1 = ((ρ.coeffs[idx1].*(span^2-(z_eval-ρ.coords[idx1])^2))...,0.0,0.0)
         coeff2 = (0.0,(ρ.coeffs[idx1].*2 .*(z_eval-ρ.coords[idx1]))...,0.0)
@@ -129,7 +129,7 @@ function ∫ρz²dz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Flo
     if idx2 == structure.ngrid
         I += ((span^2-z_eval^2)*((z2-ρ.coords[end]))
            + 2*z_eval*(z2^2-ρ.coords[end]^2)/2
-           - (z2^3-ρ.coords[end]^3)/3)*ρ.boundary_conditions[2]
+           - (z2^3-ρ.coords[end]^3)/3)*ρ.boundary_conditions[2].value
     else
         coeff1 = ((ρ.coeffs[idx2].*(span^2-(z_eval-ρ.coords[idx2])^2))...,0.0,0.0)
         coeff2 = (0.0,(ρ.coeffs[idx2].*2 .*(z_eval-ρ.coords[idx2]))...,0.0)

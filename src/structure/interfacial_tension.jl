@@ -27,7 +27,7 @@ function _initial_interfacial_tension_density_profile(model::EoSModel,ρ1,ρ2,bo
 
     ρ = DensityProfile[]
     for i in @comps
-        boundary_conditions = [ρ2[i],ρ1[i]]
+        boundary_conditions = (FixedBoundary(ρ2[i],-1),FixedBoundary(ρ1[i],1))
 
         ρ_points =@. 1/2*(ρ1[i]-ρ2[i])*tanh(z/L*coef[i]+shift[i])+1/2*(ρ1[i]+ρ2[i])
 

@@ -24,6 +24,7 @@ include("models/models.jl")
 include("structure/structure.jl")
 
 include("utils/base.jl")
+include("utils/boundary_conditions.jl")
 include("utils/profiles.jl")
 include("utils/integrals.jl")
 include("utils/anderson.jl") #TODO, port this to Clapeyron
