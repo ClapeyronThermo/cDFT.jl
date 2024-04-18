@@ -31,7 +31,7 @@ function evaluate_field(system::DFTSystem,field::WeightedDensity)
     z = ρ[1].coords
 
     for i in @comps
-        span = range(-width[i],width[i],length=41).*size[i]
+        span = width[i]*size[i]
 
         Threads.@threads for j in 1:ngrid
             n[j,i] = integral_method(structure,ρ[i],z[j],span)*N_A
@@ -73,7 +73,7 @@ function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
     size = system.species.size
 
     for i in @comps
-        span = range(-width[i],width[i],length=41).*size[i]
+        span = width[i].*size[i]
 
         Threads.@threads for j in 1:ngrid
             ∫field[j,i] = prefactor*integral_method(structure,profile[i],z[j],span)
