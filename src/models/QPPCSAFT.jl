@@ -1,11 +1,11 @@
-using Clapeyron: QPPCSAFTModel
+using Clapeyron: QPCPSAFTModel
 
-function f_res(system::DFTSystem, model::QPPCSAFTModel,n)
+function f_res(system::DFTSystem, model::QPCPSAFTModel,n)
     return f_hs(system,model,n[2,:],n[3,:],n[4,:]) + f_hc(system,model,n[1,:],n[5,:],n[6,:]) + f_disp(system,model,n[7,:]) + f_polar(system,model,n[7,:]) + f_assoc(system,model,n[2,:],n[3,:],n[4,:])
 end
 
 
-function f_polar(system::DFTSystem, model::QPPCSAFTModel, ρ̄)
+function f_polar(system::DFTSystem, model::QPCPSAFTModel, ρ̄)
   (_, T, _) = system.structure.conditions
   μ̄² = model.params.dipole2.values
   Q̄² = model.params.quadrupole2.values

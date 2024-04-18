@@ -6,7 +6,7 @@ function initialize_profiles(model::EoSModel,structure::Uniform1DCart)
     ngrid = structure.ngrid
     (p, T, x) = structure.conditions
 
-    z = range(first(bounds),last(bounds),ngrid) |> collect
+    z = LinRange(first(bounds),last(bounds),ngrid) |> collect
     L = length_scale(model)
 
     vol = Clapeyron.volume(model,p,T,x)
