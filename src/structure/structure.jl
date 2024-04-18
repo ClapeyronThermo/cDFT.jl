@@ -1,4 +1,5 @@
 include("surface_tension.jl")
+include("interfacial_tension.jl")
 
 function initialize_profiles(model::EoSModel,structure::Uniform1DCart)
     bounds = structure.bounds
