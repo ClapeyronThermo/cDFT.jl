@@ -16,7 +16,7 @@ function initialize_profiles(model::EoSModel,structure::SurfaceTension1DCart)
         boundary_conditions = [ρv[i],ρl[i]]
         ρ_points =@. 1/2*(ρl[i]-ρv[i])*tanh(z/L*(2.4728-2.3625*T/Tc[i]))+1/2*(ρl[i]+ρv[i])
 
-        push!(ρ,DensityProfile(ρ_points,z,[bounds[1],bounds[2]],boundary_conditions))
+        push!(ρ,DensityProfile(ρ_points,z,bounds,boundary_conditions))
     end
     return ρ
 end

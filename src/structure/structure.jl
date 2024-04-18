@@ -17,7 +17,7 @@ function initialize_profiles(model::EoSModel,structure::Uniform1DCart)
     for i in @comps
         boundary_conditions = [ρl[i],ρl[i]]
         ρ_points = ρl[i]*ones(ngrid)
-        push!(ρ,DensityProfile(ρ_points,z,[bounds[1],bounds[2]],boundary_conditions))
+        push!(ρ,DensityProfile(ρ_points,z,bounds,boundary_conditions))
     end
     return ρ
 end
