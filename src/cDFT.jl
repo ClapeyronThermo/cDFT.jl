@@ -23,10 +23,8 @@ include("fields/fields.jl")
 include("models/models.jl")
 include("structure/structure.jl")
 
-include("utils/types.jl")
 include("utils/base.jl")
 include("utils/profiles.jl")
-include("utils/initial.jl")
 include("utils/integrals.jl")
 include("utils/anderson.jl") #TODO, port this to Clapeyron
 
