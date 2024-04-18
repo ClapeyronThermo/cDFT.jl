@@ -48,3 +48,5 @@ function converge!(system::DFTSystem)
         update_profile!(system.profiles[i],ρ_new[:,i])
     end
 end
+
+export converge!

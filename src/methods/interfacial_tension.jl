@@ -1,7 +1,7 @@
 function interfacial_tension(model::EoSModel,p,T,n)
     L = length_scale(model)
 
-    structure = SurfaceTension1DCart((p, T, x),(-10L,10L), 201)
+    structure = InterfacialTension1DCart((p, T, n),[-10L,10L], 201)
 
     system = DFTSystem(model, structure)
 
