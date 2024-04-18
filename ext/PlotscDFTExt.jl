@@ -30,7 +30,7 @@ function Plots.plot(system::cDFT.DFTSystem)
         Plots.plot!(plt,z./L,profiles[i].(z)*Mw/1e3,label="$species",linewidth=3)
         ymax = max(ymax,maximum(profiles[i].density)*Mw/1e3)
     end
-    Plots.xlims!(plt,bounds./L)
+    Plots.xlims!(plt,(bounds[1],bounds[2])./L)
     Plots.ylims!(plt,(0,1.1*ymax))
     Plots.xlabel!(plt,"z / σ")
     Plots.ylabel!(plt,"ρ / (kg/m³)")
