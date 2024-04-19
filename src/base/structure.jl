@@ -31,3 +31,4 @@ struct Uniform1DSphr <: DFTStructure1DSphr
 end
 
 export SurfaceTension1DCart, InterfacialTension1DCart, Uniform1DCart
+export Uniform1DSphr

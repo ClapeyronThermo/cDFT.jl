@@ -5,7 +5,7 @@ struct FixedBoundary <: BoundaryCondition
     direction::Int64
 end
 
-struct FreeBoundary <: BoundaryCondition 
+mutable struct FreeBoundary <: BoundaryCondition 
     value::Float64
     direction::Int64
 end
@@ -24,11 +24,11 @@ function get_boundary_conditions!(boundary_conditions::Tuple{BoundaryCondition,B
             if boundary_conditions[i].direction == 1
                 bc[i,1]= ρ[end]
                 bc[i,2]= ρ[end]
-                boundary_conditions[i] = FreeBoundary(ρ[end], boundary_conditions[i].direction)
+                boundary_conditions[i].value = ρ[end]
             elseif boundary_conditions[i].direction == -1
                 bc[i,1]= ρ[1]
                 bc[i,2]= ρ[1]
-                boundary_conditions[i] = FreeBoundary(ρ[1], boundary_conditions[i].direction)
+                boundary_conditions[i].value = ρ[1]
             end
         elseif boundary_conditions[i] isa PeriodicBoundary
             if boundary_conditions[i].direction == 1

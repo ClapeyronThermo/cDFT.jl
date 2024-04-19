@@ -52,6 +52,55 @@ function ∫ρdz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float6
     return I
 end
 
+function ∫ρdz(structure::DFTStructure1DSphr,ρ::DensityProfile,r_eval::Float64,span::Float64)
+    I = 0.
+    
+    r1 = r_eval-span
+    r2 = r_eval+span
+
+    idx1 = _binary_search_interval(ρ, r1)
+    idx2 = _binary_search_interval(ρ, r2)
+
+    if idx1 == 0
+        I += ρ.boundary_conditions[1].value*((ρ.coords[1]^2-r1^2)/2)
+    else
+        coeff1 = ((ρ.coeffs[idx1].*ρ.coords[idx1])...,0.0)
+        coeff2 = (0.0,(ρ.coeffs[idx1])...)
+        coeff = coeff2.+coeff1
+
+        coeff = (0.0,(coeff)...)
+        coeff = coeff./(1,1,2,3,4,5)
+
+        I += evalpoly(ρ.coords[idx1+1]-ρ.coords[idx1],coeff)
+        I -= evalpoly(r1-ρ.coords[idx1],coeff)
+    end
+
+    if idx2 == structure.ngrid
+        I += ρ.boundary_conditions[2].value*((r2^2-ρ.coords[end]^2)/2)
+    else
+        coeff1 = ((ρ.coeffs[idx2].*ρ.coords[idx2])...,0.0)
+        coeff2 = (0.0,(ρ.coeffs[idx2])...)
+        coeff = coeff2.+coeff1
+
+        coeff = (0.0,(coeff)...)
+        coeff = coeff./(1,1,2,3,4,5)
+
+        I += evalpoly(r2-ρ.coords[idx2],coeff)
+    end
+
+    for i in idx1+1:idx2-1
+        coeff1 = ((ρ.coeffs[i].*ρ.coords[i])...,0.0)
+        coeff2 = (0.0,(ρ.coeffs[i])...)
+        coeff = coeff2.+coeff1
+
+        coeff = (0.0,(coeff)...)
+        coeff = coeff./(1,1,2,3,4,5)
+        I += evalpoly(ρ.coords[i+1]-ρ.coords[i],coeff)
+    end
+
+    return I/r_eval
+end
+
 function ∫ρzdz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float64,span::Float64)
     I = 0.
     
@@ -98,6 +147,62 @@ function ∫ρzdz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float
     end
 
     return I
+end
+
+function ∫ρzdz(structure::DFTStructure1DSphr,ρ::DensityProfile,r_eval::Float64,span::Float64)
+    I = 0.
+    r1 = r_eval-span
+    r2 = r_eval+span
+
+    idx1 = _binary_search_interval(ρ, r1)
+    idx2 = _binary_search_interval(ρ, r2)
+
+
+    if idx1 == 0
+        I += ((span^2+r_eval^2)*(ρ.coords[1]^2-r1^2)/2-(ρ.coords[1]^4-r1^4)/4)*ρ.boundary_conditions[1].value
+    else
+        coeff1 = ((ρ.coeffs[idx1].*ρ.coords[idx1].*(span^2+r_eval^2-ρ.coords[idx1]^2))...,0.0,0.0,0.0)
+        coeff2 = (0.0,(ρ.coeffs[idx1].*(span^2+r_eval^2-3*ρ.coords[idx1]^2))...,0.0,0.0)
+        coeff3 = (0.0,0.0,(3 .*ρ.coeffs[idx1].*ρ.coords[idx1])...,0.0)
+        coeff4 = (0.0,0.0,0.0,(ρ.coeffs[idx1])...)
+        coeff = coeff1.+coeff2.-coeff3.-coeff4
+
+        coeff = (0.0,(coeff)...)
+        coeff = coeff./(1,1,2,3,4,5,6,7)
+
+        I += evalpoly(ρ.coords[idx1+1]-ρ.coords[idx1],coeff)
+        I -= evalpoly(r1-ρ.coords[idx1],coeff)
+    end
+
+    if idx2 == structure.ngrid
+        I += ((span^2+r_eval^2)*(r2^2-ρ.coords[end]^2)/2-(r2^4-ρ.coords[end]^4)/4)*ρ.boundary_conditions[2].value
+    else
+        coeff1 = ((ρ.coeffs[idx2].*ρ.coords[idx2].*(span^2+r_eval^2-ρ.coords[idx2]^2))...,0.0,0.0,0.0)
+        coeff2 = (0.0,(ρ.coeffs[idx2].*(span^2+r_eval^2-3*ρ.coords[idx2]^2))...,0.0,0.0)
+        coeff3 = (0.0,0.0,(3 .*ρ.coeffs[idx2].*ρ.coords[idx2])...,0.0)
+        coeff4 = (0.0,0.0,0.0,(ρ.coeffs[idx2])...)
+        coeff = coeff1.+coeff2.-coeff3.-coeff4
+
+        coeff = (0.0,(coeff)...)
+        coeff = coeff./(1,1,2,3,4,5,6,7)
+
+        I += evalpoly(r2-ρ.coords[idx2],coeff)
+    end
+
+    for i in idx1+1:idx2-1
+        coeff1 = ((ρ.coeffs[i].*ρ.coords[i].*(span^2+r_eval^2-ρ.coords[i]^2))...,0.0,0.0,0.0)
+        coeff2 = (0.0,(ρ.coeffs[i].*(span^2+r_eval^2-3*ρ.coords[i]^2))...,0.0,0.0)
+        coeff3 = (0.0,0.0,(3 .*ρ.coeffs[i].*ρ.coords[i])...,0.0)
+        coeff4 = (0.0,0.0,0.0,(ρ.coeffs[i])...)
+        coeff = coeff1.+coeff2.-coeff3.-coeff4
+
+        coeff = (0.0,(coeff)...)
+        coeff = coeff./(1,1,2,3,4,5,6,7)
+
+        I += evalpoly(ρ.coords[i+1]-ρ.coords[i],coeff)
+    end
+    # println(I/r_eval)
+    return I/r_eval^2
 end
 
 function ∫ρz²dz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float64,span::Float64)
@@ -156,28 +261,63 @@ function ∫ρz²dz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Flo
 
     return I*π
 end
-#=
-function ∫fdz(model::FunctionalModel,f::Vector,z::Vector{Float64},z_eval::Float64,lim::Float64)
-    ϵerr = sqrt(eps(lim))
-    idx = @. z_eval-lim-ϵerr<=z && z<=z_eval+lim+ϵerr
-    dz = model.domain.mesh_size
 
-    return ∫(f[idx[:]],dz)
+function ∫ρz²dz(structure::DFTStructure1DSphr,ρ::DensityProfile,r_eval::Float64,span::Float64)
+    I = 0.
+    
+    r1 = r_eval-span
+    r2 = r_eval+span
+
+    idx1 = _binary_search_interval(ρ, r1)
+    idx2 = _binary_search_interval(ρ, r2)
+
+    if idx1 == 0
+        I += ((span^2-r_eval^2)*(ρ.coords[1]^2-r1^2)/2
+           + 2*r_eval*(ρ.coords[1]^3 - r1^3)/3
+           - (ρ.coords[1]^4 - r1^4)/4)*ρ.boundary_conditions[1].value
+    else
+        coeff1 = ((ρ.coeffs[idx1].*(span^2-(r_eval-ρ.coords[idx1])^2).*ρ.coords[idx1])...,0.0,0.0,0.0)
+        coeff2 = (0.0,(ρ.coeffs[idx1].*((span^2-r_eval^2)+4*ρ.coords[idx1]*r_eval-3*ρ.coords[idx1]^2))...,0.0,0.0)
+        coeff3 = (0.0,0.0,(ρ.coeffs[idx1].*(2*r_eval-3*ρ.coords[idx1]))...,0.0)
+        coeff4 = (0.0,0.0,0.0,(ρ.coeffs[idx1])...)
+        coeff = coeff1.+coeff2.+coeff3.-coeff4
+
+        coeff = (0.0,(coeff)...)
+        coeff = coeff./(1,1,2,3,4,5,6,7)
+
+        I += evalpoly(ρ.coords[idx1+1]-ρ.coords[idx1],coeff)
+        I -= evalpoly(r1-ρ.coords[idx1],coeff)
+    end
+
+    if idx2 == structure.ngrid
+        I += ((span^2-r_eval^2)*(r2^2-ρ.coords[end]^2)/2
+           + 2*r_eval*(r2^3-ρ.coords[end]^3)/3
+           - (r2^4-ρ.coords[end]^4)/4)*ρ.boundary_conditions[2].value
+    else
+        coeff1 = ((ρ.coeffs[idx2].*(span^2-(r_eval-ρ.coords[idx2])^2).*ρ.coords[idx2])...,0.0,0.0,0.0)
+        coeff2 = (0.0,(ρ.coeffs[idx2].*((span^2-r_eval^2)+4*ρ.coords[idx2]*r_eval-3*ρ.coords[idx2]^2))...,0.0,0.0)
+        coeff3 = (0.0,0.0,(ρ.coeffs[idx2].*(2*r_eval-3*ρ.coords[idx2]))...,0.0)
+        coeff4 = (0.0,0.0,0.0,(ρ.coeffs[idx2])...)
+        coeff = coeff1.+coeff2.+coeff3.-coeff4
+
+        coeff = (0.0,(coeff)...)
+        coeff = coeff./(1,1,2,3,4,5,6,7)
+
+        I += evalpoly(r2-ρ.coords[idx2],coeff)
+    end
+
+    for i in idx1+1:idx2-1
+        coeff1 = ((ρ.coeffs[i].*(span^2-(r_eval-ρ.coords[i])^2).*ρ.coords[i])...,0.0,0.0,0.0)
+        coeff2 = (0.0,(ρ.coeffs[i].*((span^2-r_eval^2)+4*ρ.coords[i]*r_eval-3*ρ.coords[i]^2))...,0.0,0.0)
+        coeff3 = (0.0,0.0,(ρ.coeffs[i].*(2*r_eval-3*ρ.coords[i]))...,0.0)
+        coeff4 = (0.0,0.0,0.0,(ρ.coeffs[i])...)
+        coeff = coeff1.+coeff2.+coeff3.-coeff4
+
+        coeff = (0.0,(coeff)...)
+        coeff = coeff./(1,1,2,3,4,5,6,7)
+
+        I += evalpoly(ρ.coords[i+1]-ρ.coords[i],coeff)
+    end
+
+    return I*π/r_eval
 end
-
-function ∫fzdz(model::FunctionalModel,f::Vector,z::Vector{Float64},z_eval::Float64,lim::Float64)
-    ϵerr = sqrt(eps(lim))
-    idx = @. z_eval-lim-ϵerr<=z && z<=z_eval+lim+ϵerr
-    dz = model.domain.mesh_size
-
-    return ∫(f[vec(idx)].*(z[vec(idx)].-z_eval),dz)
-end
-
-
-function ∫fz²dz(model::FunctionalModel,f::Vector,z::Vector{Float64},z_eval::Float64,lim::Float64)
-    ϵerr = sqrt(eps(lim))
-    idx = @. z_eval-lim-ϵerr<=z && z<=z_eval+lim+ϵerr
-    dz = model.domain.mesh_size
-
-    return ∫(f[idx[:]].*(lim^2 .-(z[idx[:]].-z_eval).^2),dz)
-end=#
