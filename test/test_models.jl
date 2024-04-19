@@ -18,6 +18,12 @@ using cDFT.Clapeyron
         μ2 = cDFT.δFδρ_res(system)
 
         @test μ1[1] ≈ μ2[1] rtol = 1e-6
+
+        structure = Uniform1DSphr((p, T, x),[2L,20L], 3)
+        system = DFTSystem(model, structure)
+        μ3 = cDFT.δFδρ_res(system)
+
+        @test μ1[1] ≈ μ3[1] rtol = 1e-6
     end
 
     @testset "PPCSAFT" begin
