@@ -202,7 +202,7 @@ function ∫ρzdz(structure::DFTStructure1DSphr,ρ::DensityProfile,r_eval::Float
         I += evalpoly(ρ.coords[i+1]-ρ.coords[i],coeff)
     end
     # println(I/r_eval)
-    return I/r_eval^2
+    return -I/r_eval^2/2
 end
 
 function ∫ρz²dz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float64,span::Float64)

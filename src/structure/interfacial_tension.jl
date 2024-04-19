@@ -29,7 +29,7 @@ function _initial_interfacial_tension_density_profile(model::EoSModel,ρ1,ρ2,bo
     for i in @comps
         boundary_conditions = (FixedBoundary(ρ2[i],-1),FixedBoundary(ρ1[i],1))
 
-        ρ_points =@. 1/2*(ρ1[i]-ρ2[i])*tanh(z/L*coef[i]+shift[i])+1/2*(ρ1[i]+ρ2[i])
+        ρ_points = @. tanh_prof(z,ρ1[i],ρ2[i],shift[i],coef[i]/L)
 
         push!(ρ,DensityProfile(ρ_points,z,bounds,boundary_conditions))
     end
@@ -48,10 +48,34 @@ function eval_interfacial_tension(model::EoSModel,p,T,ρ,z)
     return F*k_B*T-sum([μ[i]*∫(ρ[i].density,ρ[i].mesh_size) for i in @comps])+p*∫(one.(z),ρ[1].mesh_size)
 end
 
-function obj_initial_profile(model,p,T,ρ1,ρ2,bounds,z,k,c)
-    ρ, z = _initial_interfacial_tension_density_profile(model,ρ1,ρ2,bounds,z,k,c)
-    system = DFTSystem(model, 
-                       structure,
-                       )
-    return eval_interfacial_tension(model,p,T,ρ,z)
+function initialize_profiles(model::EoSModel,structure::InterfacialTension1DSphr)
+    L = length_scale(model)
+    nc = length(model)
+    bounds = structure.bounds
+    ngrid = structure.ngrid
+    (p, T, n) = structure.conditions
+    n_core = structure.core_composition
+    r_interface = structure.r_interface
+
+    r = range(first(bounds),last(bounds),ngrid) |> collect
+
+    v_bulk = volume(model,p,T,n)
+    v_core = volume(model,p,T,n_core)
+
+    ρ1 = n./v_bulk
+    ρ2 = n_core./v_core
+
+    coeff = ones(nc)*4
+    shift = ones(nc)*r_interface
+
+    ρ = DensityProfile[]
+    for i in @comps
+        boundary_conditions = (FreeBoundary(ρ2[i],-1),FixedBoundary(ρ1[i],1))
+
+        ρ_points = @. tanh_prof(r,ρ1[i],ρ2[i],shift[i],coeff[i]/L)
+
+        push!(ρ,DensityProfile(ρ_points,r,bounds,boundary_conditions))
+    end
+
+    return ρ
 end
