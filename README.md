@@ -1,4 +1,5 @@
 ![cDFT_logo](docs/cDFT_logo.svg)
+
 Welcome to cDFT! This package intends to provide a comprehensive library of classical Density Functional Theory models, as well as a simple framework to develop your own! cDFT uses much of the same tools as Clapeyron and, as such, should be used in conjunction. 
 
 ## Example usage
