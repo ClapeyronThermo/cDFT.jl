@@ -6,7 +6,7 @@ struct AndersonFixPoint{T<:Real} <: Solvers.AbstractFixPoint
     drop_tol::T
 end
 
-AndersonFixPoint(;damping=1.0,picard_damping=1e-3,delay = 0, memory = 5,drop_tol = Inf) = AndersonFixPoint(delay,memory,damping,picard_damping,drop_tol)
+AndersonFixPoint(;picard_damping=1e-2,damping=1e-2,memory=50,delay=100,drop_tol=Inf) = AndersonFixPoint(delay,memory,damping,picard_damping,drop_tol)
 
 function Solvers.promote_method(method::AndersonFixPoint,T)
     return AndersonFixPoint(method.delay,method.memory,T(method.damping),T(method.picard_damping),T(method.drop_tol))
@@ -121,5 +121,5 @@ function Solvers._fixpoint(f::F,
         end
         
     end
-    return x
+    # return X[:,1]
 end

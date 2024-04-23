@@ -5,12 +5,29 @@ version = "0.1.0"
 
 [deps]
 Clapeyron = "7c7805af-46cc-48c9-995b-ed0ed2dc909a"
-FixedPointAcceleration = "817d07cb-a79a-5c30-9a31-890123675176"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 NLSolvers = "337daf1e-9722-11e9-073e-8b9effe078ba"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
+[weakdeps]
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+ThreadPinning = "811555cd-349b-4f26-b7bc-1f208b848042"
+
+[extensions]
+PlotscDFTExt = "Plots"
+ThreadPinningcDFTExt = "ThreadPinning"
+
 [compat]
 Clapeyron = "0.4,0.5"
+ForwardDiff = "^0.10"
+LinearAlgebra = "1"
+NLSolvers = "0.5"
+StaticArrays = "^1.5.9"
+julia = "1.6"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

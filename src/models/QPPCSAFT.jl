@@ -1,51 +1,12 @@
-using Clapeyron: QPPCSAFTModel
+using Clapeyron: QPCPSAFTModel
 
-function F_res(model::QPPCSAFTModel,ρ,T,z)
-  ψ = 1.3862
-  HSd = d(model,nothing,T,onevec(model))
-  dz = ρ[1].mesh_size
-  
-  _, ρ̄, _ = weights_hs(model,ρ,z,ψ*HSd)
-
-  f(x) = f_polar(model,T,@view(x[@comps]))
-  Φ_polar = mapslices(f,ρ̄;dims=2)
-
-  _F_res_PCSAFT = invoke(F_res, Tuple{PCSAFTModel,Any,Any,Any},model,ρ,T,z)
-  return _F_res_PCSAFT + ∫(Φ_polar,dz)
+function f_res(system::DFTSystem, model::QPCPSAFTModel,n)
+    return f_hs(system,model,n[2,:],n[3,:],n[4,:]) + f_hc(system,model,n[1,:],n[5,:],n[6,:]) + f_disp(system,model,n[7,:]) + f_polar(system,model,n[7,:]) + f_assoc(system,model,n[2,:],n[3,:],n[4,:])
 end
 
-function δFδρ_res(model::QPPCSAFTModel,ρ,T,z)
-  _δFδρ_res_PCSAFT = invoke(δFδρ_res, Tuple{PCSAFTModel,Any,Any,Any},model,ρ,T,z)
-  return _δFδρ_res_PCSAFT + δFδρ_polar(model,ρ,T,z)
-end
 
-function δFδρ_polar(model::QPPCSAFTModel,ρ,T,z)
-  ψ = 1.3862
-  HSd = d(model,nothing,T,onevec(model))
-  lim = ψ*HSd
-
-  _, ρ̄, _ = weights_hs(model,ρ,z,lim)
-
-  f(x) = f_polar(model,T,@view(x[@comps]))
-  df(x) = ForwardDiff.gradient(f,x)
-  
-  δfδn0  = mapslices(df,ρ̄;dims=2)
-  ∂f∂n0 = δfδn0[:,@comps]
-
-  δFδρ_polar = zeros(length(z),length(model))
-  for i in @comps 
-      bounds = ρ[i].bounds.+(-lim[i],lim[i])
-      ∂f∂n =  DensityProfile(∂f∂n0[:,i],z,bounds,[∂f∂n0[1,i],∂f∂n0[end,i]])
-  
-      span = range(-lim[i],lim[i],length=101) # Length = 101? Is it because len(z) = 101?
-
-      δFδρ_polar[:,i] = π*∫ρz²dz.(Ref(∂f∂n),z,Ref(span))
-  end
-
-  return δFδρ_polar
-end
-
-function f_polar(model::QPPCSAFTModel,T,ρ̄)
+function f_polar(system::DFTSystem, model::QPCPSAFTModel, ρ̄)
+  (_, T, _) = system.structure.conditions
   μ̄² = model.params.dipole2.values
   Q̄² = model.params.quadrupole2.values
   has_dp = !all(iszero, μ̄²)
@@ -53,23 +14,23 @@ function f_polar(model::QPPCSAFTModel,T,ρ̄)
   if !has_dp && !has_qp return zero(T+first(ρ̄)) end
 
   ψ = 1.3862
-  HSd = d(model,nothing,T,onevec(model))
+  HSd = system.species.size
   m = model.params.segment.values
   ϵ = model.params.epsilon.values
   σ = model.params.sigma.values
 
   ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
-  η = π/6*sum(ρ̄.*m.*HSd.^3)
-  x = ρ̄ /sum(ρ̄)
-  ρ̄ = sum(ρ̄)
+  η = π/6*@sum(ρ̄[i]*m[i]*HSd[i]^3)
+  ∑ρ̄ = sum(ρ̄)
+  x = ρ̄ /∑ρ̄
   nc = length(model)
 
   a_mp_total = zero(T+ρ̄)
-  a_mp_total += has_dp && a_dd(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-  a_mp_total += has_qp && a_qq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-  a_mp_total += has_dp && has_qp && a_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
+  a_mp_total += has_dp && a_dd(x,m,ϵ,σ,μ̄²,Q̄²,η,∑ρ̄,T,nc)
+  a_mp_total += has_qp && a_qq(x,m,ϵ,σ,μ̄²,Q̄²,η,∑ρ̄,T,nc)
+  a_mp_total += has_dp && has_qp && a_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,∑ρ̄,T,nc)
 
-  return ρ̄*a_mp_total
+  return ∑ρ̄*a_mp_total
 end
 
 function a_polar(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)

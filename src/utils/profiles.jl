@@ -2,7 +2,7 @@ struct DensityProfile{ℂ,ρ} <: DFTProfile #spline density profile. parametrize
     coords::ℂ
     density::ρ
     bounds::Vector{Float64}
-    boundary_conditions::Vector{Float64}
+    boundary_conditions::Tuple{BoundaryCondition,BoundaryCondition}
     coeffs::Vector{NTuple{4,Float64}} #spline coefficients
     mesh_size::Float64
 end
@@ -30,12 +30,14 @@ function update_profile!(prof,ρnew)
     zb,za = z[1]-dz,z[1]-2*dz
     zy,zz = z[end]+dz,z[end]+2*dz
 
+    bc = get_boundary_conditions!(boundary_conditions,ρ)
+
     zs = vcat(za,zb,z,zy,zz) #z + 4
-    ρs = vcat(boundary_conditions[1],boundary_conditions[1],ρ,boundary_conditions[2],boundary_conditions[2])
+    ρs = vcat(bc[1,1],bc[1,2],ρ,bc[2,1],bc[2,2])
 
     _m(x,y) = (y[2:end].-y[1:end-1])./(x[2:end].-x[1:end-1])
     ms = _m(zs,ρs)
-    ρs_start = (boundary_conditions[1],boundary_conditions[1],ρ[1],ρ[2])
+    ρs_start = (bc[1,1],bc[1,2],ρ[1],ρ[2])
     zs_start = (za,zb,z[1],z[2])
     ms_start = _m(zs_start,ρs_start)
     ts = zeros(eltype(ρs), length(zs))
@@ -58,10 +60,12 @@ end
 function (ρ::DensityProfile)(z)
     # Value sits on upper interval border
     @inbounds begin
-    if z == ρ.coords[end]
-        idx = length(ρ.coords)-1
-
-    # Find the corresponding interval
+    if z < ρ.coords[1] && ρ.boundary_conditions[1] isa PeriodicBoundary
+        width = ρ.coords[end] - ρ.coords[1]
+        return ρ(ρ.coords[end] + mod(z-ρ.coords[1], width))
+    elseif z > ρ.coords[end] && ρ.boundary_conditions[2] isa PeriodicBoundary
+        width = ρ.coords[end] - ρ.coords[1]
+        return ρ(ρ.coords[1] + mod(z-ρ.coords[end], width))
     else
 
         # Find the interval index
@@ -69,12 +73,12 @@ function (ρ::DensityProfile)(z)
 
         # Extrapolation to the "left"
         if idx == 0
-            return ρ.boundary_conditions[1]
+            return ρ.boundary_conditions[1].value
         end
 
         # Extrapolation to the "right"
         if idx == length(ρ.coords)
-            return ρ.boundary_conditions[2]
+            return ρ.boundary_conditions[2].value
         end
     end
 
@@ -83,6 +87,21 @@ function (ρ::DensityProfile)(z)
     coeffs = ρ.coeffs[idx]
     res = evalpoly(z-ρ.coords[idx], coeffs)
     return res
+    end
+end
+
+@inline function _binary_search_interval(ρ::DensityProfile, number::Real)
+
+    @inbounds begin
+        if number < ρ.coords[1] && ρ.boundary_conditions[1] isa PeriodicBoundary
+            width = ρ.coords[end] - ρ.coords[1]
+            return _binary_search_interval(ρ.coords,ρ.coords[end] + mod(number-ρ.coords[1], width))
+        elseif number > ρ.coords[end] && ρ.boundary_conditions[2] isa PeriodicBoundary
+            width = ρ.coords[end] - ρ.coords[1]
+            return _binary_search_interval(ρ.coords,ρ.coords[end] + mod(number-ρ.coords[1], width))
+        else
+            return _binary_search_interval(ρ.coords, number)
+        end
     end
 end
 
