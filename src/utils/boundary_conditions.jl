@@ -1,19 +1,47 @@
 abstract type BoundaryCondition end
 
+"""
+    FixedBoundary(value::Float64, direction::Int64)
+
+A Fixed Boundary Condition where, when `converge!` updates the profiles, this boundary will remain unchanged. 
+
+Inputs:
+- `value::Float64`: The value of the boundary condition.
+- `direction::Int64`: The direction of the boundary condition. If `direction == 1`, the boundary condition is applied to the right boundary. If `direction == -1`, the boundary condition is applied to the left boundary.
+"""
 struct FixedBoundary <: BoundaryCondition
     value::Float64
     direction::Int64
 end
 
+"""
+    FreeBoundary(value::Float64, direction::Int64)
+
+A Free Boundary Condition where, when `converge!` updates the profiles, this boundary is allowed to changed. 
+
+Inputs:
+- `value::Float64`: The value of the boundary condition.
+- `direction::Int64`: The direction of the boundary condition. If `direction == 1`, the boundary condition is applied to the right boundary. If `direction == -1`, the boundary condition is applied to the left boundary.
+"""
 mutable struct FreeBoundary <: BoundaryCondition 
     value::Float64
     direction::Int64
 end
 
+"""
+    PeriodicBoundary(direction::Int64)
+
+A Periodic Boundary Condition where, when `converge!` updates the profiles.
+"""
 struct PeriodicBoundary <: BoundaryCondition 
     direction::Int64
 end
 
+"""
+    get_boundary_conditions!(boundary_conditions::Tuple{BoundaryCondition,BoundaryCondition},ρ)
+
+Given a tuple of boundary conditions, this function will return a 2x2 matrix of the boundary conditions. In the case of a free boundary, it will update the value.
+"""
 function get_boundary_conditions!(boundary_conditions::Tuple{BoundaryCondition,BoundaryCondition},ρ)
     bc = zeros(Float64,2,2)
     for i in 1:length(boundary_conditions)

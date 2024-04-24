@@ -1,3 +1,15 @@
+"""
+    surface_tension(model::EoSModel,T,x)
+
+Calculate the surface tensions of a vapour-liquid interface based on a given `model` and at saturated conditions `T` and `x` (liquid composition). This is a blind calculation that assumes the interface is 1D and cartesian, and that the system does phase split between two bulk phases. If the system is expected to form micelles, other methods should be used.
+
+Example:
+```julia
+julia> model = PCSAFT(["water"])
+
+julia> surface_tension(model,298.15,[1.0])
+```
+"""
 function surface_tension(model::EoSModel, T,x = [1.0])
     L = length_scale(model)
 

@@ -2,7 +2,7 @@
 """
     ∫(f,dz)
 
-Integrates a collection of points `f`, with constant `dz`, using simpson rule
+Integrates a collection of points `f`, with constant `dz`, using simpson rule.
 
 """
 ∫(f,dz) = _∫(f,dz)
@@ -23,6 +23,15 @@ function _∫(f,dz::Number,last = 0)
     return ∑f*dz/3
 end
 
+"""
+    ∫ρdz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float64,span::Float64)
+
+Obtain the follow convolution integral:
+```julia
+n(r) = ∫ρ(r')δ(R-|r-r'|)dr'
+```
+For a given density profile, `ρ` at `z_eval` where `R` is equal to `span`.
+"""
 function ∫ρdz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float64,span::Float64)
     I = 0.
     
@@ -101,6 +110,15 @@ function ∫ρdz(structure::DFTStructure1DSphr,ρ::DensityProfile,r_eval::Float6
     return I/r_eval
 end
 
+"""
+    ∫ρzdz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float64,span::Float64)
+
+Obtain the follow convolution integral:
+```julia
+n(r) = ∫ρ(r')(r-r')/(|r-r'|)δ(R-|r-r'|)dr'
+```
+For a given density profile, `ρ` at `z_eval` where `R` is equal to `span`.
+"""
 function ∫ρzdz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float64,span::Float64)
     I = 0.
     
@@ -205,6 +223,16 @@ function ∫ρzdz(structure::DFTStructure1DSphr,ρ::DensityProfile,r_eval::Float
     return -I/r_eval^2/2
 end
 
+
+"""
+    ∫ρz²dz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float64,span::Float64)
+
+Obtain the follow convolution integral:
+```julia
+n(r) = ∫ρ(r')Θ(R-|r-r'|)dr'
+```
+For a given density profile, `ρ` at `z_eval` where `R` is equal to `span`.
+"""
 function ∫ρz²dz(structure::DFTStructure1DCart,ρ::DensityProfile,z_eval::Float64,span::Float64)
     I = 0.
     

@@ -1,10 +1,24 @@
 using Clapeyron: PCSAFTModel
 
+"""
+    PCSAFT(components::Vector{String})
+
+The PC-SAFT equation of state developed by Gross and Sadowski (2001). Our DFT implementation follows the work of Sauer and Gross (2017) which uses a Weighted Density Functional approach and does not use a chain propagator. The only additional information required in `PCSAFTSpecies` is the bead size at a given temperature.
+
+The bulk model can be obtained from Clapeyron. 
+"""
+PCSAFT
+
 struct PCSAFTSpecies <: DFTSpecies
     nbeads::Vector{Int64}
     size::Vector{Float64}
 end
 
+"""
+    get_fields(model::EoSModel)
+
+For a given `model`, obtain all of the fields that will be needed to perform the DFT calculation. This function should return a vector of `DFTField`s.
+"""
 function get_fields(model::PCSAFTModel)
     nc = length(model)
     return [WeightedDensity(:ρ,zeros(nc)),
@@ -16,6 +30,11 @@ function get_fields(model::PCSAFTModel)
             WeightedDensity(:∫ρz²dz,1.3862*ones(nc))]
 end
 
+"""
+    get_species(model::EoSModel, structure::DFTStructure)
+
+For a given `model` and `structure`, define the relevant parameters for each species. These structs will contain additional information not present by default in the inital `model`, such as the bead size, the number of beads and the connectivity of the beads.
+"""
 function get_species(model::PCSAFTModel,structure::DFTStructure)
     (p,T,z) = structure.conditions
     nc = length(model)
@@ -123,6 +142,13 @@ function Δ(model::PCSAFTModel, T, n, n₃, nᵥ, i, j, a, b)
     return g_hs*σ^3*expm1(ϵ_assoc[i,j][a,b]/T)*κijab
 end
 
+"""
+    length_scale(model::EoSModel)
+
+Obtains the maximum length scale in the model and helps define the dimensions of the DFT system. This is typically equal to the size of the largest bead.
+"""
 function length_scale(model::SAFTModel)
     return maximum(model.params.sigma.values)
 end
+
+export length_scale

@@ -3,6 +3,22 @@ tanh_prof(x,start,stop,shift,coef) = 1/2*(start-stop)*tanh((x-shift)*coef)+1/2*(
 include("surface_tension.jl")
 include("interfacial_tension.jl")
 
+"""
+    initialize_profiles(model::EoSModel,structure::DFTStructure)
+
+Based on the structure, this function will initialize the density profiles for each of the species / beads in the model. The output will be a vector of unconverged `DFTProfile`s.
+
+Example:
+```julia
+julia> model = PCSAFT(["water"])
+
+julia> L = length_scale(model)
+
+julia> structure = Uniform1DCart((1e5, 298.15, [1.]), [0, 20L], 201)
+
+julia> profiles = initialize_profiles(model,structure)
+```
+"""
 function initialize_profiles(model::EoSModel,structure::Uniform1DCart)
     bounds = structure.bounds
     ngrid = structure.ngrid

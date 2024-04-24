@@ -1,5 +1,14 @@
 using Clapeyron: PCPSAFTModel
 
+"""
+    PCPSAFT(components::Vector{String})
+
+The PCP-SAFT equation of state developed by Vrabec and Gross (2006). Our DFT implementation follows the work of Sauer and Gross (2017) which uses a Weighted Density Functional approach and does not use a chain propagator. This uses the same species information as PC-SAFT.
+
+The bulk model can be obtained from Clapeyron. 
+"""
+PCPSAFT
+
 function f_res(system::DFTSystem, model::PCPSAFTModel,n)
     return f_hs(system,model,n[2,:],n[3,:],n[4,:]) + f_hc(system,model,n[1,:],n[5,:],n[6,:]) + f_disp(system,model,n[7,:]) + f_polar(system,model,n[7,:]) + f_assoc(system,model,n[2,:],n[3,:],n[4,:])
 end

@@ -1,3 +1,10 @@
+"""
+    WeightedDensity(type::Symbol,width::Vector{Float64})
+
+Generic `WeightedDensity` type used to calculate the weighted densities of the system. One must specify:
+- `type`: The type of weighted density to be calculated. Options are `:∫ρdz` (``n_0``), `:∫ρzdz` (``n_v``), `:∫ρz²dz` (``n_3``), and `:ρ` (unweighted).
+- `width`: The width of the weighted density profile.
+"""
 struct WeightedDensity <: DFTField 
     type::Symbol
     width::Vector{Float64}
@@ -40,7 +47,12 @@ function evaluate_field(system::DFTSystem,field::WeightedDensity)
     return n
 end
 
-function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
+"""
+    integrate_field(system::DFTSystem, field::DFTField, profile::Vector{DFTProfile})
+
+This function will obtain, for a given field, the functional derivative for each species / bead. The output will be a 2D array with the dimensions `(ngrid,nc)`, where `ngrid` is the number of grid points, and `nc` is the number of components in the model.
+"""
+function integrate_field(system::DFTSystem,field::WeightedDensity,profile::Vector{DFTProfile})
     model = system.model
     structure = system.structure
     nc = length(model)

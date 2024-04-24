@@ -1,0 +1,6 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+cDFT = "9d464fa6-e93d-4d45-9e5b-7c20149a9a88"
+
+[compat]
+Documenter = "1"

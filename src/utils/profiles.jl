@@ -1,3 +1,29 @@
+"""
+    DensityProfile(ρ,z,bounds,boundary_conditions)  
+
+A spline density profile. This profile is parametrized by a set splines obtained from densities `ρ` at coordinates `z`, with a set of `bounds` which have specified `boundary_conditions`. The spline coefficients are calculated and stored in the profile. The struct carries the following information:
+- `coords`: The coordinates of the density profile.
+- `density`: The density values at the coordinates.
+- `bounds`: The bounds of the density profile.
+- `boundary_conditions`: The boundary conditions of the density profile.
+- `coeffs`: The spline coefficients of the density profile.
+- `mesh_size`: The mesh size of the density profile.
+Once the profile is created, the output can be treated like a function, where the value at a given coordinate is obtained by evaluating the spline segment at that coordinate.
+
+Example:
+```julia
+julia> z = LinRange(-1,1,10)
+
+julia> ρ = @. exp(-z^2)
+
+julia> bounds = [-1,1]
+
+julia> boundary_conditions = (FixedBoundary(exp(-1),-1),FixedBoundary(exp(-1),1))
+
+julia> profile = DensityProfile(ρ,z,bounds,boundary_conditions)
+
+julia> profile(0.5)
+"""
 struct DensityProfile{ℂ,ρ} <: DFTProfile #spline density profile. parametrize by dimensions?
     coords::ℂ
     density::ρ
@@ -7,7 +33,6 @@ struct DensityProfile{ℂ,ρ} <: DFTProfile #spline density profile. parametrize
     mesh_size::Float64
 end
 
-
 function DensityProfile(ρ,z,bounds,boundary_conditions)    
     coeffs = Vector{NTuple{4,Float64}}(undef,length(z)-1)
     mesh_size = (z[end]-z[1])/(length(z)-1)
@@ -15,6 +40,11 @@ function DensityProfile(ρ,z,bounds,boundary_conditions)
     update_profile!(prof,prof.density)
 end
 
+"""
+    update_profile!(prof,ρnew)
+
+This function will update the density profile `prof` with the new density values `ρnew`. The spline coefficients will be recalculated and stored in the profile.
+"""
 function update_profile!(prof,ρnew)
     @assert length(prof.density) == length(ρnew)
     prof.density .= ρnew
