@@ -48,11 +48,11 @@ function evaluate_field(system::DFTSystem,field::WeightedDensity)
 end
 
 """
-    integrate_field(system::DFTSystem, field::DFTField, profile::Vector{DFTProfile})
+    integrate_field(system::DFTSystem, field::DFTField, profile)
 
 This function will obtain, for a given field, the functional derivative for each species / bead. The output will be a 2D array with the dimensions `(ngrid,nc)`, where `ngrid` is the number of grid points, and `nc` is the number of components in the model.
 """
-function integrate_field(system::DFTSystem,field::WeightedDensity,profile::Vector{DFTProfile})
+function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
     model = system.model
     structure = system.structure
     nc = length(model)
