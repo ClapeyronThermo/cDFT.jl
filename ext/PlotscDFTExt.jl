@@ -32,7 +32,12 @@ function Plots.plot(system::cDFT.DFTSystem)
     end
     Plots.xlims!(plt,(bounds[1],bounds[2])./L)
     Plots.ylims!(plt,(0,1.1*ymax))
-    Plots.xlabel!(plt,"z / σ")
+    if typeof(system.structure) <: cDFT.DFTStructure1DSphr 
+        Plots.xlabel!(plt,"r / σ")
+    elseif typeof(system.structure) <: cDFT.DFTStructure1DCart
+        Plots.xlabel!(plt,"z / σ")
+    end
+
     Plots.ylabel!(plt,"ρ / (kg/m³)")
     return plt
 end
