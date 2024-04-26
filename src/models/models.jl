@@ -35,7 +35,7 @@ function δFδρ_res(system::DFTSystem)
     fields = system.fields
     ρ = system.profiles
     z = ρ[1].coords
-    nc = length(model)
+    nb = sum(system.species.nbeads)
     nf = length(fields)
     dz = system.profiles[1].mesh_size
     ngrid = system.structure.ngrid
@@ -45,27 +45,13 @@ function δFδρ_res(system::DFTSystem)
     f(x) = f_res(system,model,x)
     df(x) = ForwardDiff.gradient(f,x)
 
-    δf = zeros(ngrid,nf,nc)
+    δf = zeros(ngrid,nf,nb)
 
-    # dx = similar(n,nf)
     Threads.@threads for i in 1:ngrid
         δf[i,:,:] = df(n[i,:,:])
     end
 
-    δFδρ_res = zeros(ngrid,nc)
-
-    for j in 1:nf
-        ∂f = DensityProfile[]
-        for i in @comps
-            lim = system.species.size[i]
-            bounds = ρ[i].bounds.+(-lim,lim)
-            boundary_conditions = ρ[i].boundary_conditions
-            bc1 = typeof(boundary_conditions[1])(δf[1,j,i],-1)
-            bc2 = typeof(boundary_conditions[1])(δf[end,j,i],1)
-            push!(∂f, DensityProfile(@view(δf[:,j,i]),z,bounds,(bc1,bc2)))
-        end
-        δFδρ_res += integrate_field(system,fields[j],∂f)
-    end
+    δFδρ_res = integrate_field(system, δf)
 
     return δFδρ_res
 end

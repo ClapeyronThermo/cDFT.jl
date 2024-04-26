@@ -15,7 +15,9 @@ function evaluate_field(system::DFTSystem,field::WeightedDensity)
     structure = system.structure
     ngrid = structure.ngrid
     model = system.model
-    n = zeros(length(ρ[1].coords),length(ρ))
+    nb = length(ρ)
+    ngrid = structure.ngrid
+    n = zeros(ngrid,nb)
     width = field.width 
     type = field.type
     size = system.species.size
@@ -27,7 +29,7 @@ function evaluate_field(system::DFTSystem,field::WeightedDensity)
     elseif type == :∫ρz²dz
         integral_method = ∫ρz²dz
     elseif type == :ρ
-        for i in @comps
+        for i in 1:nb
             n[:,i] .= ρ[i].density*N_A
         end
         return n
@@ -37,7 +39,7 @@ function evaluate_field(system::DFTSystem,field::WeightedDensity)
     
     z = ρ[1].coords
 
-    for i in @comps
+    for i in 1:nb
         span = width[i]*size[i]
 
         Threads.@threads for j in 1:ngrid
@@ -47,21 +49,16 @@ function evaluate_field(system::DFTSystem,field::WeightedDensity)
     return n
 end
 
-"""
-    integrate_field(system::DFTSystem, field::DFTField, profile)
-
-This function will obtain, for a given field, the functional derivative for each species / bead. The output will be a 2D array with the dimensions `(ngrid,nc)`, where `ngrid` is the number of grid points, and `nc` is the number of components in the model.
-"""
 function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
     model = system.model
     structure = system.structure
-    nc = length(model)
+    nb = sum(system.species.nbeads)
     ngrid = system.structure.ngrid
 
     width = field.width 
     type = field.type
 
-    ∫field = zeros(ngrid,nc)
+    ∫field = zeros(ngrid,nb)
     z = profile[1].coords
 
     if type == :∫ρdz
@@ -74,7 +71,7 @@ function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
         integral_method = ∫ρz²dz
         prefactor = 1
     elseif type == :ρ
-        for i in @comps
+        for i in 1:nb
             ∫field[:,i] .= profile[i].(z)
         end
         return ∫field
@@ -84,7 +81,7 @@ function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
 
     size = system.species.size
 
-    for i in @comps
+    for i in 1:nb
         span = width[i].*size[i]
 
         Threads.@threads for j in 1:ngrid
