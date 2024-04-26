@@ -10,6 +10,7 @@ using Clapeyron: assoc_similar, assoc_matrix_solve, assoc_options, assoc_pair_le
 using Clapeyron: issite, compute_index, complement_index, indices
 import Clapeyron.Solvers
 using Clapeyron: SingleComp
+using GCIdentifier, ChemicalIdentifiers
 using StaticArrays
 
 #if !isdefined(Clapeyron,Symbol("@sum"))
@@ -24,6 +25,7 @@ include("models/models.jl")
 include("structure/structure.jl")
 
 include("utils/base.jl")
+include("utils/connectivity.jl")
 include("utils/boundary_conditions.jl")
 include("utils/profiles.jl")
 include("utils/integrals.jl")
@@ -35,10 +37,12 @@ include("models/FMT.jl")
 include("models/PCSAFT.jl")
 include("models/PPCSAFT.jl")
 include("models/gcPPCSAFT.jl")
+include("models/hetero_gcPPCSAFT.jl")
 include("models/QPPCSAFT.jl")
 include("models/SAFTVRMie.jl")
 
 include("methods/converge.jl")
+include("methods/propagator.jl")
 include("methods/surface_tension.jl")
 include("methods/interfacial_tension.jl")
 
