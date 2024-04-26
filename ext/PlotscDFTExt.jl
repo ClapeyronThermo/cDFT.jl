@@ -7,7 +7,7 @@ function Plots.plot(system::cDFT.DFTSystem)
     profiles = system.profiles
     structure = system.structure
     model = system.model
-    nc = length(model)
+    nb = length(profiles)
 
     bounds = structure.bounds
 
@@ -24,9 +24,11 @@ function Plots.plot(system::cDFT.DFTSystem)
                     legend_font=font(12))
 
     ymax = 0.
-    for i in 1:nc
-        species = model.components[i]
-        Mw = model.params.Mw[i]
+    for i in 1:nb
+        species_id = system.species.species_id[i]
+        group_id = system.species.group_id[i]
+        species = model.groups.flattenedgroups[group_id]
+        Mw = model.params.Mw[group_id]
         Plots.plot!(plt,z./L,profiles[i].(z)*Mw/1e3,label="$species",linewidth=3)
         ymax = max(ymax,maximum(profiles[i].density)*Mw/1e3)
     end
