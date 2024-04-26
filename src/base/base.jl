@@ -45,9 +45,9 @@ function DFTSystem(model::EoSModel,structure::DFTStructure,profile::Vector{DFTPr
 end
 
 function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
-    profiles = initialize_profiles(model,structure)
-    fields = get_fields(model)
     species = get_species(model, structure)
+    fields = get_fields(model)
+    profiles = initialize_profiles(model,structure, species)
     return DFTSystem(model, species, structure, profiles, fields, options)
 end
 

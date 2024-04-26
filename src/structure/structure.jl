@@ -19,7 +19,7 @@ julia> structure = Uniform1DCart((1e5, 298.15, [1.]), [0, 20L], 201)
 julia> profiles = initialize_profiles(model,structure)
 ```
 """
-function initialize_profiles(model::EoSModel,structure::Uniform1DCart)
+function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species)
     bounds = structure.bounds
     ngrid = structure.ngrid
     (p, T, x) = structure.conditions
@@ -32,10 +32,14 @@ function initialize_profiles(model::EoSModel,structure::Uniform1DCart)
     ρl = x./vol
 
     ρ = DensityProfile[]
+
+    nbeads = species.nbeads
     for i in @comps
-        boundary_conditions = (FixedBoundary(ρl[i],-1), FixedBoundary(ρl[i],1))
-        ρ_points = ρl[i]*ones(ngrid)
-        push!(ρ,DensityProfile(ρ_points,z,bounds,boundary_conditions))
+        for j in 1:nbeads[i]
+            boundary_conditions = (FixedBoundary(ρl[i],-1), FixedBoundary(ρl[i],1))
+            ρ_points = ρl[i]*ones(ngrid)
+            push!(ρ,DensityProfile(ρ_points,z,bounds,boundary_conditions))
+        end
     end
     return ρ
 end
