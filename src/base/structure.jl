@@ -68,6 +68,7 @@ struct InterfacialTension1DCart <: DFTStructure1DCart
     conditions::Tuple{Float64,Float64,Vector{Float64}}
     bounds::Vector{Float64}
     ngrid::Int64
+    composition_II::Vector{Float64}
 end
 
 """

@@ -15,9 +15,8 @@ function propagate(system, δf_res, species_id)
     ρ = system.profiles
     structure = system.structure
     ngrid = structure.ngrid
-    nbeads = system.species.nbeads[species_id]  
-    beads = system.species.species_id .== species_id 
-    connectivity = system.species.connectivity[beads, beads] 
+    nbeads = system.species[species_id].nbeads
+    connectivity = system.species[species_id].connectivity
     z = system.profiles[1].coords
 
     I1 = ones(Float64, ngrid, nbeads)
@@ -32,7 +31,7 @@ function propagate(system, δf_res, species_id)
     for i in 2:nbeads
         _I1 = @. I1[:,id1_1]*exp(-δf_res[:,id1_1])
 
-        lim = (system.species.size[id1_1]+system.species.size[id1_2])/2
+        lim = (system.species[species_id].size[id1_1]+system.species[species_id].size[id1_2])/2
         bounds = system.structure.bounds.+(-lim,lim)
         boundary_conditions = ρ[i].boundary_conditions
         bc1 = typeof(boundary_conditions[1])(_I1[1],-1)
@@ -53,7 +52,7 @@ function propagate(system, δf_res, species_id)
 
         _I2 = @. I2[:,id2_1]*exp(-δf_res[:,id2_1])
 
-        lim = (system.species.size[id2_1]+system.species.size[id2_2])/2
+        lim = (system.species[species_id].size[id2_1]+system.species[species_id].size[id2_2])/2
         bounds = system.structure.bounds.+(-lim,lim)
         boundary_conditions = ρ[i].boundary_conditions
         bc1 = typeof(boundary_conditions[1])(_I2[1],-1)

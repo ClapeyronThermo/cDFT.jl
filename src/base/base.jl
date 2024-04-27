@@ -33,7 +33,7 @@ DFTSystem
 """
 struct DFTSystem
     model::EoSModel
-    species::DFTSpecies
+    species::Vector{DFTSpecies}
     structure::DFTStructure
     profiles::Vector{DFTProfile}
     fields::Vector{DFTField}

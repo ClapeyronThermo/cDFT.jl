@@ -1,36 +1,39 @@
 using Clapeyron: HeterogcPCPSAFT
 
 struct gcPCPSAFTSpecies <: DFTSpecies
-    nbeads::Vector{Int64}
+    nbeads::Int64
+    bead_id::Vector{Int64}
     connectivity::Array{Int64}
-    species_id::Vector{Int64}
-    group_id::Vector{Int64}
     size::Vector{Float64}
+    bulk_density::Float64
+    chempot_res::Float64
 end
 
 function get_species(model::HeterogcPCPSAFT,structure::DFTStructure)
     (p,T,z) = structure.conditions
-    nc = length(model)
-    nbeads = sum.(model.groups.n_flattenedgroups)
     HSd = d(model,1e-3,T,z)
-    species_id = zeros(Int64, sum(nbeads))
-    group_id = zeros(Int64, sum(nbeads))
-    size = zeros(sum(nbeads))
-    connectivity = zeros(Int64, sum(nbeads), sum(nbeads))
-    for i in 1:nc
-        species_id[sum(nbeads[1:i])-nbeads[i]+1:sum(nbeads[1:i])] .= i
-        _group_id, _bond_mat = get_connectivity(model, model.components[i])
-        group_id[sum(nbeads[1:i])-nbeads[i]+1:sum(nbeads[1:i])] = _group_id
-        if !isempty(_bond_mat)
-            connectivity[sum(nbeads[1:i])-nbeads[i]+1:sum(nbeads[1:i]),sum(nbeads[1:i])-nbeads[i]+1:sum(nbeads[1:i])] = _bond_mat
+    v = volume(model, p, T, z; phase=:l)
+    ρbulk = z./v
+    μres = Clapeyron.VT_chemical_potential_res(model, v, T, z) / Clapeyron.R̄ / T
+
+    s = gcPCPSAFTSpecies[]
+    for i in @comps
+        nbeads = sum(model.groups.n_flattenedgroups[i])        
+
+        _group_id, _bond_mat = get_connectivity(model, model.components[i])        
+        if isempty(_bond_mat)
+            _bond_mat = [0.;;]
         end
+
+        size = zeros(nbeads)
+        for j in unique(_group_id)
+            size[_group_id .== j] .= HSd[j]
+        end
+
+        s = push!(s,gcPCPSAFTSpecies(nbeads, _group_id, _bond_mat, size, ρbulk[i], μres[i]))
     end
 
-    for i in unique(group_id)
-        size[group_id .== i] .= HSd[i]
-    end
-
-    return gcPCPSAFTSpecies(nbeads, connectivity, species_id, group_id, size)
+    return s
 end
 
 function get_fields(model::HeterogcPCPSAFT)
@@ -51,13 +54,15 @@ end
 function f_hs(system::DFTSystem, model::HeterogcPCPSAFT, n, n₃, nᵥ)
     species = system.species
     m = model.params.segment.values
-    HSd = system.species.size
 
-    n₀ = zero(first(n) + first(m) + first(HSd))
+    n₀ = zero(first(n))
     n₁,n₂,nᵥ₁,nᵥ₂,n₃₃ = zero(n₀), zero(n₀), zero(n₀), zero(n₀), zero(n₀)
+    species_id = 1
+    bead_id = 1 
     for i in 1:length(n)
-        group_id = species.group_id[i]
-        mᵢ,HSdᵢ,nᵥᵢ = m[group_id],HSd[i],nᵥ[i]
+        group_id = species[species_id].bead_id[bead_id]
+        HSdᵢ = species[species_id].size[bead_id]
+        mᵢ,nᵥᵢ = m[group_id],nᵥ[i]
         nᵢmᵢ = n[i]*mᵢ
         n₀ += nᵢmᵢ/HSdᵢ
         n₁ += 0.5nᵢmᵢ
@@ -65,67 +70,108 @@ function f_hs(system::DFTSystem, model::HeterogcPCPSAFT, n, n₃, nᵥ)
         nᵥ₁ += nᵥᵢ*mᵢ/HSdᵢ
         nᵥ₂ += -2π*nᵥᵢ*mᵢ
         n₃₃ += n₃[i]*mᵢ
+
+        if bead_id == species[species_id].nbeads
+            species_id += 1
+            bead_id = 1
+        else
+            bead_id += 1
+        end
     end
     return -n₀*log(1-n₃₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃₃)/(12*π*n₃₃^2)+1/(12*π*n₃₃*(1-n₃₃)^2))
 end
 
 function f_hc(system::DFTSystem, model::HeterogcPCPSAFT, ρhc, ρ̄hc)
-    HSd = system.species.size
-    nbeads = sum(system.species.nbeads)
-    connectivity = system.species.connectivity
+    species = system.species
     m = model.params.segment.values
-    ζ₃ = zero(eltype(HSd)) + zero(eltype(ρ̄hc))
+    ζ₃ = zero(eltype(ρ̄hc))
     ζ₂ = zero(ζ₃)
-    for i in 1:nbeads
-        group_id = system.species.group_id[i]
-        mi,ρ̄hci,HSdi = m[group_id],ρ̄hc[i],HSd[i]
+
+    species_id = 1
+    bead_id = 1
+    for i in 1:length(ρhc)
+        group_id = system.species[species_id].bead_id[bead_id]
+        HSdi = system.species[species_id].size[bead_id]
+        mi,ρ̄hci = m[group_id],ρ̄hc[i]
         ζ₃ += mi*ρ̄hci
         ζ₂ += mi*ρ̄hci/HSdi
+
+        if bead_id == species[species_id].nbeads
+            species_id += 1
+            bead_id = 1
+        else
+            bead_id += 1
+        end
     end
     ζ₃ *= 0.125
     ζ₂ *= 0.125
     #ζ₃ = 1/8*dot(m,ρ̄hc)
     #ζ₂ = sum(1/8*m.*ρ̄hc./HSd)
     ∑f = zero(ζ₃)
-    for i in 1:nbeads
-        for j in findall(connectivity[i,:].==1)
-            r_HSd = HSd[i]*HSd[j]/(HSd[i]+HSd[j])
+    species_id = 1
+    bead_id = 1
+
+    for i in 1:length(ρhc)
+        HSd = species[species_id].size
+        for j in findall(species[species_id].connectivity[bead_id,:].==1)
+            r_HSd = HSd[bead_id]*HSd[j]/(HSd[bead_id]+HSd[j])
             yᵈᵈ = 1/(1-ζ₃) + 3*r_HSd*ζ₂/(1-ζ₃)^2+2*r_HSd^2*ζ₂^2/(1-ζ₃)^3
-            fi = -ρhc[i]/2*log(yᵈᵈ)
+            fi = -ρhc[bead_id]/2*log(yᵈᵈ)
             ∑f += fi
+        end
+
+        if bead_id == species[species_id].nbeads
+            species_id += 1
+            bead_id = 1
+        else
+            bead_id += 1
         end
     end
     return ∑f
 end
 
-function f_disp(system::DFTSystem, model::HeterogcPCPSAFT, ρ̄)
-    HSd = system.species.size
-    nbeads = sum(system.species.nbeads)
+function f_disp(system::DFTSystem, model::HeterogcPCPSAFT, n)
+    ρ̄ = deepcopy(n)
+    nbeads = length(ρ̄)
     (_, T, _) = system.structure.conditions
     ψ = 1.5357
     σ = model.params.sigma.values
     ϵ = model.params.epsilon.values
     m = model.params.segment.values
+    
+    m̄ = zero(first(ρ̄))
+    ∑ρ̄i = zero(first(ρ̄))
 
-    ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
-    ∑ρ̄ = sum(ρ̄)
-    m̄ = zero(∑ρ̄)
-    ∑ρ̄i = zero(∑ρ̄)
-
+    bead_1 = 1
     for i in 1:length(model)
-        species_id = system.species.species_id
-        group_id = system.species.group_id
-        ρ̄i = sum(ρ̄[species_id .== i])/system.species.nbeads[i]
-        m̄ += sum(m[group_id[species_id .== i]]*ρ̄i)
+        
+        nbead = system.species[i].nbeads
+
+        ρ̄[bead_1:bead_1+nbead-1] .*= 3 ./(4*ψ^3 .*system.species[i].size.^3)./π
+        group_id = system.species[i].bead_id
+        ρ̄i = sum(ρ̄[bead_1:bead_1+nbead-1])/nbead
+        m̄ += sum(m[group_id]*ρ̄i)
         ∑ρ̄i += ρ̄i
+        bead_1 += nbead
     end
     m̄ /= ∑ρ̄i
 
+    ∑ρ̄ = sum(ρ̄)
 
-    η = zero( ∑ρ̄ + first(HSd))
+    η = zero(∑ρ̄)
+    species_id = 1
+    bead_id = 1
     for i in 1:nbeads
-        group_id = system.species.group_id[i]
-        η += m[group_id]*ρ̄[i]*HSd[i]^3
+        group_id = system.species[species_id].bead_id[bead_id]
+        HSd = system.species[species_id].size[bead_id]
+        η += m[group_id]*ρ̄[i]*HSd^3
+
+        if bead_id == system.species[species_id].nbeads
+            species_id += 1
+            bead_id = 1
+        else
+            bead_id += 1
+        end
     end
     η = π/6*η
 
@@ -136,8 +182,10 @@ function f_disp(system::DFTSystem, model::HeterogcPCPSAFT, ρ̄)
     m2ϵσ3₂ = zero(T+first(ρ̄))
     m2ϵσ3₁ = m2ϵσ3₂
     
+    species_id = 1
+    bead_id = 1
     for i in 1:nbeads
-        group_idi = system.species.group_id[i]
+        group_idi = system.species[species_id].bead_id[bead_id]
         constant = ρ̄[i]*ρ̄[i]*m[group_idi]*m[group_idi] * σ[group_idi,group_idi]^3
         exp1 = (ϵ[group_idi,group_idi]/T)
         exp2 = exp1*exp1
@@ -145,13 +193,29 @@ function f_disp(system::DFTSystem, model::HeterogcPCPSAFT, ρ̄)
         m2ϵσ3₁ += constant*exp1
         m2ϵσ3₂ += constant*exp2
 
+        species_id2 = 1
+        bead_id2 = 1
         for j in 1:(i-1)
-            group_idj = system.species.group_id[j]
+            group_idj = system.species[species_id2].bead_id[bead_id2]
             constant = ρ̄[i]*ρ̄[j]*m[group_idi]*m[group_idj] * σ[group_idi,group_idj]^3
             exp1 = (ϵ[group_idi,group_idj]/T)
             exp2 = exp1*exp1
             m2ϵσ3₁ += 2*constant*exp1
             m2ϵσ3₂ += 2*constant*exp2
+
+            if bead_id2 == system.species[species_id2].nbeads
+                species_id2 += 1
+                bead_id2 = 1
+            else
+                bead_id2 += 1
+            end
+        end
+
+        if bead_id == system.species[species_id].nbeads
+            species_id += 1
+            bead_id = 1
+        else
+            bead_id += 1
         end
     end
     return -2*π*I₁*m2ϵσ3₁-π*m̄*C₁^-1*I₂*m2ϵσ3₂

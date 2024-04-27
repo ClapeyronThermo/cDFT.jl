@@ -6,6 +6,7 @@ end
 
 
 function f_polar(system::DFTSystem, model::QPCPSAFTModel, ρ̄)
+    species = system.species
   (_, T, _) = system.structure.conditions
   μ̄² = model.params.dipole2.values
   Q̄² = model.params.quadrupole2.values
@@ -14,7 +15,7 @@ function f_polar(system::DFTSystem, model::QPCPSAFTModel, ρ̄)
   if !has_dp && !has_qp return zero(T+first(ρ̄)) end
 
   ψ = 1.3862
-  HSd = system.species.size
+  HSd = [species[i].size[1] for i in @comps]
   m = model.params.segment.values
   ϵ = model.params.epsilon.values
   σ = model.params.sigma.values

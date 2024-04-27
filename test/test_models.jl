@@ -26,8 +26,8 @@ using cDFT.Clapeyron
         @test μ1[1] ≈ μ3[1] rtol = 1e-6
     end
 
-    @testset "PPCSAFT" begin
-        model = PPCSAFT(["acetone","hexane","DMSO"])
+    @testset "PCPSAFT" begin
+        model = PCPSAFT(["acetone","hexane","DMSO"])
 
         μ1 = Clapeyron.chemical_potential_res(model,p,T,x3)/T/Clapeyron.Rgas()
         

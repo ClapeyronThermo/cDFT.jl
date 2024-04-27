@@ -35,7 +35,7 @@ function δFδρ_res(system::DFTSystem)
     fields = system.fields
     ρ = system.profiles
     z = ρ[1].coords
-    nb = sum(system.species.nbeads)
+    nb = length(ρ)
     nf = length(fields)
     dz = system.profiles[1].mesh_size
     ngrid = system.structure.ngrid

@@ -7,6 +7,7 @@ function Plots.plot(system::cDFT.DFTSystem)
     profiles = system.profiles
     structure = system.structure
     model = system.model
+    species = system.species
     nb = length(profiles)
 
     bounds = structure.bounds
@@ -24,13 +25,30 @@ function Plots.plot(system::cDFT.DFTSystem)
                     legend_font=font(12))
 
     ymax = 0.
+    species_id = 1
+    bead_id = 1
     for i in 1:nb
-        species_id = system.species.species_id[i]
-        group_id = system.species.group_id[i]
-        species = model.groups.flattenedgroups[group_id]
-        Mw = model.params.Mw[group_id]
-        Plots.plot!(plt,z./L,profiles[i].(z)*Mw/1e3,label="$species",linewidth=3)
+        if species[species_id].nbeads > 1
+            species_name = model.components[species_id]
+            group_id = species[species_id].bead_id[bead_id]
+            group_name = model.groups.flattenedgroups[group_id]
+            name = "$species_name $group_name $bead_id"
+            Mw = model.params.Mw[group_id]
+        else
+            species_name = model.components[species_id]
+            name = "$species_name"
+            Mw = model.params.Mw[species_id]
+        end
+        
+        Plots.plot!(plt,z./L,profiles[i].(z)*Mw/1e3,label="$name",linewidth=3)
         ymax = max(ymax,maximum(profiles[i].density)*Mw/1e3)
+
+        if bead_id == species[species_id].nbeads
+            species_id += 1
+            bead_id = 1
+        else
+            bead_id += 1
+        end
     end
     Plots.xlims!(plt,(bounds[1],bounds[2])./L)
     Plots.ylims!(plt,(0,1.1*ymax))

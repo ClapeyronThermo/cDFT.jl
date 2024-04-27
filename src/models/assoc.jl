@@ -1,7 +1,8 @@
 import Clapeyron: getsites
 
 function f_assoc(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
-    HSd = system.species.size
+    species = system.species
+    HSd = [species[i].size[1] for i in @comps]
     (_, T, _) = system.structure.conditions
     _0 = zero(T+first(n)+first(n₃)+first(nᵥ))
     nn = assoc_pair_length(model)
@@ -44,7 +45,8 @@ function Δ(model::EoSModel, T, n, n₃, nᵥ)
 end
 
 function X(system::DFTSystem, model::EoSModel, n, n₃, nᵥ)
-    HSd = system.species.size
+    species = system.species
+    HSd = [species[i].size[1] for i in @comps]
     n₀ = n./HSd
     n₂ = π.*HSd.*n
     nᵥ₂ = -2π.*nᵥ
@@ -63,7 +65,8 @@ function X(model::EoSModel,T,n,n₃,nᵥ,n₀,ξ)
 end
 
 function assoc_site_matrix(system::DFTSystem, model::EoSModel, n, n₃, nᵥ)
-    HSd = system.species.size
+    species = system.species
+    HSd = [species[i].size[1] for i in @comps]
     n₀ = n./HSd
     n₂ = π.*HSd.*n
     nᵥ₂ = -2π.*nᵥ

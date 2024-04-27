@@ -8,8 +8,9 @@ Hard-Sphere Functional derived using Fundamental Measure Theory as presented by 
 1. Yu, Y-X., & Wu, J. (2002). Structures of hard-sphere fluids from a modified fundamental-measure theory. The Journal of Chemical Physics, 117(22), 10156-10164. [doi:10.1063/1.1520530](https://doi.org/10.1063/1.1520530)
 """
 function f_hs(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
+    species = system.species
     m = model.params.segment.values
-    HSd = system.species.size
+    HSd = [species[i].size[1] for i in @comps]
 
     n₀ = zero(first(n) + first(m) + first(HSd))
     n₁,n₂,nᵥ₁,nᵥ₂,n₃₃ = zero(n₀), zero(n₀), zero(n₀), zero(n₀), zero(n₀)

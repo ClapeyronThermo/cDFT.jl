@@ -1,4 +1,4 @@
-function initialize_profiles(model::EoSModel,structure::SurfaceTension1DCart)
+function initialize_profiles(model::EoSModel,structure::SurfaceTension1DCart, species)
     bounds = structure.bounds
     ngrid = structure.ngrid
     (p, T, x) = structure.conditions
@@ -13,10 +13,13 @@ function initialize_profiles(model::EoSModel,structure::SurfaceTension1DCart)
 
     ρ = DensityProfile[]
     for i in @comps
-        boundary_conditions = (FixedBoundary(ρv[i],-1),FixedBoundary(ρl[i],1))
-        ρ_points = @. tanh_prof(z,ρl[i],ρv[i],0.0,(2.4728-2.3625*T/Tc[i])/L)
+        nbeads = species[i].nbeads
+        for j in 1:nbeads
+            boundary_conditions = (FixedBoundary(ρv[i],-1),FixedBoundary(ρl[i],1))
+            ρ_points = @. tanh_prof(z,ρl[i],ρv[i],0.0,(2.4728-2.3625*T/Tc[i])/L)
 
-        push!(ρ,DensityProfile(ρ_points,z,bounds,boundary_conditions))
+            push!(ρ,DensityProfile(ρ_points,z,bounds,boundary_conditions))
+        end
     end
     return ρ
 end
