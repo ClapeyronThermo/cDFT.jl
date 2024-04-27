@@ -28,13 +28,15 @@
         T = 298.15
         n = [0.5,0.5]
 
+        (x,_,_) = tp_flash(model, 1e5, 298.15, [0.5,0.5], RRTPFlash(equilibrium=:lle))
+
         γ1 = interfacial_tension(model,p,T,n)
 
         @test γ1 ≈ 0.030742209755905244 rtol = 1e-4
 
         L = cDFT.length_scale(model)
 
-        structure = InterfacialTension1DCart((p, T, n),[-10L,10L], 201)
+        structure = InterfacialTension1DCart((p, T, x[1,:]),[-10L,10L], 201, x[2,:])
 
         system = DFTSystem(model, structure)
 
