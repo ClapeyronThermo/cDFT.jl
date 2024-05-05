@@ -14,9 +14,16 @@ function F_ideal(system::DFTSystem)
 
     dz = ρ[1].mesh_size
 
-    n = zeros(ngrid,length(ρ))
-    for i in @comps
-        n[:,i] = ρ[i].density
+    n = zeros(ngrid,length(model))
+    species_id = 1
+    bead_id = 1
+    for i in 1:length(ρ)
+        n[:,species_id] += ρ[i].density/system.species[species_id].nbeads
+        bead_id += 1
+        if bead_id > system.species[species_id].nbeads
+            bead_id = 1
+            species_id += 1
+        end
     end
     
     f(x) = f_ideal(system,model.idealmodel,x)    
