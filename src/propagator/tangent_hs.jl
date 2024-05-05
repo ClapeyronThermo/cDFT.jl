@@ -1,17 +1,5 @@
-"""
-    converge!(system::DFTSystem)
 
-For a given system, converge the profiles using the solver specified under `system.options.solver`. Convergence is achieved by solving the generic equation:
-```julia
-ρi = ρi_bulk*exp(β(μi_res - δFδρ_res))
-```
-For stability purposes, the equation has be reformulated as:
-```julia
-ln(ρi) = ln(ρi_bulk) + β(μi_res - δFδρ_res)
-```
-The default solver uses Anderson Mixing with 100 initial Picard iterations, 50 memory points, 1e-2 damping, and an infinite drop tolerance. 
-"""
-function propagate(system, δf_res, species_id)
+function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res, species_id)
     ρ = system.profiles
     structure = system.structure
     ngrid = structure.ngrid

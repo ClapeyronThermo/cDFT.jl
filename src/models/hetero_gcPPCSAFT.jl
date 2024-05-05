@@ -20,17 +20,20 @@ function get_species(model::HeterogcPCPSAFT,structure::DFTStructure)
     for i in @comps
         nbeads = sum(model.groups.n_flattenedgroups[i])        
 
-        _group_id, _bond_mat = get_connectivity(model, model.components[i])        
+        _group_id, _group_names, _bond_mat = get_connectivity(model, model.components[i])        
         if isempty(_bond_mat)
             _bond_mat = [0.;;]
         end
 
         size = zeros(nbeads)
-        for j in unique(_group_id)
-            size[_group_id .== j] .= HSd[j]
+        group_id = zeros(nbeads)
+        for j in 1:nbeads
+            group_idx = model.groups.groups[i] .== _group_names[j]
+            size[j] = HSd[group_idx][1]
+            group_id[j] = model.groups.i_groups[i][group_idx][1]
         end
 
-        s = push!(s,gcPCPSAFTSpecies(nbeads, _group_id, _bond_mat, size, ρbulk[i], μres[i]))
+        s = push!(s,gcPCPSAFTSpecies(nbeads, group_id, _bond_mat, size, ρbulk[i], μres[i]))
     end
 
     return s
@@ -44,6 +47,10 @@ function get_fields(model::HeterogcPCPSAFT)
             WeightedDensity(:∫ρzdz,0.5*ones(nb)),
             WeightedDensity(:∫ρz²dz,ones(nb)),
             WeightedDensity(:∫ρz²dz,1.5357*ones(nb))]
+end
+
+function get_propagator(model::HeterogcPCPSAFT)
+    return TangentHSPropagator()
 end
 
 function f_res(system::DFTSystem, model::HeterogcPCPSAFT,n)
@@ -116,7 +123,7 @@ function f_hc(system::DFTSystem, model::HeterogcPCPSAFT, ρhc, ρ̄hc)
         for j in findall(species[species_id].connectivity[bead_id,:].==1)
             r_HSd = HSd[bead_id]*HSd[j]/(HSd[bead_id]+HSd[j])
             yᵈᵈ = 1/(1-ζ₃) + 3*r_HSd*ζ₂/(1-ζ₃)^2+2*r_HSd^2*ζ₂^2/(1-ζ₃)^3
-            fi = -ρhc[bead_id]/2*log(yᵈᵈ)
+            fi = -ρhc[i]/2*log(yᵈᵈ)
             ∑f += fi
         end
 

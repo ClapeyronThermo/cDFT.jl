@@ -31,6 +31,8 @@ include("utils/profiles.jl")
 include("utils/integrals.jl")
 include("utils/anderson.jl") #TODO, port this to Clapeyron
 
+include("propagator/propagator.jl")
+
 include("models/BasicIdeal.jl")
 
 include("models/FMT.jl")
@@ -42,7 +44,6 @@ include("models/QPPCSAFT.jl")
 include("models/SAFTVRMie.jl")
 
 include("methods/converge.jl")
-include("methods/propagator.jl")
 include("methods/surface_tension.jl")
 include("methods/interfacial_tension.jl")
 

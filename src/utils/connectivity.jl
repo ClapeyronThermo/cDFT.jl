@@ -22,6 +22,12 @@ function get_connectivity(model::EoSModel, name::String)
         end
     end
 
-    return group_id, bond_mat
+    group_names = String[]
+    
+    for i in group_id
+        pair = groups[i]
+        push!(group_names, GCIdentifier.name(pair))
+    end
+    return group_id, group_names, bond_mat
 end
 

@@ -1,6 +1,7 @@
 abstract type DFTProfile end
 abstract type DFTField end
 abstract type DFTSpecies end
+abstract type DFTPropagator end
 
 include("devices.jl")
 include("structure.jl")
@@ -37,6 +38,7 @@ struct DFTSystem
     structure::DFTStructure
     profiles::Vector{DFTProfile}
     fields::Vector{DFTField}
+    propagator::DFTPropagator
     options::DFTOptions
 end
 
@@ -47,8 +49,9 @@ end
 function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
     species = get_species(model, structure)
     fields = get_fields(model)
+    propagator = get_propagator(model)
     profiles = initialize_profiles(model,structure, species)
-    return DFTSystem(model, species, structure, profiles, fields, options)
+    return DFTSystem(model, species, structure, profiles, fields, propagator, options)
 end
 
 export DFTSystem
