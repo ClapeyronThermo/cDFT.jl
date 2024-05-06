@@ -18,7 +18,7 @@ function F_ideal(system::DFTSystem)
     species_id = 1
     bead_id = 1
     for i in 1:length(ρ)
-        n[:,species_id] += ρ[i].density/system.species[species_id].nbeads
+        n[:,species_id] .+= ρ[i].density/system.species[species_id].nbeads
         bead_id += 1
         if bead_id > system.species[species_id].nbeads
             bead_id = 1
