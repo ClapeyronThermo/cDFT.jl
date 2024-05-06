@@ -34,9 +34,9 @@ function converge!(system::DFTSystem)
         bead_id = 1
         bead_1 = 1
         for i in 1:nbeads
-            nbeads = species[species_id].nbeads
+            bead_n = species[species_id].nbeads
             if bead_id == 1
-                I1, I2 = propagate(system, system.propagator, δfδρ_res[:,bead_1:bead_1+nbeads-1], species_id)
+                I1, I2 = propagate(system, system.propagator, δfδρ_res[:,bead_1:bead_1+bead_n-1], species_id)
             end
             
             Threads.@threads for j in 1:ngrid
@@ -45,7 +45,7 @@ function converge!(system::DFTSystem)
 
             if bead_id == species[species_id].nbeads
                 species_id += 1
-                bead_1 += nbeads
+                bead_1 += bead_n
                 bead_id = 1
             else
                 bead_id += 1
