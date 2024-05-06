@@ -228,6 +228,58 @@ function f_disp(system::DFTSystem, model::HeterogcPCPSAFT, n)
     return -2*π*I₁*m2ϵσ3₁-π*m̄*C₁^-1*I₂*m2ϵσ3₂
 end
 
+function  Δ(model::HeterogcPCPSAFT, T, n, n₃, nᵥ)
+    ϵ_assoc = model.params.epsilon_assoc.values
+    κ = model.params.bondvol.values
+    σ = model.params.sigma.values
+    Δout = Compressed4DMatrix{Float64}()
+    
+    for i in @comps
+        k,l = get_group_idx(model,i,j,a,b)
+        gkl = @f(g_hs,k,l,_data)
+        Δout[idx] = gkl*σ[k,l]^3*(exp(ϵ_assoc[i,j][a,b]/T)-1)*κ[i,j][a,b]
+    end
+    return Δout
+end
+
+
+function assoc_site_matrix(model::HeterogcPCPSAFT,T,n,n₃,nᵥ,n₀,ξ)
+    delta = Δ(model,T,n,n₃,nᵥ)
+    sitesparam = Clapeyron.getsites(model)
+    _sites = sitesparam.n_sites
+    p = _sites.p
+    _ii::Vector{Tuple{Int,Int}} = delta.outer_indices
+    _aa::Vector{Tuple{Int,Int}} = delta.inner_indices
+    _idx = 1:length(_ii)
+    _Δ= delta.values
+    TT = eltype(_Δ)
+    count = 0
+    _n = sitesparam.n_sites.v
+    nn = length(_n)
+    K  = zeros(TT,nn,nn)
+    count = 0
+    options = assoc_options(model)
+    combining = options.combining
+    @inbounds for i ∈ 1:length(model) #for i ∈ comps
+        sitesᵢ = 1:(p[i+1] - p[i]) #sites are normalized, with independent indices for each component
+        for a ∈ sitesᵢ #for a ∈ sites(comps(i))
+            ia = compute_index(p,i,a)
+            for idx ∈ _idx #iterating for all sites
+                ij = _ii[idx]
+                ab = _aa[idx]
+                if issite(i,a,ij,ab)
+                    j = complement_index(i,ij)
+                    b = complement_index(a,ab)
+                    jb = compute_index(p,j,b)
+                    njb = _n[jb]
+                    K[ia,jb]  = n₀[j]*ξ[j]*njb*_Δ[idx]
+                end
+            end
+        end
+    end
+    return K
+end
+
 function length_scale(model::HeterogcPCPSAFT)
     return maximum(model.params.sigma.values)
 end
