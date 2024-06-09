@@ -22,7 +22,7 @@ ThreadPinningcDFTExt = "ThreadPinning"
 
 [compat]
 ChemicalIdentifiers = "0.1"
-Clapeyron = "0.4,0.5"
+Clapeyron = "0.5,0.6"
 ForwardDiff = "^0.10"
 GCIdentifier "0.3"
 LinearAlgebra = "1"
