@@ -26,11 +26,11 @@ Clapeyron = "0.5,0.6"
 ForwardDiff = "^0.10"
 GCIdentifier = "0.3"
 LinearAlgebra = "1"
-julia = "1.6"
 NLSolvers = "0.5"
 Plots = "1"
 StaticArrays = "^1.5.9"
-ThreadPinning = "0.7"
+ThreadPinning = "0.7, 1"
+julia = "1.6"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
