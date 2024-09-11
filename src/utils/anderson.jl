@@ -12,7 +12,7 @@ function Solvers.promote_method(method::AndersonFixPoint,T)
     return AndersonFixPoint(method.delay,method.memory,T(method.damping),T(method.picard_damping),T(method.drop_tol))
 end
 
-rtol_anderson(output,input) = maximum(x->(abs(first(x)/last(x)) -1),zip(output,input))
+rtol_anderson(output,input) = maximum(x->(abs(first(x) - last(x))),zip(output,input))/maximum(output)
 # args
 function Solvers._fixpoint(f::F,
     x0::X where {X <:AbstractVector{T}},
@@ -99,7 +99,7 @@ function Solvers._fixpoint(f::F,
 
         # Check for convergence
         if mod(k,10) == 0
-            # println(rtol_anderson(fval,x))
+            println(rtol_anderson(fval,x))
         end
         if rtol_anderson(fval,x) < rtol || !finite_check
             # println(k)
