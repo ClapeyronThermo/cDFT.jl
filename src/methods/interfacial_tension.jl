@@ -13,7 +13,7 @@ julia> interfacial_tension(model,1e5,298.15,[0.5,0.5])
 function interfacial_tension(model::EoSModel,p,T,n)
     L = length_scale(model)
 
-    (x,n,G) = tp_flash(model, 1e5, 298.15, [0.5,0.5], RRTPFlash(equilibrium=:lle))
+    (x,n,G) = tp_flash(model, p, T, n, RRTPFlash(equilibrium=:lle))
 
     structure = InterfacialTension1DCart((p, T, x[1,:]),[-10L,10L], 201, x[2,:])
 
