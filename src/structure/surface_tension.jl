@@ -13,7 +13,7 @@ function initialize_profiles(model::EoSModel,structure::SurfaceTension1DCart, sp
 
     ρ = DensityProfile[]
     for i in @comps
-        nbeads = species[i].nbeads
+        nbeads = species.nbeads[i]
         for j in 1:nbeads
             boundary_conditions = (FixedBoundary(ρv[i],-1),FixedBoundary(ρl[i],1))
             ρ_points = @. tanh_prof(z,ρl[i],ρv[i],0.0,(2.4728-2.3625*T/Tc[i])/L)

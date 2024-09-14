@@ -10,7 +10,7 @@ Hard-Sphere Functional derived using Fundamental Measure Theory as presented by 
 function f_hs(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
     species = system.species
     m = model.params.segment.values
-    HSd = [species[i].size[1] for i in @comps]
+    HSd = species.size
 
     n₀ = zero(first(n) + first(m) + first(HSd))
     n₁,n₂,nᵥ₁,nᵥ₂,n₃₃ = zero(n₀), zero(n₀), zero(n₀), zero(n₀), zero(n₀)

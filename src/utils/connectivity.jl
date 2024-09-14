@@ -6,7 +6,7 @@ function get_connectivity(model::EoSModel, name::String)
     atoms = get_atoms(mol)
     bondlist = __getbondlist(mol)
     groups = get_grouplist(model)
-    group_id, mapping = get_expanded_groups(mol, groups, atoms, bondlist, false)
+    group_id, mapping = get_expanded_groups(mol, groups, atoms, bondlist, false, smiles)
 
     bond_mat = zeros(Int64, length(group_id), length(group_id))
 

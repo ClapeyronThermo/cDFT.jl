@@ -39,21 +39,12 @@ function evaluate_field(system::DFTSystem,field::WeightedDensity)
     
     z = ρ[1].coords
 
-    species_id = 1
-    bead_id = 1
     for i in 1:nb
-        size = species[species_id].size[bead_id]
+        size = species.size[i]
         span = width[i].*size
 
         Threads.@threads for j in 1:ngrid
             n[j,i] = integral_method(structure,ρ[i],z[j],span)*N_A
-        end
-
-        if bead_id == species[species_id].nbeads
-            species_id += 1
-            bead_id = 1
-        else
-            bead_id += 1
         end
     end
     return n
@@ -90,21 +81,12 @@ function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
         error("Invalid type of field")
     end
 
-    species_id = 1
-    bead_id = 1
     for i in 1:nb
-        size = species[species_id].size[bead_id]
+        size = species.size[i]
         span = width[i].*size
 
         Threads.@threads for j in 1:ngrid
             ∫field[j,i] = prefactor*integral_method(structure,profile[i],z[j],span)
-        end
-
-        if bead_id == species[species_id].nbeads
-            species_id += 1
-            bead_id = 1
-        else
-            bead_id += 1
         end
     end
     return ∫field

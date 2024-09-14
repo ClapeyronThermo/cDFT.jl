@@ -21,7 +21,7 @@ function f_polar(system::DFTSystem, model::PCPSAFTModel, ρ̄)
     if !has_dp return zero(T+first(ρ̄)) end
 
     ψ = 1.3862
-    HSd = [species[i].size[1] for i in @comps]
+    HSd = species.size
 
     m = model.params.segment.values
     ϵ = model.params.epsilon.values

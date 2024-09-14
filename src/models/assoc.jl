@@ -2,7 +2,7 @@ import Clapeyron: getsites
 
 function f_assoc(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
     species = system.species
-    HSd = [species[i].size[1] for i in @comps]
+    HSd = species.size
     (_, T, _) = system.structure.conditions
     _0 = zero(T+first(n)+first(n₃)+first(nᵥ))
     nn = assoc_pair_length(model)
@@ -26,11 +26,12 @@ function f_assoc(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
         Xᵢ = X_[i]
         resᵢₐ = _0
         for (a,nᵢₐ) ∈ pairs(ni)
+            k = model.sites.site_translator[i][a][1]
             Xᵢₐ = Xᵢ[a]
             nᵢₐ = ni[a]
-            resᵢₐ +=  nᵢₐ* (log(Xᵢₐ) - Xᵢₐ/2 + 0.5)
+            resᵢₐ +=  n₀[k]*ξ[k]*nᵢₐ* (log(Xᵢₐ) - Xᵢₐ/2 + 0.5)
         end
-        res += resᵢₐ*n₀[i]*ξ[i]
+        res += resᵢₐ
     end
     return res
 end
@@ -46,7 +47,7 @@ end
 
 function X(system::DFTSystem, model::EoSModel, n, n₃, nᵥ)
     species = system.species
-    HSd = [species[i].size[1] for i in @comps]
+    HSd = species.size
     n₀ = n./HSd
     n₂ = π.*HSd.*n
     nᵥ₂ = -2π.*nᵥ
@@ -66,7 +67,7 @@ end
 
 function assoc_site_matrix(system::DFTSystem, model::EoSModel, n, n₃, nᵥ)
     species = system.species
-    HSd = [species[i].size[1] for i in @comps]
+    HSd = species.size
     n₀ = n./HSd
     n₂ = π.*HSd.*n
     nᵥ₂ = -2π.*nᵥ
@@ -101,9 +102,10 @@ function assoc_site_matrix(model::EoSModel,T,n,n₃,nᵥ,n₀,ξ)
                 if issite(i,a,ij,ab)
                     j = complement_index(i,ij)
                     b = complement_index(a,ab)
+                    _,l = get_group_idx(model,i,j,a,b)
                     jb = compute_index(p,j,b)
                     njb = _n[jb]
-                    K[ia,jb]  = n₀[j]*ξ[j]*njb*_Δ[idx]
+                    K[ia,jb]  = n₀[l]*ξ[l]*njb*_Δ[idx]
                 end
             end
         end

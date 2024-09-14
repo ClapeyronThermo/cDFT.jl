@@ -4,7 +4,7 @@ using LinearAlgebra
 using ForwardDiff, NLSolvers
 using Clapeyron
 using Clapeyron: d, N_A, k_B, R̄
-using Clapeyron: @comps
+using Clapeyron: @comps, @groups
 using Clapeyron: Solvers, log, sqrt, log1p, PackedVofV, sparse, SparseMatrixCSC
 using Clapeyron: assoc_similar, assoc_matrix_solve, assoc_options, assoc_pair_length
 using Clapeyron: issite, compute_index, complement_index, indices
@@ -26,6 +26,7 @@ include("structure/structure.jl")
 
 include("utils/base.jl")
 include("utils/connectivity.jl")
+include("utils/expand_model.jl")
 include("utils/boundary_conditions.jl")
 include("utils/profiles.jl")
 include("utils/integrals.jl")

@@ -28,7 +28,7 @@ function _initial_interfacial_tension_density_profile(model::EoSModel,species,ρ
 
     ρ = DensityProfile[]
     for i in @comps
-        nbeads = species[i].nbeads
+        nbeads = species.nbeads[i]
         for j in 1:nbeads
             boundary_conditions = (FixedBoundary(ρ2[i],-1),FixedBoundary(ρ1[i],1))
 
@@ -74,7 +74,7 @@ function initialize_profiles(model::EoSModel,structure::InterfacialTension1DSphr
 
     ρ = DensityProfile[]
     for i in @comps
-        nbeads = species[i].nbeads
+        nbeads = species.nbeads[i]
         for j in 1:nbeads
             boundary_conditions = (FreeBoundary(ρ2[i],-1),FixedBoundary(ρ1[i],1))
 

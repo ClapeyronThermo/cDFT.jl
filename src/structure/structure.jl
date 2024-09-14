@@ -34,7 +34,7 @@ function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species)
     ρ = DensityProfile[]
 
     for i in @comps
-        nbeads = species[i].nbeads
+        nbeads = species.nbeads[i]
         for j in 1:nbeads
             boundary_conditions = (FixedBoundary(ρl[i],-1), FixedBoundary(ρl[i],1))
             ρ_points = ρl[i]*ones(ngrid)
@@ -58,7 +58,7 @@ function initialize_profiles(model::EoSModel,structure::Uniform1DSphr,species)
 
     ρ = DensityProfile[]
     for i in @comps
-        nbeads = species[i].nbeads
+        nbeads = species.nbeads[i]
         for j in 1:nbeads
             boundary_conditions = (FreeBoundary(ρl[i],-1), FixedBoundary(ρl[i],1))
             ρ_points = ρl[i]*ones(ngrid)

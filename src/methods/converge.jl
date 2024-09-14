@@ -29,26 +29,12 @@ function converge!(system::DFTSystem)
 
         δfδρ_res = δFδρ_res(system)
         I1, I2 = 1.,1.
-
-        species_id = 1
-        bead_id = 1
-        bead_1 = 1
-        for i in 1:nbeads
-            bead_n = species[species_id].nbeads
-            if bead_id == 1
-                I1, I2 = propagate(system, system.propagator, δfδρ_res[:,bead_1:bead_1+bead_n-1], species_id)
-            end
-            
-            Threads.@threads for j in 1:ngrid
-                ln_Gx[j,i] = log(species[species_id].bulk_density).+(species[species_id].chempot_res .- δfδρ_res[j,i]).+log(I1[j,bead_id].*I2[j,bead_id])
-            end
-
-            if bead_id == species[species_id].nbeads
-                species_id += 1
-                bead_1 += bead_n
-                bead_id = 1
-            else
-                bead_id += 1
+        for i in @comps
+            I1, I2 = propagate(system, system.propagator, δfδρ_res, i)
+            for k in @chain(i)
+                Threads.@threads for j in 1:ngrid
+                    ln_Gx[j,k] = log(species.bulk_density[i]).+(species.chempot_res[i] .- δfδρ_res[j,k]).+log(I1[j,k].*I2[j,k])
+                end
             end
         end
         

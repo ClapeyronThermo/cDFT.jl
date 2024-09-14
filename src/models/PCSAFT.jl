@@ -10,11 +10,10 @@ The bulk model can be obtained from Clapeyron.
 PCSAFT
 
 struct PCSAFTSpecies <: DFTSpecies
-    nbeads::Int64
-    bead_id::Vector{Int64}
+    nbeads::Vector{Int64}
     size::Vector{Float64}
-    bulk_density::Float64
-    chempot_res::Float64
+    bulk_density::Vector{Float64}
+    chempot_res::Vector{Float64}
 end
 
 """
@@ -41,14 +40,11 @@ For a given `model` and `structure`, define the relevant parameters for each spe
 function get_species(model::PCSAFTModel,structure::DFTStructure)
     (p,T,z) = structure.conditions
     size = d(model,1e-3,T,z)
-    s = PCSAFTSpecies[]
     v = volume(model, p, T, z; phase=:l)
     ρbulk = z./v
     μres = Clapeyron.VT_chemical_potential_res(model, v, T, z) / Clapeyron.R̄ / T
-    for i in @comps
-        s = push!(s,PCSAFTSpecies(1, [i], [size[i]], ρbulk[i], μres[i]))
-    end
-    return s
+    nc = length(model)
+    return PCSAFTSpecies(ones(Int64,nc),size,ρbulk,μres)
 end
 
 """
@@ -68,7 +64,7 @@ end
 
 function f_hc(system::DFTSystem, model::PCSAFTModel, ρhc, ρ̄hc, _λ)
     species = system.species
-    HSd = [species[i].size[1] for i in @comps]
+    HSd = species.size
     m = model.params.segment.values
     ζ₃ = zero(eltype(HSd)) + zero(eltype(ρ̄hc))
     ζ₂ = zero(ζ₃)
@@ -97,7 +93,7 @@ function f_disp(system::DFTSystem, model::PCSAFTModel, ρ̄)
     ψ = 1.3862
     σ = model.params.sigma.values
     m = model.params.segment.values
-    HSd = [species[i].size[1] for i in @comps]
+    HSd = species.size
 
     ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
     ∑ρ̄ = sum(ρ̄)

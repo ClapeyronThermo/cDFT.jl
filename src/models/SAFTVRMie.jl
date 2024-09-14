@@ -4,11 +4,10 @@ using Clapeyron: KHS_fdf, aS_1_fdf, B_fdf, g_HS
 using Clapeyron: SAFTVRMieconsts
 
 struct SAFTVRMieSpecies <: DFTSpecies 
-    nbeads::Int64
-    bead_id::Vector{Int64}
+    nbeads::Vector{Int64}
     size::Vector{Float64}
-    bulk_density::Float64
-    chempot_res::Float64
+    bulk_density::Vector{Float64}
+    chempot_res::Vector{Float64}
 end
 
 function get_fields(model::SAFTVRMieModel)
@@ -25,14 +24,11 @@ end
 function get_species(model::SAFTVRMieModel,structure::DFTStructure)
     (p,T,z) = structure.conditions
     size = d(model,1e-3,T,z)
-    s = SAFTVRMieSpecies[]
     v = volume(model, p, T, z; phase=:l)
     ρbulk = z./v
     μres = Clapeyron.VT_chemical_potential_res(model, v, T, z) / Clapeyron.R̄ / T
-    for i in @comps
-        s = push!(s,SAFTVRMieSpecies(1, [i], [size[i]], ρbulk[i], μres[i]))
-    end
-    return s
+    nc = length(model)
+    return SAFTVRMieSpecies(ones(Int64,nc),size,ρbulk,μres)
 end
 
 function get_propagator(model::SAFTVRMieModel)
@@ -47,7 +43,7 @@ end
 function f_chain(system::DFTSystem, model::SAFTVRMieModel, ρhc, ρ̄hc, _λ)
     V = nothing
     (_, T, _) = system.structure.conditions
-    _d = [system.species[i].size[1] for i in @comps]
+    _d = system.species.size
     m = model.params.segment
     _ϵ = model.params.epsilon
     _λr = model.params.lambda_r
@@ -148,7 +144,7 @@ end
 function f_disp(system::DFTSystem, model::SAFTVRMieModel, ρ̄)
     V = nothing
     ψ = 1.3862
-    _d = [system.species[i].size[1] for i in @comps]
+    _d = system.species.size
     (_, T, _) = system.structure.conditions
     m = model.params.segment
     _ϵ = model.params.epsilon

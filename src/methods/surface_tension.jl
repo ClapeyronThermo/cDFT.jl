@@ -31,9 +31,9 @@ function surface_tension(model::EoSModel, T,x = [1.0])
     bead_id = 1
     species_id = 1
     for i in 1:length(ρ)
-        chem_pot_term += μ[species_id]*∫(ρ[i].density,ρ[i].mesh_size)/system.species[species_id].nbeads
+        chem_pot_term += μ[species_id]*∫(ρ[i].density,ρ[i].mesh_size)/system.species.nbeads[species_id]
         bead_id += 1
-        if bead_id > system.species[species_id].nbeads
+        if bead_id > system.species.nbeads[species_id]
             bead_id = 1
             species_id += 1
         end
@@ -59,9 +59,9 @@ function surface_tension(system::DFTSystem)
     bead_id = 1
     species_id = 1
     for i in 1:length(ρ)
-        chem_pot_term += μ[species_id]*∫(ρ[i].density,ρ[i].mesh_size)/system.species[species_id].nbeads
+        chem_pot_term += μ[species_id]*∫(ρ[i].density,ρ[i].mesh_size)/system.species.nbeads[species_id]
         bead_id += 1
-        if bead_id > system.species[species_id].nbeads
+        if bead_id > system.species.nbeads[species_id]
             bead_id = 1
             species_id += 1
         end

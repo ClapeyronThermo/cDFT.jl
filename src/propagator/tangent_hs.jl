@@ -3,8 +3,8 @@ function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res, s
     ρ = system.profiles
     structure = system.structure
     ngrid = structure.ngrid
-    nbeads = system.species[species_id].nbeads
-    connectivity = system.species[species_id].connectivity
+    nbeads = sum(system.species.nbeads)
+    connectivity = system.model.groups.n_intergroups[species_id]
     z = system.profiles[1].coords
 
     I1 = ones(Float64, ngrid, nbeads)
@@ -19,7 +19,7 @@ function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res, s
     for i in 2:nbeads
         _I1 = @. I1[:,id1_1]*exp(-δf_res[:,id1_1])
 
-        lim = (system.species[species_id].size[id1_1]+system.species[species_id].size[id1_2])/2
+        lim = (system.species.size[id1_1]+system.species.size[id1_2])/2
         bounds = system.structure.bounds.+(-lim,lim)
         boundary_conditions = ρ[i].boundary_conditions
         bc1 = typeof(boundary_conditions[1])(_I1[1],-1)
@@ -40,7 +40,7 @@ function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res, s
 
         _I2 = @. I2[:,id2_1]*exp(-δf_res[:,id2_1])
 
-        lim = (system.species[species_id].size[id2_1]+system.species[species_id].size[id2_2])/2
+        lim = (system.species.size[id2_1]+system.species.size[id2_2])/2
         bounds = system.structure.bounds.+(-lim,lim)
         boundary_conditions = ρ[i].boundary_conditions
         bc1 = typeof(boundary_conditions[1])(_I2[1],-1)

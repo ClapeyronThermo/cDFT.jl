@@ -44,22 +44,13 @@ function integrate_field(system::DFTSystem, δf)
     for j in 1:nf
         ∂f = DensityProfile[]
         
-        species_id = 1
-        bead_id = 1
         for i in 1:nb
-            lim = species[species_id].size[bead_id]
+            lim = species.size[i]
             bounds = ρ[i].bounds.+(-lim,lim)
             boundary_conditions = ρ[i].boundary_conditions
             bc1 = typeof(boundary_conditions[1])(δf[1,j,i],-1)
             bc2 = typeof(boundary_conditions[2])(δf[end,j,i],1)
             push!(∂f, DensityProfile(@view(δf[:,j,i]),z,bounds,(bc1,bc2)))
-
-            if bead_id == species[species_id].nbeads
-                species_id += 1
-                bead_id = 1
-            else
-                bead_id += 1
-            end
         end
         δFδρ_res += integrate_field(system,fields[j],∂f)
     end

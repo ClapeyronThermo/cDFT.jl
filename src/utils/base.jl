@@ -10,3 +10,13 @@ function free_energy(system::DFTSystem)
 end
 
 onevec(model) = Clapeyron.FillArrays.Ones(length(model))
+
+macro chain(component, args...)
+    quote
+        if hasfield(typeof(system.model), :groups)
+            system.model.groups.i_groups[$(component)]
+        else
+            $(component)
+        end
+    end |> esc
+end
