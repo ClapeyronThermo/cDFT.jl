@@ -20,3 +20,18 @@ macro chain(component, args...)
         end
     end |> esc
 end
+
+function get_chain_idx(model::EoSModel,i,j,a,b)
+    return get_chain_idx(model.sites,i,j,a,b)
+end
+
+function get_chain_idx(param::SiteParam, i::Int64, j::Int64, a::Int64, b::Int64)
+    if isnothing(param.site_translator)
+        return i,j
+    else
+        site_translator::Vector{Vector{NTuple{2,Int}}} = param.site_translator
+        k,_ = site_translator[i][a]
+        l,_ = site_translator[j][b]
+        return k,l
+    end
+end

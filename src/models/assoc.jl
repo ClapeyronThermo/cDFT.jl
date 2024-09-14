@@ -102,7 +102,7 @@ function assoc_site_matrix(model::EoSModel,T,n,n₃,nᵥ,n₀,ξ)
                 if issite(i,a,ij,ab)
                     j = complement_index(i,ij)
                     b = complement_index(a,ab)
-                    _,l = get_group_idx(model,i,j,a,b)
+                    _,l = get_chain_idx(model,i,j,a,b)
                     jb = compute_index(p,j,b)
                     njb = _n[jb]
                     K[ia,jb]  = n₀[l]*ξ[l]*njb*_Δ[idx]
@@ -122,8 +122,9 @@ function f_assoc_exact_1(model, T, n, n₃, nᵥ, n₀, ξ)
     resᵢₐ = _0
     nia = nn[i][a]
     njb = nn[j][b]
-    n₀ᵢ,n₀ⱼ = n₀[i], n₀[j]
-    ξᵢ,ξⱼ = ξ[i], ξ[j]
+    k, l = get_chain_idx(model,i,j,a,b)
+    n₀ᵢ,n₀ⱼ = n₀[k], n₀[l]
+    ξᵢ,ξⱼ = ξ[k], ξ[l]
     res = ξᵢ*n₀ᵢ*nia*(log(xia) - xia*0.5 + 0.5)
     if (i != j) | (a != b) #we check if we have 2 sites or just 1
         res += n₀ⱼ*ξⱼ*njb*(log(xjb) - xjb*0.5 + 0.5)
@@ -149,8 +150,9 @@ function _X_exact1(model, T, n, n₃, nᵥ, n₀, ξ)
     na = ni[a]
     nj = sitesparam.n_sites[j]
     nb = nj[b]
-    n₀ᵢ,n₀ⱼ = n₀[i], n₀[j]
-    ξᵢ,ξⱼ = ξ[i], ξ[j]
+    k,l = get_chain_idx(model,i,j,a,b)
+    n₀ᵢ,n₀ⱼ = n₀[k], n₀[l]
+    ξᵢ,ξⱼ = ξ[k], ξ[l]
     kia = na*n₀ᵢ*ξᵢ*_Δ
     kjb = nb*n₀ⱼ*ξⱼ*_Δ
     _a = kia

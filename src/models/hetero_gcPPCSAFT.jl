@@ -1,4 +1,4 @@
-using Clapeyron: HeterogcPCPSAFT, get_group_idx
+using Clapeyron: HeterogcPCPSAFT, get_chain_idx
 
 function DFTSystem(model::HeterogcPCPSAFT,structure::DFTStructure,options::DFTOptions)
     model = expand_model(model)
@@ -75,8 +75,6 @@ function f_hc(system::DFTSystem, model::HeterogcPCPSAFT, ρhc, ρ̄hc)
     ζ₃ = zero(eltype(ρ̄hc))
     ζ₂ = zero(ζ₃)
 
-    species_id = 1
-    bead_id = 1
     for i in @comps
         for k in @groups(i)
             HSdi = species.size[k]
@@ -122,9 +120,9 @@ function f_disp(system::DFTSystem, model::HeterogcPCPSAFT, n)
     for i in @comps
         for k in @groups(i)
             ρ̄[k] *= 3 /(4*ψ^3 *system.species.size[k].^3)/π
-            m̄ += m[k]*ρ̄[k]*system.species.nbeads[i]
+            m̄ += m[k]*ρ̄[k]
             η += m[k]*ρ̄[k]*system.species.size[k]^3
-            ∑ρ̄i += ρ̄[k]
+            ∑ρ̄i += ρ̄[k]/system.species.nbeads[i]
         end
     end
     m̄ /= ∑ρ̄i
@@ -163,7 +161,7 @@ end
 #     Δout = 
     
 #     for (idx,(i,j),(a,b)) in indices(κ)
-#         k,l = get_group_idx(model,i,j,a,b)
+#         k,l = get_chain_idx(model,i,j,a,b)
 #         gkl = @f(g_hs,k,l,_data)
 #         Δout[idx] = gkl*σ[k,l]^3*(exp(ϵ_assoc[i,j][a,b]/T)-1)*κ[i,j][a,b]
 #     end
@@ -177,7 +175,7 @@ function Δ(model::HeterogcPCPSAFT, T, n, n₃, nᵥ, i, j, a, b)
     _0 = zero(T+first(n)+first(n₃)+first(nᵥ)+first(κijab))
     iszero(κijab) && return _0
 
-    k,l = get_group_idx(model,i,j,a,b)
+    k,l = get_chain_idx(model,i,j,a,b)
     σ = model.params.sigma.values[k,l]
     m = model.params.segment.values
     HSd = d(model,1e-3,T,onevec(model))
