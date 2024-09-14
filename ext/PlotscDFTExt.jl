@@ -27,50 +27,44 @@ function Plots.plot(system::cDFT.DFTSystem; x_units=:normalized, y_units=:mass)
     ymax = 0.
     species_id = 1
     bead_id = 1
-    for i in 1:nb
-        if species[species_id].nbeads > 1
-            species_name = model.components[species_id]
-            group_id = species[species_id].bead_id[bead_id]
-            group_name = model.groups.flattenedgroups[group_id]
-            name = "$species_name $group_name $bead_id"
-            Mw = model.params.Mw[group_id]
-            norm_const = model.params.segment[group_id]*species[species_id].size[bead_id]^3*cDFT.N_A
-        else
-            species_name = model.components[species_id]
-            name = "$species_name"
-            Mw = model.params.Mw[species_id]
-            norm_const = model.params.segment[species_id]*species[species_id].size[species_id]^3*cDFT.N_A
-        end
+    for i in cDFT.@comps
+        for k in cDFT.@chain(i)
+            if species.nbeads[i] > 1
+                species_name = model.components[i]
+                group_name = model.groups.flattenedgroups[k]
+                name = "$species_name $group_name"
+                Mw = model.params.Mw[k]
+                norm_const = model.params.segment[k]*species.size[k]^3*cDFT.N_A
+            else
+                species_name = model.components[i]
+                name = "$species_name"
+                Mw = model.params.Mw[i]
+                norm_const = model.params.segment[i]*species.size[i]^3*cDFT.N_A
+            end
 
-        if x_units == :normalized
-            X = z./L
-        elseif x_units == :angstrom
-            X = z.*1e10
-        elseif x_units == :nanometer
-            X = z.*1e9
-        else
-            X = z
-        end
+            if x_units == :normalized
+                X = z./L
+            elseif x_units == :angstrom
+                X = z.*1e10
+            elseif x_units == :nanometer
+                X = z.*1e9
+            else
+                X = z
+            end
 
-        if y_units == :normalized
-            Y = profiles[i].(z).*norm_const
-            y_norm = "σ³"
-        elseif y_units == :mass
-            Y = profiles[i].(z).*Mw/1e3
-            y_norm = " / (kg/m³)"
-        else
-            Y = profiles[i].(z)
-            y_norm = " / (mol/m³)"
-        end
+            if y_units == :normalized
+                Y = profiles[k].(z).*norm_const
+                y_norm = "σ³"
+            elseif y_units == :mass
+                Y = profiles[k].(z).*Mw/1e3
+                y_norm = " / (kg/m³)"
+            else
+                Y = profiles[k].(z)
+                y_norm = " / (mol/m³)"
+            end
         
-        Plots.plot!(plt,X,Y,label="$name",linewidth=3)
-        ymax = max(ymax,maximum(Y))
-
-        if bead_id == species[species_id].nbeads
-            species_id += 1
-            bead_id = 1
-        else
-            bead_id += 1
+            Plots.plot!(plt,X,Y,label="$name",linewidth=3)
+            ymax = max(ymax,maximum(Y))
         end
     end
     
@@ -103,6 +97,8 @@ function Plots.plot(system::cDFT.DFTSystem; x_units=:normalized, y_units=:mass)
     else
         Plots.ylabel!(plt,"ρ / (mol/m³)")
     end
+
+    Plots.plot!(plt,legend=:topleft)
 
     return plt
 end
