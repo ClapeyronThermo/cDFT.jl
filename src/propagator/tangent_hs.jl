@@ -1,70 +1,86 @@
 
-function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res, species_id)
+function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res)
     ρ = system.profiles
+    model = system.model
     structure = system.structure
     ngrid = structure.ngrid
+    species = system.species
     nbeads = sum(system.species.nbeads)
-    connectivity = system.model.groups.n_intergroups[species_id]
     z = system.profiles[1].coords
 
-    I1 = ones(Float64, ngrid, nbeads)
-    I2 = ones(Float64, ngrid, nbeads)
+    Gcα = ones(Float64, ngrid, nbeads, nbeads)
+    Gp  = ones(Float64, ngrid, nbeads)
 
-    if system.species.nbeads[species_id] == 1
-        return I1, I2
+    levels = species.levels
+    for i in @comps
+        if system.species.nbeads[i] == 1
+            Gp[:,@chain(i)] = 1.
+        else
+            n_intergroups = model.groups.n_intergroups[i] .== 1
+            i_groups = model.groups.i_groups[i]
+            # Get the levels
+            n_levels = maximum(levels[i_groups])
+
+            is_leaf = sum(n_intergroups,dims=1).==1
+            i_root = i_groups[levels[i_groups].==1][1]
+            # Get Gαk
+            for L in n_levels:-1:1
+                i_group_level = i_groups[findall(levels[i_groups].==L)]
+                for k in i_group_level
+                    k_children = findall(n_intergroups[k,:] .&& levels.==L+1)
+                    if !is_leaf[k]
+                        for α in k_children
+                            β = findall(n_intergroups[α,:] .&& levels.==L+2)
+                            if isempty(β)
+                                _Gcα = @. exp(-δf_res[:,α])
+                            else
+                                _Gcα = exp.(-δf_res[:,α]).*prod(Gcα[:,α,β],dims=(2,3))
+                            end
+
+                            lim = (system.species.size[k]+system.species.size[α])/2
+                            bounds = system.structure.bounds.+(-lim,lim)
+                            boundary_conditions = ρ[k].boundary_conditions
+                            bc1 = typeof(boundary_conditions[1])(_Gcα[1],-1)
+                            bc2 = typeof(boundary_conditions[2])(_Gcα[end],1)
+                            _Gcα = DensityProfile(_Gcα,z,bounds,(bc1,bc2))
+                            for j in 1:ngrid
+                                Gcα[j,k,α] = ∫ρdz(structure, _Gcα, z[j], lim)./(2*lim)
+                            end
+                        end
+                    end
+                end
+            end
+
+            # Get I2
+            for L in 1:n_levels
+                i_group_level = i_groups[findall(levels[i_groups].==L)]
+                for k in i_group_level
+                    if k == i_root
+                        Gp[:,k] .= 1.
+                    else
+                        l = findall(n_intergroups[k,:] .&& levels.==L-1)[1]
+
+                        α = findall(n_intergroups[l,:] .&& levels.==L)
+                        α = α[α.!=k]
+                    
+                        _Gp = exp.(-δf_res[:,l]).*Gp[:,l].*prod(Gcα[:,l,α],dims=(2,3))
+
+                        lim = (system.species.size[k]+system.species.size[l])/2
+                        bounds = system.structure.bounds.+(-lim,lim)
+                        boundary_conditions = ρ[k].boundary_conditions
+                        bc1 = typeof(boundary_conditions[1])(_Gp[1],-1)
+                        bc2 = typeof(boundary_conditions[2])(_Gp[end],1)
+                        _Gp = DensityProfile(_Gp,z,bounds,(bc1,bc2))
+                        for j in 1:ngrid
+                            Gp[j,k] = ∫ρdz(structure, _Gp, z[j], lim)./(2*lim)
+                        end
+                    end
+                end
+            end
+        end
     end
 
-    leaves = findall(sum(connectivity; dims=1).==1)
-    id1_1 = leaves[1][2]
-    id1_2 = findfirst(connectivity[:,id1_1].==1)
-    id2_1 = leaves[2][2]
-    id2_2 = findfirst(connectivity[:,id2_1].==1)
-
-    for i in 2:system.species.nbeads[species_id]
-        _I1 = @. I1[:,id1_1]*exp(-δf_res[:,id1_1])
-
-        lim = (system.species.size[id1_1]+system.species.size[id1_2])/2
-        bounds = system.structure.bounds.+(-lim,lim)
-        boundary_conditions = ρ[i].boundary_conditions
-        bc1 = typeof(boundary_conditions[1])(_I1[1],-1)
-        bc2 = typeof(boundary_conditions[2])(_I1[end],1)
-
-        _I1 = DensityProfile(_I1,z,bounds,(bc1,bc2))
-        
-        for j in 1:ngrid
-            I1[j,id1_2] = ∫ρdz(structure, _I1, z[j], lim)./(2*lim)
-        end
-
-        id1_next = findall(connectivity[:,id1_2].==1)
-        if length(id1_next) > 1
-            id1_next = id1_next[id1_next.!=id1_1]
-            id1_1 = deepcopy(id1_2)
-            id1_2 = deepcopy(id1_next[1])
-        end
-
-        _I2 = @. I2[:,id2_1]*exp(-δf_res[:,id2_1])
-
-        lim = (system.species.size[id2_1]+system.species.size[id2_2])/2
-        bounds = system.structure.bounds.+(-lim,lim)
-        boundary_conditions = ρ[i].boundary_conditions
-        bc1 = typeof(boundary_conditions[1])(_I2[1],-1)
-        bc2 = typeof(boundary_conditions[2])(_I2[end],1)
-
-        _I2 = DensityProfile(_I2,z,bounds,(bc1,bc2))
-        
-        for j in 1:ngrid
-            I2[j,id2_2] = ∫ρdz(structure, _I2, z[j], lim)./(2*lim)
-        end
-
-        id2_next = findall(connectivity[:,id2_2].==1)
-        if length(id2_next) > 1
-            id2_next = id2_next[id2_next.!=id2_1]
-            id2_1 = deepcopy(id2_2)
-            id2_2 = deepcopy(id2_next[1])
-        end
-    end
-
-    return I1, I2
+    return Gcα, Gp
 end
 
 export converge!

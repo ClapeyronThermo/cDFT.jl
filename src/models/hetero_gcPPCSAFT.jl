@@ -14,6 +14,7 @@ end
 struct gcPCPSAFTSpecies <: DFTSpecies
     nbeads::Vector{Int64}
     size::Vector{Float64}
+    levels::Vector{Int64}
     bulk_density::Vector{Float64}
     chempot_res::Vector{Float64}
 end
@@ -25,7 +26,28 @@ function get_species(model::HeterogcPCPSAFT,structure::DFTStructure)
     ρbulk = z./v
     μres = Clapeyron.VT_chemical_potential_res(model, v, T, z) / Clapeyron.R̄ / T
     nbeads = length.(model.groups.groups)
-    return gcPCPSAFTSpecies(nbeads,HSd,ρbulk,μres)
+
+    levels = zeros(Int, sum(nbeads))
+
+    for i in @comps
+        i_groups = model.groups.i_groups[i]
+        bond_mat = Bool.(model.groups.n_intergroups[i])
+        nbonds = sum(bond_mat,dims=2)[:]
+        is_leaf = nbonds .== 1
+        i_root = findfirst(nbonds .== maximum(nbonds[i_groups]))
+        levels[i_root] = 1
+    
+        idx_current_level = i_root
+        is_bonded = bond_mat[idx_current_level,:]
+        k = 1
+        while any(levels[i_groups] .== 0)
+            levels[is_bonded] .= k+1
+            idx_next_level = findall(levels .== k+1 .&& .!(is_leaf))
+            is_bonded = (sum(bond_mat[idx_next_level,:],dims=1)[:].==1 .&& levels.==0)
+            k+=1
+        end
+    end
+    return gcPCPSAFTSpecies(nbeads,HSd,levels,ρbulk,μres)
 end
 
 function get_fields(model::HeterogcPCPSAFT)

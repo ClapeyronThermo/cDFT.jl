@@ -28,16 +28,21 @@ function converge!(system::DFTSystem)
         end
 
         δfδρ_res = δFδρ_res(system)
-        I1, I2 = 1.,1.
+        Gcα, Gp = propagate(system, system.propagator, δfδρ_res)
+
         for i in @comps
-            I1, I2 = propagate(system, system.propagator, δfδρ_res, i)
             for k in @chain(i)
+                if system.species.nbeads[i] != 1
+                    α = findall(model.groups.n_intergroups[i][k,:] .== 1 .&& species.levels .> species.levels[k])
+                else
+                    α = k
+                end
+
                 Threads.@threads for j in 1:ngrid
-                    ln_Gx[j,k] = log(species.bulk_density[i]).+(species.chempot_res[i] .- δfδρ_res[j,k]).+log(I1[j,k].*I2[j,k])
+                    ln_Gx[j,k] = log(species.bulk_density[i]) + (species.chempot_res[i] - δfδρ_res[j,k]) + log(Gp[j,k]) + sum(log.(Gcα[j,k,α]))
                 end
             end
         end
-        
         ln_G = vec(ln_Gx)
         
         return ln_G
