@@ -10,13 +10,17 @@ function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res, s
     I1 = ones(Float64, ngrid, nbeads)
     I2 = ones(Float64, ngrid, nbeads)
 
+    if system.species.nbeads[species_id] == 1
+        return I1, I2
+    end
+
     leaves = findall(sum(connectivity; dims=1).==1)
     id1_1 = leaves[1][2]
     id1_2 = findfirst(connectivity[:,id1_1].==1)
     id2_1 = leaves[2][2]
     id2_2 = findfirst(connectivity[:,id2_1].==1)
 
-    for i in 2:nbeads
+    for i in 2:system.species.nbeads[species_id]
         _I1 = @. I1[:,id1_1]*exp(-δf_res[:,id1_1])
 
         lim = (system.species.size[id1_1]+system.species.size[id1_2])/2

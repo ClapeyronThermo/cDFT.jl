@@ -20,9 +20,6 @@ using StaticArrays
 #end
 
 include("base/base.jl")
-include("fields/fields.jl")
-include("models/models.jl")
-include("structure/structure.jl")
 
 include("utils/base.jl")
 include("utils/connectivity.jl")
@@ -30,7 +27,12 @@ include("utils/expand_model.jl")
 include("utils/boundary_conditions.jl")
 include("utils/profiles.jl")
 include("utils/integrals.jl")
-include("utils/anderson.jl") #TODO, port this to Clapeyron
+include("utils/anderson.jl")
+
+include("fields/fields.jl")
+include("models/models.jl")
+include("structure/structure.jl")
+ #TODO, port this to Clapeyron
 
 include("propagator/propagator.jl")
 
