@@ -58,12 +58,9 @@ function surface_tension(system::DFTSystem)
     chem_pot_term = 0.
     bead_id = 1
     species_id = 1
-    for i in 1:length(ρ)
-        chem_pot_term += μ[species_id]*∫(ρ[i].density,ρ[i].mesh_size)/system.species.nbeads[species_id]
-        bead_id += 1
-        if bead_id > system.species.nbeads[species_id]
-            bead_id = 1
-            species_id += 1
+    for i in @comps
+        for k in @chain(i)
+            chem_pot_term += μ[i]*∫(ρ[k].density,ρ[k].mesh_size)/system.species.nbeads[i]
         end
     end
     return F*k_B*T-chem_pot_term+p*∫(ones(ngrid),ρ[1].mesh_size)
