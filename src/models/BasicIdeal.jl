@@ -17,7 +17,7 @@ function F_ideal(system::DFTSystem)
     n = zeros(ngrid,length(model))
     for i in @comps
         for k in @chain(i)
-            n[:,i] .+= ρ[k].density/system.species.nbeads[i]
+            n[:,i] += ρ[k].density/system.species.nbeads[i]
         end
     end
     

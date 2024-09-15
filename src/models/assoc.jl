@@ -26,7 +26,11 @@ function f_assoc(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
         Xᵢ = X_[i]
         resᵢₐ = _0
         for (a,nᵢₐ) ∈ pairs(ni)
-            k = model.sites.site_translator[i][a][1]
+            if isnothing(model.sites.site_translator)
+                k = i
+            else
+                k = model.sites.site_translator[i][a][1]
+            end
             Xᵢₐ = Xᵢ[a]
             nᵢₐ = ni[a]
             resᵢₐ +=  n₀[k]*ξ[k]*nᵢₐ* (log(Xᵢₐ) - Xᵢₐ/2 + 0.5)

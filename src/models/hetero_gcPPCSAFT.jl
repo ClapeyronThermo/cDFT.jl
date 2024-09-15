@@ -1,4 +1,4 @@
-using Clapeyron: HeterogcPCPSAFT, get_chain_idx
+using Clapeyron: HeterogcPCPSAFT
 
 function DFTSystem(model::HeterogcPCPSAFT,structure::DFTStructure,options::DFTOptions)
     model = expand_model(model)
@@ -7,7 +7,7 @@ function DFTSystem(model::HeterogcPCPSAFT,structure::DFTStructure,options::DFTOp
     propagator = get_propagator(model)
     profiles = initialize_profiles(model,structure, species)
     group_idx = reduce(vcat,model.groups.i_groups)
-    profiles = profiles[group_idx]
+    profiles[group_idx] = profiles
     return DFTSystem(model, species, structure, profiles, fields, propagator, options)
 end
 
