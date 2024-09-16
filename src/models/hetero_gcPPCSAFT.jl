@@ -34,7 +34,7 @@ function get_species(model::HeterogcPCPSAFT,structure::DFTStructure)
         bond_mat = Bool.(model.groups.n_intergroups[i])
         nbonds = sum(bond_mat,dims=2)[:]
         is_leaf = nbonds .== 1
-        i_root = findfirst(nbonds .== maximum(nbonds[i_groups]))
+        i_root = i_groups[findfirst(nbonds[i_groups] .== maximum(nbonds[i_groups]))]
         levels[i_root] = 1
     
         idx_current_level = i_root

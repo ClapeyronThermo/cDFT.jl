@@ -13,9 +13,7 @@ function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res)
 
     levels = species.levels
     for i in @comps
-        if system.species.nbeads[i] == 1
-            Gp[:,@chain(i)] = 1.
-        else
+        if system.species.nbeads[i] !== 1
             n_intergroups = model.groups.n_intergroups[i] .== 1
             i_groups = model.groups.i_groups[i]
             # Get the levels
