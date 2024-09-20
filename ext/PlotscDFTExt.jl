@@ -33,12 +33,10 @@ function Plots.plot(system::cDFT.DFTSystem; x_units=:normalized, y_units=:mass)
                 species_name = model.components[i]
                 group_name = model.groups.flattenedgroups[k]
                 name = "$species_name $group_name"
-                Mw = model.params.Mw[k]
                 norm_const = model.params.segment[k]*species.size[k]^3*cDFT.N_A
             else
                 species_name = model.components[i]
                 name = "$species_name"
-                Mw = model.params.Mw[i]
                 norm_const = model.params.segment[i]*species.size[i]^3*cDFT.N_A
             end
 
@@ -56,6 +54,7 @@ function Plots.plot(system::cDFT.DFTSystem; x_units=:normalized, y_units=:mass)
                 Y = profiles[k].(z).*norm_const
                 y_norm = "σ³"
             elseif y_units == :mass
+                Mw = model.params.Mw[k]
                 Y = profiles[k].(z).*Mw/1e3
                 y_norm = " / (kg/m³)"
             else
