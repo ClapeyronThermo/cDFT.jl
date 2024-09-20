@@ -20,25 +20,7 @@ function surface_tension(model::EoSModel, T,x = [1.0])
     system = DFTSystem(model, structure)
 
     converge!(system)
-
-    ρ = system.profiles
-    ngrid = system.structure.ngrid
-
-    F = free_energy(system)
-
-    μ = Clapeyron.VT_chemical_potential(model,vl,T,x)
-    chem_pot_term = 0.
-    bead_id = 1
-    species_id = 1
-    for i in 1:length(ρ)
-        chem_pot_term += μ[species_id]*∫(ρ[i].density,ρ[i].mesh_size)/system.species.nbeads[species_id]
-        bead_id += 1
-        if bead_id > system.species.nbeads[species_id]
-            bead_id = 1
-            species_id += 1
-        end
-    end
-    return F*k_B*T-chem_pot_term+p*∫(ones(ngrid),ρ[1].mesh_size)
+    return surface_tension(system)
 end
 
 function surface_tension(system::DFTSystem)
