@@ -33,49 +33,37 @@ function expand_model(model::EoSModel)
 
     n_groups_cache = Clapeyron.pack_vectors([Float64.(n_flattenedgroups[i]) for i in 1:nspecies])
 
-    if typeof(model.groups) <: Clapeyron.StructGroupParam
-        n_intergroups = Matrix{Int64}[]
-        for i in 1:nspecies
-            _n_intergroups = zeros(Int64,ngroups,ngroups)
-            if length(n_groups[i]) > 1
-                _, group_names, bondmat = cDFT.get_connectivity(model,model.components[i])
-                _groups = getindex.(split.(groups[i],"_"),1)
-                ngroup_types_i = length(model.groups.groups[i])
-                for k in 1:ngroup_types_i
-                    idx_group_i_1 = findall(_groups.==model.groups.groups[i][k])
-                    idx_group_1_2 = findall(group_names.==model.groups.groups[i][k])
-                    for l in 1:ngroup_types_i
-                        idx_group_j_1 = findall(_groups.==model.groups.groups[i][l])
-                        idx_group_j_2 = findall(group_names.==model.groups.groups[i][l])
-                        _n_intergroups[i_groups[i][idx_group_i_1],i_groups[i][idx_group_j_1]] = bondmat[idx_group_1_2,idx_group_j_2]
-                    end
+    n_intergroups = Matrix{Int64}[]
+    for i in 1:nspecies
+        _n_intergroups = zeros(Int64,ngroups,ngroups)
+        if length(n_groups[i]) > 1
+            _, group_names, bondmat = cDFT.get_connectivity(model,model.components[i])
+            _groups = getindex.(split.(groups[i],"_"),1)
+            ngroup_types_i = length(model.groups.groups[i])
+            for k in 1:ngroup_types_i
+                idx_group_i_1 = findall(_groups.==model.groups.groups[i][k])
+                idx_group_1_2 = findall(group_names.==model.groups.groups[i][k])
+                for l in 1:ngroup_types_i
+                    idx_group_j_1 = findall(_groups.==model.groups.groups[i][l])
+                    idx_group_j_2 = findall(group_names.==model.groups.groups[i][l])
+                    _n_intergroups[i_groups[i][idx_group_i_1],i_groups[i][idx_group_j_1]] = bondmat[idx_group_1_2,idx_group_j_2]
                 end
-                append!(n_intergroups, [_n_intergroups])
-            else
-                append!(n_intergroups, [_n_intergroups])
             end
+            append!(n_intergroups, [_n_intergroups])
+        else
+            append!(n_intergroups, [_n_intergroups])
         end
-        groupsparams = Clapeyron.StructGroupParam(model.components,
-                                        groups,
-                                        model.groups.grouptype,
-                                        n_groups,
-                                        n_intergroups,
-                                        i_groups,
-                                        flattenedgroups,
-                                        n_flattenedgroups,
-                                        n_groups_cache,
-                                        model.groups.sourcecsvs)
-    else
-        groupsparams = GroupParam(model.components,
-                                groups,
-                                model.groups.grouptype,
-                                n_groups,
-                                i_groups,
-                                flattenedgroups,
-                                n_flattenedgroups,
-                                n_groups_cache,
-                                model.groups.sourcecsvs)
     end
+    groupsparams = Clapeyron.StructGroupParam(model.components,
+                                    groups,
+                                    model.groups.grouptype,
+                                    n_groups,
+                                    n_intergroups,
+                                    i_groups,
+                                    flattenedgroups,
+                                    n_flattenedgroups,
+                                    n_groups_cache,
+                                    model.groups.sourcecsvs)
 
 
     # Expand the sites 
