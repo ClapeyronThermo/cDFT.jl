@@ -4,12 +4,13 @@ struct AndersonFixPoint{T<:Real} <: Solvers.AbstractFixPoint
     damping::T
     picard_damping::T
     drop_tol::T
+    verbose::Bool
 end
 
-AndersonFixPoint(;picard_damping=1e-2,damping=1e-2,memory=50,delay=100,drop_tol=Inf) = AndersonFixPoint(delay,memory,damping,picard_damping,drop_tol)
+AndersonFixPoint(;picard_damping=1e-2,damping=1e-2,memory=50,delay=100,drop_tol=Inf, verbose = false) = AndersonFixPoint(delay,memory,damping,picard_damping,drop_tol, verbose)
 
 function Solvers.promote_method(method::AndersonFixPoint,T)
-    return AndersonFixPoint(method.delay,method.memory,T(method.damping),T(method.picard_damping),T(method.drop_tol))
+    return AndersonFixPoint(method.delay,method.memory,T(method.damping),T(method.picard_damping),T(method.drop_tol),method.verbose)
 end
 
 rtol_anderson(output,input) = maximum(x->(abs(first(x) - last(x))),zip(output,input))/maximum(output)
@@ -98,7 +99,7 @@ function Solvers._fixpoint(f::F,
         finite_check = NLSolvers.isallfinite(x)
 
         # Check for convergence
-        if mod(k,10) == 0
+        if mod(k,10) == 0 && method.verbose
             println(rtol_anderson(fval,x))
         end
         if rtol_anderson(fval,x) < rtol || !finite_check
