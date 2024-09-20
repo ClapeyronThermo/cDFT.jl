@@ -30,30 +30,18 @@ Obtain the functional derivatives of the residual free energy of the system for 
 
 The output is a 2D array with the dimensions `(ngrid,nc)`, where `ngrid` is the number of grid points, and `nc` is the number of components in the model. The values are normalised by `kB*T`.
 """
-function δFδρ_res(system::DFTSystem)
-    model = system.model
-    fields = system.fields
-    ρ = system.profiles
-    z = ρ[1].coords
-    nb = length(ρ)
-    nf = length(fields)
-    dz = system.profiles[1].mesh_size
-    ngrid = system.structure.ngrid
+function δFδρ_res!(system::DFTSystem)
+    structure = system.structure
+    evaluate_field!(system)
 
-    n = evaluate_field(system)
+    f(x) = f_res(system,system.model,x)
 
-    f(x) = f_res(system,model,x)
-    df(x) = ForwardDiff.gradient(f,x)
 
-    δf = zeros(ngrid,nf,nb)
-
-    Threads.@threads for i in 1:ngrid
-        δf[i,:,:] = df(n[i,:,:])
+    Threads.@threads for i in @grid
+        system.cache.n[i,:,:] = ForwardDiff.gradient(f,system.cache.n[i,:,:])
     end
 
-    δFδρ_res = integrate_field(system, δf)
-
-    return δFδρ_res
+    integrate_field!(system)
 end
 
 include("assoc.jl")

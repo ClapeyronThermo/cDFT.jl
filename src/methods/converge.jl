@@ -27,8 +27,8 @@ function converge!(system::DFTSystem)
             update_profile!(system.profiles[i], exp.(@view(ln_x[:,i])))
         end
 
-        δfδρ_res = δFδρ_res(system)
-        Gcα, Gp = propagate(system, system.propagator, δfδρ_res)
+        δFδρ_res(system)
+        Gcα, Gp = propagate(system, system.propagator)
 
         for i in @comps
             for k in @chain(i)

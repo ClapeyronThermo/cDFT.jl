@@ -21,6 +21,12 @@ macro chain(component, args...)
     end |> esc
 end
 
+macro grid(args...)
+    quote
+        1:structure.ngrid
+    end |> esc
+end
+
 function get_chain_idx(model::EoSModel,i,j,a,b)
     return get_chain_idx(model.sites,i,j,a,b)
 end

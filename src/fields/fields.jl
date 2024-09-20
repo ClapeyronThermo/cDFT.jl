@@ -7,19 +7,17 @@ This function will obtain every field used in the system (listed in `system.fiel
 
 This is the macro function that will call `evaluate_field(system,field)` for each field in the system.
 """
-function evaluate_field(system::DFTSystem)
+function evaluate_field!(system::DFTSystem)
     fields = system.fields
     nf = length(fields)
-    nb = length(system.profiles)
-    ngrid = system.structure.ngrid
-
-    n = zeros(ngrid,nf,nb)
+    fields = system.fields
+    profiles = system.profiles
+    species = system.species
+    structure = system.structure
 
     for i in 1:nf
-        n[:,i,:] = evaluate_field(system,fields[i])
+        system.cache.n[:,i,:] .= evaluate_field(system.cache.n[:,i,:],structure,fields[i],profiles,species)
     end
-    
-    return n
 end
 
 """
@@ -29,31 +27,21 @@ This function will obtain, for all fields, the functional derivative for each sp
 
 This is the macro function that will call `integrate_field(system,field,δf)` for each field in the system.
 """
-function integrate_field(system::DFTSystem, δf)
-    ρ = system.profiles
+function integrate_field!(system::DFTSystem)
+    profiles = system.profiles
     fields = system.fields
     species = system.species
+    structure = system.structure
 
-    z = ρ[1].coords
-    ngrid = system.structure.ngrid
-    nb  = length(ρ)
+    nb  = length(profiles)
     nf = length(fields)
 
-    δFδρ_res = zeros(ngrid,nb)
 
-    for j in 1:nf
-        ∂f = DensityProfile[]
-        
+    for j in 1:nf        
         for i in 1:nb
-            lim = species.size[i]
-            bounds = ρ[i].bounds.+(-lim,lim)
-            boundary_conditions = ρ[i].boundary_conditions
-            bc1 = typeof(boundary_conditions[1])(δf[1,j,i],-1)
-            bc2 = typeof(boundary_conditions[2])(δf[end,j,i],1)
-            push!(∂f, DensityProfile(@view(δf[:,j,i]),z,bounds,(bc1,bc2)))
+            update_profile!(fields[j].profiles[i],system.cache.n[:,j,i])
         end
-        δFδρ_res += integrate_field(system,fields[j],∂f)
+        system.cache.n[:,1,:] += integrate_field(system.cache.n[:,1,:],structure,fields[j],profiles,species)
     end
 
-    return δFδρ_res
 end

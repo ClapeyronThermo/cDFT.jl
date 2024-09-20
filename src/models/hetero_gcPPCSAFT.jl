@@ -3,12 +3,13 @@ using Clapeyron: HeterogcPCPSAFT
 function DFTSystem(model::HeterogcPCPSAFT,structure::DFTStructure,options::DFTOptions)
     model = expand_model(model)
     species = get_species(model, structure)
-    fields = get_fields(model, species, structure)
     propagator = get_propagator(model)
     profiles = initialize_profiles(model,structure, species)
     group_idx = reduce(vcat,model.groups.i_groups)
     profiles[group_idx] = profiles
-    return DFTSystem(model, species, structure, profiles, fields, propagator, options)
+    fields = get_fields(model, species, structure, profiles)
+    cache = DFTCache(structure.ngrid,length(fields),sum(species.nbeads))
+    return DFTSystem(model, species, structure, profiles, fields, propagator, cache, options)
 end
 
 struct gcPCPSAFTSpecies <: DFTSpecies
@@ -50,14 +51,14 @@ function get_species(model::HeterogcPCPSAFT,structure::DFTStructure)
     return gcPCPSAFTSpecies(nbeads,HSd,levels,ρbulk,μres)
 end
 
-function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure)
+function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure, profiles::Vector{DensityProfile})
     nb = length(model.groups.flattenedgroups)
-    return [WeightedDensity(:ρ,zeros(nb)),
-            WeightedDensity(:∫ρdz,0.5*ones(nb)),
-            WeightedDensity(:∫ρz²dz,0.5*ones(nb)),
-            WeightedDensity(:∫ρzdz,0.5*ones(nb)),
-            WeightedDensity(:∫ρz²dz,ones(nb)),
-            WeightedDensity(:∫ρz²dz,1.5357*ones(nb))]
+    return [WeightedDensity(:ρ,zeros(nb),species,profiles),
+            WeightedDensity(:∫ρdz,0.5*ones(nb),species,profiles),
+            WeightedDensity(:∫ρz²dz,0.5*ones(nb),species,profiles),
+            WeightedDensity(:∫ρzdz,0.5*ones(nb),species,profiles),
+            WeightedDensity(:∫ρz²dz,ones(nb),species,profiles),
+            WeightedDensity(:∫ρz²dz,1.5357*ones(nb),species,profiles)]
 end
 
 function get_propagator(model::HeterogcPCPSAFT)

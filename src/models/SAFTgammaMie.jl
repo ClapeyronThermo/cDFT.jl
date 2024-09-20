@@ -9,7 +9,8 @@ function DFTSystem(model::SAFTgammaMieModel,structure::DFTStructure,options::DFT
     profiles = initialize_profiles(model,structure, species)
     group_idx = reduce(vcat,model.groups.i_groups)
     profiles[group_idx] = profiles
-    return DFTSystem(model, species, structure, profiles, fields, propagator, options)
+    cache = DFTCache(structure.ngrid,length(fields),sum(species.nbeads))
+    return DFTSystem(model, species, structure, profiles, fields, propagator, cache, options)
 end
 
 struct SAFTgammaMieSpecies <: DFTSpecies

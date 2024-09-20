@@ -5,6 +5,7 @@ abstract type DFTPropagator end
 
 include("devices.jl")
 include("structure.jl")
+include("cache.jl")
 
 """
     DFTSystem(model::EoSModel, species::DFTSpecies, structure::DFTStructure, profiles::Vector{DFTProfile}, fields::Vector{DFTField}, options::DFTOptions)
@@ -39,6 +40,7 @@ struct DFTSystem
     profiles::Vector{DFTProfile}
     fields::Vector{DFTField}
     propagator::DFTPropagator
+    cache::DFTCache
     options::DFTOptions
 end
 
@@ -48,10 +50,11 @@ end
 
 function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
     species = get_species(model, structure)
-    fields = get_fields(model, species, structure)
     propagator = get_propagator(model)
     profiles = initialize_profiles(model,structure, species)
-    return DFTSystem(model, species, structure, profiles, fields, propagator, options)
+    fields = get_fields(model, species, structure, profiles)
+    cache = DFTCache(structure.ngrid,length(fields),sum(species.nbeads))
+    return DFTSystem(model, species, structure, profiles, fields, propagator, cache, options)
 end
 
 export DFTSystem
