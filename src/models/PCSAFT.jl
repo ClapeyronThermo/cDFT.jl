@@ -21,7 +21,7 @@ end
 
 For a given `model`, obtain all of the fields that will be needed to perform the DFT calculation. This function should return a vector of `DFTField`s.
 """
-function get_fields(model::PCSAFTModel)
+function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure)
     nc = length(model)
     return [WeightedDensity(:ρ,zeros(nc)),
             WeightedDensity(:∫ρdz,0.5*ones(nc)),

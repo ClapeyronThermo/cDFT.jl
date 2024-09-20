@@ -3,7 +3,7 @@ using Clapeyron: HeterogcPCPSAFT
 function DFTSystem(model::HeterogcPCPSAFT,structure::DFTStructure,options::DFTOptions)
     model = expand_model(model)
     species = get_species(model, structure)
-    fields = get_fields(model)
+    fields = get_fields(model, species, structure)
     propagator = get_propagator(model)
     profiles = initialize_profiles(model,structure, species)
     group_idx = reduce(vcat,model.groups.i_groups)
@@ -50,7 +50,7 @@ function get_species(model::HeterogcPCPSAFT,structure::DFTStructure)
     return gcPCPSAFTSpecies(nbeads,HSd,levels,ρbulk,μres)
 end
 
-function get_fields(model::HeterogcPCPSAFT)
+function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure)
     nb = length(model.groups.flattenedgroups)
     return [WeightedDensity(:ρ,zeros(nb)),
             WeightedDensity(:∫ρdz,0.5*ones(nb)),

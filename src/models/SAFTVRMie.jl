@@ -10,15 +10,21 @@ struct SAFTVRMieSpecies <: DFTSpecies
     chempot_res::Vector{Float64}
 end
 
-function get_fields(model::SAFTVRMieModel)
+function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTStructure)
     nc = length(model)
+    λ_r = diagvalues(model.params.lambda_r.values)
+    λ_a = diagvalues(model.params.lambda_a.values)
+    σ   = diagvalues(model.params.sigma.values)
+    C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
+    x = species.size ./ σ
+    ψ = @. cbrt(3*C*x^3*(x^-λ_a/(λ_a-3)-x^-λ_r/(λ_r-3)))
     return [WeightedDensity(:ρ,zeros(nc)),
             WeightedDensity(:∫ρdz,0.5*ones(nc)),
             WeightedDensity(:∫ρz²dz,0.5*ones(nc)),
             WeightedDensity(:∫ρzdz,0.5*ones(nc)),
             WeightedDensity(:∫ρz²dz,ones(nc)),
             WeightedDensity(:∫ρdz,ones(nc)),
-            WeightedDensity(:∫ρz²dz,1.3862*ones(nc))]
+            WeightedDensity(:∫ρz²dz,ψ)]
 end
 
 function get_species(model::SAFTVRMieModel,structure::DFTStructure)
@@ -135,15 +141,11 @@ function f_chain(system::DFTSystem, model::SAFTVRMieModel, ρhc, ρ̄hc, _λ)
     end
     
     return -fchain
-    #λ = _λ./(2*HSd) 
-    #yᵈᵈ = @. 1/(1-ζ₃)+1.5*HSd*ζ₂/(1-ζ₃)^2+0.5*HSd^2*ζ₂^2/(1-ζ₃)^3
-    #f = @. -ρhc*(m-1)*log(yᵈᵈ*λ/ρhc)
-    #return sum(f)
 end
 
 function f_disp(system::DFTSystem, model::SAFTVRMieModel, ρ̄)
     V = nothing
-    ψ = 1.3862
+    ψ = system.fields[end].width
     _d = system.species.size
     (_, T, _) = system.structure.conditions
     m = model.params.segment
@@ -152,7 +154,7 @@ function f_disp(system::DFTSystem, model::SAFTVRMieModel, ρ̄)
     _λa = model.params.lambda_a
     _σ = model.params.sigma
 
-    ρ̄ = ρ̄*3 ./(4*ψ^3 .*_d.^3)/π
+    ρ̄ = ρ̄*3 ./(4*ψ.^3 .*_d.^3)/π
     ∑ρ̄ = sum(ρ̄)
     z = ρ̄ /∑ρ̄
     m̄ = dot(z,m)
@@ -275,6 +277,7 @@ function Δ(model::SAFTVRMieModel, T, n, n₃, nᵥ, i, j, a, b)
     m = model.params.segment.values
     ϵ_assoc = model.params.epsilon_assoc.values
     K = model.params.bondvol.values[i,j][a,b]
+    _0 = zero(T+first(n)+first(n₃)+first(nᵥ)+first(K))
     iszero(K) && return _0
 
     ρ̄ = n₃*3*2 ./(_d.^3)/π

@@ -48,7 +48,7 @@ end
 
 function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
     species = get_species(model, structure)
-    fields = get_fields(model)
+    fields = get_fields(model, species, structure)
     propagator = get_propagator(model)
     profiles = initialize_profiles(model,structure, species)
     return DFTSystem(model, species, structure, profiles, fields, propagator, options)
