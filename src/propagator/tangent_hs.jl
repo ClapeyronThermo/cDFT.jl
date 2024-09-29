@@ -20,7 +20,7 @@ function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res)
             n_levels = maximum(levels[i_groups])
 
             i_root = i_groups[levels[i_groups].==1][1]
-            is_leaf = sum(n_intergroups,dims=1).==1 .&& levels.!=1
+            is_leaf = sum(n_intergroups,dims=1).==1 .&& (levels.!=1)'
             # Get Gαk
             for L in n_levels:-1:1
                 i_group_level = i_groups[findall(levels[i_groups].==L)]
