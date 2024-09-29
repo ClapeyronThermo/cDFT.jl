@@ -2,6 +2,7 @@ tanh_prof(x,start,stop,shift,coef) = 1/2*(start-stop)*tanh((x-shift)*coef)+1/2*(
 
 include("surface_tension.jl")
 include("interfacial_tension.jl")
+include("external_field.jl")
 
 """
     initialize_profiles(model::EoSModel,structure::DFTStructure)

@@ -29,7 +29,9 @@ function converge!(system::DFTSystem)
 
         δfδρ_res = δFδρ_res(system)
         Gcα, Gp = propagate(system, system.propagator, δfδρ_res)
-
+        Vext = evaluate_external_field(system)
+        # println(δfδρ_res)
+        # println(species.chempot_res)
         for i in @comps
             for k in @chain(i)
                 if system.species.nbeads[i] != 1
@@ -39,7 +41,7 @@ function converge!(system::DFTSystem)
                 end
 
                 Threads.@threads for j in 1:ngrid
-                    ln_Gx[j,k] = log(species.bulk_density[i]) + (species.chempot_res[i] - δfδρ_res[j,k]) + log(Gp[j,k]) + sum(log.(Gcα[j,k,α]))
+                    ln_Gx[j,k] = log(species.bulk_density[i]) + (species.chempot_res[i] - δfδρ_res[j,k]) + log(Gp[j,k]) + sum(log.(Gcα[j,k,α])) - Vext[j,k]
                 end
             end
         end

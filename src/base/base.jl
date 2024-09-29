@@ -2,6 +2,9 @@ abstract type DFTProfile end
 abstract type DFTField end
 abstract type DFTSpecies end
 abstract type DFTPropagator end
+abstract type ExternalFieldModel end
+
+const DB_PATH = normpath(Base.pkgdir(cDFT),"database")
 
 include("devices.jl")
 include("structure.jl")

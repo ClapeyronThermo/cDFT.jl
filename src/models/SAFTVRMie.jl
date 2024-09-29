@@ -30,7 +30,7 @@ end
 function get_species(model::SAFTVRMieModel,structure::DFTStructure)
     (p,T,z) = structure.conditions
     size = d(model,1e-3,T,z)
-    v = volume(model, p, T, z; phase=:l)
+    v = volume(model, p, T, z)
     ρbulk = z./v
     μres = Clapeyron.VT_chemical_potential_res(model, v, T, z) / Clapeyron.R̄ / T
     nc = length(model)

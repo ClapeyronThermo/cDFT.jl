@@ -23,7 +23,7 @@ end
 function get_species(model::SAFTgammaMie,structure::DFTStructure)
     (p,T,z) = structure.conditions
     HSd = d(model,1e-3,T,ones(length(model.groups.flattenedgroups)))
-    v = volume(model, p, T, z; phase=:l)
+    v = volume(model, p, T, z)
     ρbulk = z./v
     μres = Clapeyron.VT_chemical_potential_res(model, v, T, z) / Clapeyron.R̄ / T
     nbeads = length.(model.groups.groups)
@@ -58,7 +58,7 @@ function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DF
     σ   = diagvalues(model.params.sigma.values)
     C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
     x = species.size ./ σ
-    ψ = @. cbrt(3*C*x^3*(x^-λ_a/(λ_a-3)-x^-λ_r/(λ_r-3)))
+    ψ = @. cbrt(3*C*(1/(λ_a-3)-1/(λ_r-3)))
     return [WeightedDensity(:ρ,zeros(nb)),
             WeightedDensity(:∫ρdz,0.5*ones(nb)),
             WeightedDensity(:∫ρz²dz,0.5*ones(nb)),
