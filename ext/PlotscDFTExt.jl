@@ -57,6 +57,9 @@ function Plots.plot(system::cDFT.DFTSystem; x_units=:normalized, y_units=:mass)
                 Mw = model.params.Mw[k]
                 Y = profiles[k].(z).*Mw/1e3
                 y_norm = " / (kg/m³)"
+            elseif y_units == :angstrom
+                Y = profiles[k].(z).*cDFT.N_A/1e30
+                y_norm = " / (kg/m³)"
             else
                 Y = profiles[k].(z)
                 y_norm = " / (mol/m³)"
