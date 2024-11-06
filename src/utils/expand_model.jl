@@ -97,7 +97,7 @@ function expand_model(model::EoSModel)
         sites_per_species = String[]
         _i_flattenedsites = zeros(Int64,nsites)
         _i_sites = Int64[]
-        _n_flattenedsites = zeros(Int64,ngroups)
+        _n_flattenedsites = zeros(Int64,nsites)
         _n_sites = Int64[]
         _site_translator = Tuple{Int64,Int64}[]
         l = 1
