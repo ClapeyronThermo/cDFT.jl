@@ -321,12 +321,30 @@ function expand_model(model::SAFTgammaMieModel)
 
     eos_type = typeof(model)
 
+    vreosparam_type = typeof(model.vrmodel.params)
+    vreosparams = vreosparam_type(model.vrmodel.params.Mw,
+                                  model.vrmodel.params.segment,
+                                  model.vrmodel.params.sigma,
+                                  model.vrmodel.params.lambda_a,
+                                  model.vrmodel.params.lambda_r,
+                                  model.vrmodel.params.epsilon,
+                                  eosparams.epsilon_assoc,
+                                  eosparams.bondvol)
+
+    vrmodel = SAFTVRMie(model.vrmodel.components,
+                        siteparams,
+                        vreosparams,
+                        model.vrmodel.idealmodel,
+                        model.vrmodel.assoc_options,
+                        model.vrmodel.references
+                        )
+
     return new_model = eos_type(model.components,
                                 groupsparams,
                                 siteparams,
                                 eosparams,
                                 model.idealmodel,
-                                model.vrmodel,
+                                vrmodel,
                                 model.epsilon_mixing,
                                 model.assoc_options,
                                 model.references)
