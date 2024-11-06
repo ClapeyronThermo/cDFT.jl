@@ -1,4 +1,4 @@
-using Clapeyron: PCPSAFTModel
+using Clapeyron: PCPSAFTModel, pcp_sigma, pcp_dipole, pcp_dipole2, pcp_epsilon, pcp_segment
 
 """
     PCPSAFT(components::Vector{String})
@@ -16,16 +16,16 @@ end
 function f_polar(system::DFTSystem, model::PCPSAFTModel, ρ̄)
     species = system.species
     (_, T, _) = system.structure.conditions
-    μ̄² = model.params.dipole2.values
+    μ̄² = pcp_dipole2(model)
     has_dp = !all(iszero, μ̄²)
     if !has_dp return zero(T+first(ρ̄)) end
 
     ψ = 1.3862
     HSd = species.size
 
-    m = model.params.segment.values
-    ϵ = model.params.epsilon.values
-    σ = model.params.sigma.values
+    m = pcp_segment(model)
+    ϵ = pcp_epsilon(model)
+    σ = pcp_sigma(model)
 
     ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
     η = π/6*@sum(ρ̄[i]*m[i]*HSd[i]^3)

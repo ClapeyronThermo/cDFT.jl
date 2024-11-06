@@ -66,7 +66,7 @@ end
 
 function f_res(system::DFTSystem, model::HeterogcPCPSAFT,n)
     n1,n2,n3,n4,n5,n6 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4,:]),@view(n[5,:]),@view(n[6,:])
-    return f_hs(system,model,n2,n3,n4) + f_hc(system,model,n1,n5) + f_disp(system,model,n6) + f_assoc(system,model,n2,n3,n4)
+    return f_hs(system,model,n2,n3,n4) + f_hc(system,model,n1,n5) + f_disp(system,model,n6) + f_assoc(system,model,n2,n3,n4) + f_polar(system,model,n6)
 end
 
 function f_hs(system::DFTSystem, model::HeterogcPCPSAFT, n, n₃, nᵥ)
@@ -217,6 +217,43 @@ function Δ(model::HeterogcPCPSAFT, T, n, n₃, nᵥ, i, j, a, b)
     ξ = 1-nᵥ₂^2/n₂^2
     g_hs = 1/(1-n₃₃)+dij*ξ*n₂/(2*(1-n₃₃)^2)+dij^2*n₂^2*ξ/(18*(1-n₃₃)^3)
     return g_hs*σ^3*expm1(ϵ_assoc[i,j][a,b]/T)*κijab
+end
+
+function f_polar(system::DFTSystem, model::HeterogcPCPSAFT, ρ̄)
+    species = system.species
+    (_, T, _) = system.structure.conditions
+    μ̄² = pcp_dipole2(model)
+    has_dp = !all(iszero, μ̄²)
+    if !has_dp return zero(T+first(ρ̄)) end
+
+    ψ = 1.5357
+    HSd = species.size
+
+    m = pcp_segment(model)
+    ϵ = pcp_epsilon(model)
+    σ = pcp_sigma(model)
+
+    _m = model.params.segment.values
+
+    ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
+
+    _ρ̄ = zeros(eltype(ρ̄),length(model))
+    η = zero(first(ρ̄))
+    for i in @comps
+        for k in @groups(i)
+            _ρ̄[i] += ρ̄[k]/system.species.nbeads[i]
+            η += _m[k]*ρ̄[k]*system.species.size[k]^3
+        end
+    end
+
+    η *= π/6
+    ∑ρ̄ = sum(_ρ̄)
+    x = _ρ̄ /∑ρ̄
+    _A₂ = A2(x,m,ϵ,σ,μ̄²,η,∑ρ̄,T)
+    iszero(_A₂) && return zero(_A₂)
+    _A₃ = A3(x,m,ϵ,σ,μ̄²,η,∑ρ̄,T)
+    _a_dd = _A₂^2/(_A₂-_A₃)
+    return ∑ρ̄*_a_dd
 end
 
 function length_scale(model::HeterogcPCPSAFT)
