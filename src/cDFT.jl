@@ -46,6 +46,7 @@ include("models/hetero_gcPPCSAFT.jl")
 include("models/QPPCSAFT.jl")
 include("models/SAFTVRMie.jl")
 include("models/SAFTgammaMie.jl")
+include("models/COFFEE.jl")
 
 include("methods/converge.jl")
 include("methods/surface_tension.jl")
