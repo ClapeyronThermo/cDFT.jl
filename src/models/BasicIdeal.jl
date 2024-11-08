@@ -7,17 +7,17 @@ Obtain the ideal free energy of the system.
 
 The output is a scalar of units J.
 """
-function F_ideal(system::DFTSystem)
+function F_ideal(system::DFTSystem,ρ)
     model = system.model
-    ρ = system.profiles
     ngrid = system.structure.ngrid
+    bounds = system.structure.bounds
 
-    dz = ρ[1].mesh_size
+    dz = (bounds[2]-bounds[1])/ngrid
 
     n = zeros(ngrid,length(model))
     for i in @comps
         for k in @chain(i)
-            n[:,i] += ρ[k].density/system.species.nbeads[i]
+            n[:,i] += ρ[:,k]/system.species.nbeads[i]
         end
     end
     

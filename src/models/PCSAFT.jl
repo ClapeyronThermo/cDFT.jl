@@ -23,13 +23,16 @@ For a given `model`, obtain all of the fields that will be needed to perform the
 """
 function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure)
     nc = length(model)
-    return [WeightedDensity(:ρ,zeros(nc)),
-            WeightedDensity(:∫ρdz,0.5*ones(nc)),
-            WeightedDensity(:∫ρz²dz,0.5*ones(nc)),
-            WeightedDensity(:∫ρzdz,0.5*ones(nc)),
-            WeightedDensity(:∫ρz²dz,ones(nc)),
-            WeightedDensity(:∫ρdz,ones(nc)),
-            WeightedDensity(:∫ρz²dz,1.3862*ones(nc))]
+    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
+    ω = fftfreq(structure.ngrid, f)
+    d = species.size
+    return [WeightedDensity(:ρ,zeros(nc),ω),
+            WeightedDensity(:∫ρdz,0.5*d,ω),
+            WeightedDensity(:∫ρz²dz,0.5*d,ω),
+            WeightedDensity(:∫ρzdz,0.5*d,ω),
+            WeightedDensity(:∫ρz²dz,d,ω),
+            WeightedDensity(:∫ρdz,d,ω),
+            WeightedDensity(:∫ρz²dz,1.3862*d,ω)]
 end
 
 """
@@ -38,11 +41,10 @@ end
 For a given `model` and `structure`, define the relevant parameters for each species. These structs will contain additional information not present by default in the inital `model`, such as the bead size, the number of beads and the connectivity of the beads.
 """
 function get_species(model::PCSAFTModel,structure::DFTStructure)
-    (p,T,z) = structure.conditions
-    size = d(model,1e-3,T,z)
-    v = volume(model, p, T, z)
-    ρbulk = z./v
-    μres = Clapeyron.VT_chemical_potential_res(model, v, T, z) / Clapeyron.R̄ / T
+    (p,T) = structure.conditions
+    ρbulk = structure.ρbulk
+    size = d(model,1e-3,T,ρbulk)
+    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), T, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / T
     nc = length(model)
     return PCSAFTSpecies(ones(Int64,nc),size,ρbulk,μres)
 end
@@ -52,7 +54,7 @@ end
 
 For a given `model`, define the relevant propagator. 
 """
-function get_propagator(model::PCSAFTModel)
+function get_propagator(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure)
     return IdealPropagator()
 end
 
@@ -89,7 +91,7 @@ end
 
 function f_disp(system::DFTSystem, model::PCSAFTModel, ρ̄)
     species = system.species
-    (_, T, _) = system.structure.conditions
+    (_, T) = system.structure.conditions
     ψ = 1.3862
     σ = model.params.sigma.values
     m = model.params.segment.values

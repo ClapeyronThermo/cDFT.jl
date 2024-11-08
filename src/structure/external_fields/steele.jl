@@ -33,15 +33,14 @@ function Steele(surface::Array{String,1};
     return Steele(surface, packagedparams, references)
 end
 
-function evaluate_external_field(structure::DFTStructure,external_field::SteeleModel,model::SAFTModel,profiles::Vector{DFTProfile})
-    z = profiles[1].coords
+function evaluate_external_field(structure::DFTStructure,external_field::SteeleModel,model::SAFTModel,ρ::Array{Float64},z)
     return evaluate_external_field(structure,external_field,model,z)
 end
 
-function evaluate_external_field(structure::DFTStructure,external_field::SteeleModel,model::SAFTModel,z::Vector{Float64})
+function evaluate_external_field(structure::DFTStructure,external_field::SteeleModel,model::SAFTModel,z)
 
     H = structure.width
-    (_,T,_) = structure.conditions
+    (_,T) = structure.conditions
     ϵs = external_field.params.epsilon.values
     σs = external_field.params.sigma.values
     Δ  = external_field.params.delta.values

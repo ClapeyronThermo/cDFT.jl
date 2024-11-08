@@ -12,32 +12,36 @@ end
 
 function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTStructure)
     nc = length(model)
+    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
+    ω = fftfreq(structure.ngrid, f)
+    d = species.size
+
     λ_r = diagvalues(model.params.lambda_r.values)
     λ_a = diagvalues(model.params.lambda_a.values)
     σ   = diagvalues(model.params.sigma.values)
     C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
     x = species.size ./ σ
     ψ = @. cbrt(3*C*x^3*(x^-λ_a/(λ_a-3)-x^-λ_r/(λ_r-3)))
-    return [WeightedDensity(:ρ,zeros(nc)),
-            WeightedDensity(:∫ρdz,0.5*ones(nc)),
-            WeightedDensity(:∫ρz²dz,0.5*ones(nc)),
-            WeightedDensity(:∫ρzdz,0.5*ones(nc)),
-            WeightedDensity(:∫ρz²dz,ones(nc)),
-            WeightedDensity(:∫ρdz,ones(nc)),
-            WeightedDensity(:∫ρz²dz,ψ)]
+    return [WeightedDensity(:ρ,zeros(nc),ω),
+            WeightedDensity(:∫ρdz,0.5*d,ω),
+            WeightedDensity(:∫ρz²dz,0.5*d,ω),
+            WeightedDensity(:∫ρzdz,0.5*d,ω),
+            WeightedDensity(:∫ρz²dz,d,ω),
+            WeightedDensity(:∫ρdz,d,ω),
+            WeightedDensity(:∫ρz²dz,ψ.*d,ω)]
 end
 
 function get_species(model::SAFTVRMieModel,structure::DFTStructure)
-    (p,T,z) = structure.conditions
-    size = d(model,1e-3,T,z)
-    v = volume(model, p, T, z)
-    ρbulk = z./v
-    μres = Clapeyron.VT_chemical_potential_res(model, v, T, z) / Clapeyron.R̄ / T
+    (p,T) = structure.conditions
+    ρbulk = structure.ρbulk
+    size = d(model,1e-3,T,ρbulk)
+
+    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), T, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / T
     nc = length(model)
     return SAFTVRMieSpecies(ones(Int64,nc),size,ρbulk,μres)
 end
 
-function get_propagator(model::SAFTVRMieModel)
+function get_propagator(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTStructure)
     return IdealPropagator()
 end
 
@@ -48,7 +52,7 @@ end
 
 function f_chain(system::DFTSystem, model::SAFTVRMieModel, ρhc, ρ̄hc, _λ)
     V = nothing
-    (_, T, _) = system.structure.conditions
+    (_, T) = system.structure.conditions
     _d = system.species.size
     m = model.params.segment
     _ϵ = model.params.epsilon
@@ -147,14 +151,14 @@ function f_disp(system::DFTSystem, model::SAFTVRMieModel, ρ̄)
     V = nothing
     ψ = system.fields[end].width
     _d = system.species.size
-    (_, T, _) = system.structure.conditions
+    (_, T) = system.structure.conditions
     m = model.params.segment
     _ϵ = model.params.epsilon
     _λr = model.params.lambda_r
     _λa = model.params.lambda_a
     _σ = model.params.sigma
 
-    ρ̄ = ρ̄*3 ./(4*ψ.^3 .*_d.^3)/π
+    ρ̄ = ρ̄*3 ./(4*ψ.^3)/π
     ∑ρ̄ = sum(ρ̄)
     z = ρ̄ /∑ρ̄
     m̄ = dot(z,m)

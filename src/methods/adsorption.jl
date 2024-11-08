@@ -1,7 +1,6 @@
-function adsorption(system)
-    profiles = system.profiles
+function adsorption(system,ρ)
     # Integrate over all profiles
-    return [∫(ρ,ρ.mesh_size)/diff(ρ.bounds)[1] for ρ in profiles]
+    return [∫(_ρ,_ρ.mesh_size)/diff(_ρ.bounds)[1] for _ρ in profiles]
 end
 
 function adsorption(model::EoSModel, surface::ExternalFieldModel, p, T, n=[1.0], width=0.0)

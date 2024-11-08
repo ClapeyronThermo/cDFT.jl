@@ -99,7 +99,8 @@ julia> structure = InterfacialTension1DCart((p, T, n), [-10L, 10L], 201)
 ```
 """
 struct ExternalField1DCart <: DFTStructure1DCart 
-    conditions::Tuple{Float64,Float64,Vector{Float64}}
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
     bounds::Vector{Float64}
     ngrid::Int64
     external_field::ExternalFieldModel
@@ -120,7 +121,8 @@ julia> structure = Uniform1DCart((p, T, n), [-10L, 10L], 201)
 ```
 """
 struct Uniform1DCart <: DFTStructure1DCart
-    conditions::Tuple{Float64,Float64,Vector{Float64}}
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
     bounds::Vector{Float64}
     ngrid::Int64
 end
@@ -177,6 +179,40 @@ struct InterfacialTension1DSphr <: DFTStructure1DSphr
     ngrid::Int64
     core_composition::Vector{Float64}
     r_interface::Float64
+end
+
+
+"""
+    SurfaceTension1DCart(conditions::Tuple{Float64,Float64,Vector{Float64}}, bounds::Vector{Float64}, ngrid::Int64)
+
+The generic structure type used when trying to simulate liquid-vapour interfaces in 1D-cartesian coordinates. Contains:
+- `conditions`: The x, p, T conditions in the liquid phase at which the calculations are performed.
+- `bounds`: Specifies the location of the bounds of the system. The interface will be located in the middle.
+- `ngrids`: The number of grid points used to represent the density profile.
+In the case of the surface tension calculation, the pressure specified must be the saturation pressure at T and x. As the density profiles in the liquid and vapour phases are expected to reach their bulk values, the densities at the bounds are _fixed_ at their bulk values. In general, it is recommends to use a width of about `20L` (`L` being the length scale of the model) and about 201 grid points.
+
+The profiles will be initialised as generic sigmoidals of the form:
+`tanh_prof(x,start,stop,shift,coef) = 1/2*(start-stop)*tanh((x-shift)*coef)+1/2*(start+stop)`
+
+Example:
+```julia
+julia> model = PCSAFT(["water"])
+
+julia> T = 298.15
+
+julia> (p, vl, vv) = saturation_pressure(model, T)
+
+julia> L = length_scale(model)
+
+julia> structure = SurfaceTension1DCart((p, T, [1.]), [-10L, 10L], 201)
+```
+"""
+struct TwoPhase1DCart <: DFTStructure1DCart 
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    ρbulk2::Vector{Float64}
+    bounds::Vector{Float64}
+    ngrid::Int64
 end
 
 export SurfaceTension1DCart, InterfacialTension1DCart, Uniform1DCart

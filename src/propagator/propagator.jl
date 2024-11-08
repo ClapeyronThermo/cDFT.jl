@@ -16,7 +16,9 @@ Tangent Hard-Sphere propagator for DFT calculations. Assumes all species are mad
 # References
 1. Xu, X., Cao, D., Zhang, X. and Wang W. (2009). Universal version of density-functional theory for polymers with complex architecture. PHYSICAL REVIEW E, 79, 021805. [doi::10.1103/PhysRevE.79.021805](https://doi.org/10.1103/PhysRevE.79.021805)
 """
-struct TangentHSPropagator <: DFTPropagator end
+struct TangentHSPropagator <: DFTPropagator 
+    map::Array{ComplexF64}
+end
 
 include("ideal.jl")
 include("tangent_hs.jl")

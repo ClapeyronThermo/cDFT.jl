@@ -2,7 +2,12 @@ tanh_prof(x,start,stop,shift,coef) = 1/2*(start-stop)*tanh((x-shift)*coef)+1/2*(
 
 include("surface_tension.jl")
 include("interfacial_tension.jl")
+include("two_phase.jl")
 include("external_field.jl")
+
+function initialize_profiles(system::DFTSystem)
+    return initialize_profiles(system.model,system.structure,system.species)
+end
 
 """
     initialize_profiles(model::EoSModel,structure::DFTStructure)
@@ -21,25 +26,14 @@ julia> profiles = initialize_profiles(model,structure)
 ```
 """
 function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species)
-    bounds = structure.bounds
     ngrid = structure.ngrid
-    (p, T, x) = structure.conditions
+    ρbulk = structure.ρbulk
 
-    z = LinRange(first(bounds),last(bounds),ngrid) |> collect
-    L = length_scale(model)
-
-    vol = Clapeyron.volume(model,p,T,x)
-
-    ρl = x./vol
-
-    ρ = DensityProfile[]
+    ρ = zeros(ngrid,sum(species.nbeads))
 
     for i in @comps
-        nbeads = species.nbeads[i]
-        for j in 1:nbeads
-            boundary_conditions = (FixedBoundary(ρl[i],-1), FixedBoundary(ρl[i],1))
-            ρ_points = ρl[i]*ones(ngrid)
-            push!(ρ,DensityProfile(ρ_points,z,bounds,boundary_conditions))
+        for j in @chain(i)
+            ρ[:,j] = ρbulk[i]*ones(ngrid)
         end
     end
     return ρ
