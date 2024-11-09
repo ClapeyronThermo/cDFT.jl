@@ -35,13 +35,13 @@ DFTSystem
   device: CPU
 ```
 """
-struct DFTSystem
-    model::EoSModel
-    species::DFTSpecies
-    structure::DFTStructure
-    fields::Vector{DFTField}
-    propagator::DFTPropagator
-    options::DFTOptions
+struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F<:DFTField,P<:DFTPropagator,O<:DFTOptions}
+    model::M
+    species::S
+    structure::T
+    fields::Vector{F}
+    propagator::P
+    options::O
 end
 
 function DFTSystem(model::EoSModel,structure::DFTStructure,profile::Vector{DFTProfile},fields::Vector{DFTField},options::DFTOptions)
@@ -54,6 +54,9 @@ function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions
     propagator = get_propagator(model, species, structure)
     return DFTSystem(model, species, structure, fields, propagator, options)
 end
+
+length_fields(system::DFTSystem) = length_fields(system.model)
+length_fields(system::Clapeyron.EoSModel) = 7
 
 export DFTSystem
 

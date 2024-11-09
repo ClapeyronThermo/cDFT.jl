@@ -15,9 +15,9 @@ julia> using ThreadPinning
 julia> options = DFTOptions(CPU(4, [0,1,12,13]))
 ```
 """
-struct DFTOptions
-    device::Device
-    solver::Solvers.AbstractFixPoint
+struct DFTOptions{D,S}
+    device::D
+    solver::S
 end
 
 function DFTOptions(device::Device)

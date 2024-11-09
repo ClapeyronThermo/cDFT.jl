@@ -13,7 +13,7 @@ function evaluate_field(system::DFTSystem, profiles)
     nb = size(profiles,2)
     ngrid = system.structure.ngrid
 
-    n = zeros(ngrid,nf,nb)
+    n = zeros(Float64,ngrid,nf,nb)
 
     for i in 1:nf
         n[:,i,:] = evaluate_field(system,fields[i], profiles)

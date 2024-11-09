@@ -16,14 +16,16 @@ function F_res(system::DFTSystem, ρ)
 
     f(x) = f_res(system,model,x)
 
-    ϕ = zeros(ngrid)
-
-    Threads.@threads for i in 1:ngrid
+    ϕ = similar(ρ,ngrid)
+    ϕ .= 0
+    for i in 1:ngrid
         ϕ[i] = f(@view n[i,:,:])
     end
 
     return ∫(ϕ,dz)
 end
+
+f_res(system,model,ρ,dcache) = f_res(system,model,ρ)
 
 """
     δFδρ_res(system::DFTSystem)
@@ -40,18 +42,19 @@ function δFδρ_res(system::DFTSystem, ρ)
     ngrid = system.structure.ngrid
 
     n = evaluate_field(system,ρ)
-
+    nf = length_fields(system)
+    @assert nf == length(system.fields) "define length_fields(model::EoSModel) = nf"
     f(x) = f_res(system,model,x)
-    df(x) = ForwardDiff.gradient(f,x)
+    n_first = @view(n[1,:,:])
+    cfg = ForwardDiff.GradientConfig(f, n_first, ForwardDiff.Chunk{nf}())
+    df!(df,x) = ForwardDiff.gradient!(df,f,x,cfg)
 
     δf = zeros(ngrid,nf,nb)
 
-    Threads.@threads for i in 1:ngrid
-        δf[i,:,:] = df(n[i,:,:])
+    for i in 1:ngrid
+        df!(@view(δf[i,:,:]),@view(n[i,:,:]))
     end
-
     δFδρ_res = integrate_field(system, δf, ρ)
-
     return δFδρ_res
 end
 

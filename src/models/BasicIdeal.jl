@@ -25,7 +25,7 @@ function F_ideal(system::DFTSystem,ρ)
 
     ϕ = zeros(ngrid)
     
-    Threads.@threads for i in 1:ngrid
+    for i in 1:ngrid
         ϕ[i] = f(@view n[i,:])
     end
 

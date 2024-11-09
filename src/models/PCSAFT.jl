@@ -64,11 +64,18 @@ function f_res(system::DFTSystem, model::PCSAFTModel,n)
     return f_hs(system,model,n2,n3,n4) + f_hc(system,model,n1,n5,n6) + f_disp(system,model,n7) + f_assoc(system,model,n2,n3,n4)
 end
 
+function f_hc(system::DFTSystem, model::PCSAFTModel,n)
+    n1 = @view(n[1,:])
+    n5 = @view(n[5,:])
+    n6 = @view(n[6,:])
+    return f_hc(system,model,n1,n5,n6)
+end
+
 function f_hc(system::DFTSystem, model::PCSAFTModel, ρhc, ρ̄hc, _λ)
     species = system.species
     HSd = species.size
     m = model.params.segment.values
-    ζ₃ = zero(eltype(HSd)) + zero(eltype(ρ̄hc))
+    ζ₃ = zero(Base.promote_eltype(m,ρhc, ρ̄hc, _λ))
     ζ₂ = zero(ζ₃)
     for i in @comps
         mi,ρ̄hci,HSdi = m[i],ρ̄hc[i],HSd[i]
@@ -80,7 +87,7 @@ function f_hc(system::DFTSystem, model::PCSAFTModel, ρhc, ρ̄hc, _λ)
     #ζ₃ = 1/8*dot(m,ρ̄hc)
     #ζ₂ = sum(1/8*m.*ρ̄hc./HSd)
     ∑f = zero(ζ₃)
-    for i in @comps
+    for i in 1:length(model)
         λ = _λ[i]/(2*HSd[i])
         yᵈᵈ = 1/(1-ζ₃) + 1.5*HSd[i]*ζ₂/(1-ζ₃)^2+0.5*HSd[i]^2*ζ₂^2/(1-ζ₃)^3
         fi = -ρhc[i]*(m[i]-1)*log(yᵈᵈ*λ/ρhc[i])
@@ -97,23 +104,35 @@ function f_disp(system::DFTSystem, model::PCSAFTModel, ρ̄)
     m = model.params.segment.values
     HSd = species.size
 
-    ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
-    ∑ρ̄ = sum(ρ̄)
-    x = ρ̄ /∑ρ̄
-    m̄ = dot(x,m)
-
-    η = zero(first(m) + ∑ρ̄ + first(HSd))
-    for i in 1:length(m)
-        η += m[i]*ρ̄[i]*HSd[i]^3
+    if length(model) == 1
+        m2ϵσ3₁,m2ϵσ3₂ =  Clapeyron.m2ϵσ3(model,zero(T), T, SA[1.0])
+        HSd1 = HSd[1]
+        ρ̄z1 = ρ̄[1]*3/(4*ψ*ψ*ψ*HSd1*HSd1*HSd1)/π
+        η = m[1]*ρ̄[1]/(8*ψ*ψ*ψ)
+        ∑ρ̄ = ρ̄z1
+        m̄ = m[1]*oneunit(∑ρ̄)
+    else
+        ρ̄z = similar(ρ̄,Base.promote_eltype(ρ̄,HSd,ψ))
+        ρ̄z .= ρ̄
+        ρ̄z ./= (HSd .* HSd .* HSd)
+        ρ̄z .*= 3/(4*ψ*ψ*ψ*π)
+        ∑ρ̄ = sum(ρ̄z)
+        m̄ = dot(ρ̄z,m)/∑ρ̄    
+        η = zero(Base.promote_eltype(m,∑ρ̄,HSd))
+        for i in 1:length(m)
+            η += m[i]*ρ̄z[i]*HSd[i]^3
+        end
+        η = π/6*η       
+        m2ϵσ3₁,m2ϵσ3₂ =  Clapeyron.m2ϵσ3(model,zero(T), T, ρ̄)
     end
-    η = π/6*η
-
-    C₁ = 1+m̄*(8*η-2*η^2)/(1-η)^4+(1-m̄)*(20*η-27*η^2+12*η^3-2*η^4)/((1-η)^2*(2-η)^2)
+    ηm1 = (1-η)
+    ηm2 = ηm1*ηm1
+    ηm4 = ηm2*ηm2
+    evalpoly(η,(0,20,-27,12,-2))
+    C₁ = 1 + m̄*(8*η-2*η*η)/ηm4+(1-m̄)*evalpoly(η,(0,20,-27,12,-2))/(ηm2*(2-η)*(2-η))
     I₁ = I(model,m̄,η,1)
     I₂ = I(model,m̄,η,2)
-
-    m2ϵσ3₁,m2ϵσ3₂ =  Clapeyron.m2ϵσ3(model,zero(T), T, x)
-    return -2*π*∑ρ̄^2*I₁*m2ϵσ3₁-π*∑ρ̄^2*m̄*C₁^-1*I₂*m2ϵσ3₂
+    return -2*π*∑ρ̄*∑ρ̄*I₁*m2ϵσ3₁-π*∑ρ̄*∑ρ̄*m̄*I₂*m2ϵσ3₂/C₁
 end
 
 function I(model::PCSAFTModel,m̄,n₃,n)
@@ -123,10 +142,12 @@ function I(model::PCSAFTModel,m̄,n₃,n)
         corr = Clapeyron.PCSAFTconsts.corr2
     end
     res = zero(n₃)
+    m2 = (m̄-1)/m̄
+    m3 = (m̄-1)/m̄*(m̄-2)/m̄
     @inbounds for i ∈ 1:7
         ii = i-1
         corr1,corr2,corr3 = corr[i]
-        ki = corr1 + (m̄-1)/m̄*corr2 + (m̄-1)/m̄*(m̄-2)/m̄*corr3
+        ki = corr1 + m2*corr2 + m3*corr3
         res += ki*n₃^ii
     end
     return res
