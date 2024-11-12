@@ -5,26 +5,30 @@ include("interfacial_tension.jl")
 include("two_phase.jl")
 include("external_field.jl")
 
-function initialize_profiles(system::DFTSystem)
-    return initialize_profiles(system.model,system.structure,system.species)
-end
-
 """
-    initialize_profiles(model::EoSModel,structure::DFTStructure)
+    initialize_profiles(system::DFTSystem)
 
-Based on the structure, this function will initialize the density profiles for each of the species / beads in the model. The output will be a vector of unconverged `DFTProfile`s.
+Based on the system specifications, this function will initialize the density profiles for each of the species / beads in the model. The output will be an array of size `(ngrid,nb)` where `ngrid` is the number of grid points used and `nb` is the number of beads.
 
 Example:
 ```julia
 julia> model = PCSAFT(["water"])
 
+julia> ρbulk = [molar_density(model,1e5,298.15)]
+
 julia> L = length_scale(model)
 
-julia> structure = Uniform1DCart((1e5, 298.15, [1.]), [0, 20L], 201)
+julia> structure = Uniform1DCart((1e5, 298.15), ρbulk, [0, 20L], 201)
 
-julia> profiles = initialize_profiles(model,structure)
+julia> system = DFTSystem(model, structure)
+
+julia> profiles = initialize_profiles(system)
 ```
 """
+function initialize_profiles(system::DFTSystem)
+    return initialize_profiles(system.model,system.structure,system.species)
+end
+
 function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species)
     ngrid = structure.ngrid
     ρbulk = structure.ρbulk

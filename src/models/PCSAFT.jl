@@ -17,7 +17,7 @@ struct PCSAFTSpecies <: DFTSpecies
 end
 
 """
-    get_fields(model::EoSModel)
+    get_fields(model::EoSModel, species::DFTSpecies, structure::DFTStructure)
 
 For a given `model`, obtain all of the fields that will be needed to perform the DFT calculation. This function should return a vector of `DFTField`s.
 """
@@ -50,7 +50,7 @@ function get_species(model::PCSAFTModel,structure::DFTStructure)
 end
 
 """
-    get_propagator(model::EoSModel)
+    get_propagator(model::EoSModel, species::DFTSpecies, structure::DFTStructure)
 
 For a given `model`, define the relevant propagator. 
 """

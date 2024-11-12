@@ -1,9 +1,10 @@
 """
-    WeightedDensity(type::Symbol,width::Vector{Float64})
+    WeightedDensity(type::Symbol,width::Vector{Float64},map::Array{ComplexF64})
 
 Generic `WeightedDensity` type used to calculate the weighted densities of the system. One must specify:
 - `type`: The type of weighted density to be calculated. Options are `:∫ρdz` (``n_0``), `:∫ρzdz` (``n_v``), `:∫ρz²dz` (``n_3``), and `:ρ` (unweighted).
 - `width`: The width of the weighted density profile.
+- `map`: The Fourier transform of the weights.
 """
 struct WeightedDensity <: DFTField 
     type::Symbol

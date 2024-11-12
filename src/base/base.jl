@@ -10,13 +10,12 @@ include("devices.jl")
 include("structure.jl")
 
 """
-    DFTSystem(model::EoSModel, species::DFTSpecies, structure::DFTStructure, profiles::Vector{DFTProfile}, fields::Vector{DFTField}, options::DFTOptions)
+    DFTSystem(model::EoSModel, species::DFTSpecies, structure::DFTStructure, fields::Vector{DFTField}, options::DFTOptions)
 
 Generic struct which includes all the information needed to perform DFT / SCFT calculations:
 - `model`: A model object that should be obtained from Clapeyron.jl, and contains all information regarding species parameters.
 - `species`: A `DFTSpecies` object which is model-dependent. Typically contains the number of beads in each species and the bead sizes.
 - `structure`: A `DFTStructure` object which provides information regarding the geometry (including bounds) and conditions (n, p, T) of the DFT calculations.
-- `profiles`: A vector of `DFTProfile`s for each species / bead in the system. By default, these will be cubic splines.
 - `fields`: A vector of `DFTField`s for each field used in the DFT-calculation. This is typically model-dependent. 
 - `options`: A `DFTOptions` object which contains information regarding the convergence settings and the devices used as part of the DFT calculation.
 Example usage:

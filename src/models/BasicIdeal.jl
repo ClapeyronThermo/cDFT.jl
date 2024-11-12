@@ -1,9 +1,9 @@
 using Clapeyron: BasicIdealModel
 
 """
-    F_ideal(system::DFTSystem)
+    F_ideal(system::DFTSystem, ρ)
 
-Obtain the ideal free energy of the system.
+Obtain the ideal free energy of the system for a given profile `ρ`.
 
 The output is a scalar of units J.
 """

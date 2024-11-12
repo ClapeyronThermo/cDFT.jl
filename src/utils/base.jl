@@ -1,7 +1,7 @@
 """
-    free_energy(system::DFTSystem)
+    free_energy(system::DFTSystem, ρ)
 
-Obtain the total free energy of the system. This is done by summing the ideal and residual free energies.
+Obtain the total free energy of the system for a given profile. This is done by summing the ideal and residual free energies.
 
 The output is a scalar of units J.
 """

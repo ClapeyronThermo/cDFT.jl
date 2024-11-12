@@ -1,5 +1,5 @@
 """
-    converge!(system::DFTSystem)
+    converge!(system::DFTSystem, ρ)
 
 For a given system, converge the profiles using the solver specified under `system.options.solver`. Convergence is achieved by solving the generic equation:
 ```julia
