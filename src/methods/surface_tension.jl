@@ -10,19 +10,22 @@ julia> model = PCSAFT(["water"])
 julia> surface_tension(model,298.15,[1.0])
 ```
 """
-function surface_tension(model::EoSModel, T,x = [1.0])
+function surface_tension(model::EoSModel, T, x = [1.0])
     L = length_scale(model)
 
     (p, vl, vv, y) = bubble_pressure(model, T, x)
+    
+    ρ1 = x./vl
+    ρ2 = y./vv
 
-    structure = SurfaceTension1DCart((p, T, x),[-10L,10L], 101)
+    structure = TwoPhase1DCart((p, T), ρ1, ρ2, [-10L,10L], 201)
 
     system = DFTSystem(model, structure)
 
-    ρ = initialize_profiles(model, structure, system.species)
+    ρ = initialize_profiles(system)
 
-    converge!(system, ρ)
-    return surface_tension(system,ρ)
+    ρ = converge!(system, ρ)
+    return surface_tension(system,ρ)/2
 end
 
 function surface_tension(system::DFTSystem,ρ)

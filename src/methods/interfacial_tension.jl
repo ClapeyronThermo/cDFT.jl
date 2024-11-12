@@ -10,29 +10,22 @@ julia> model = PCSAFT(["water","hexane"])
 julia> interfacial_tension(model,1e5,298.15,[0.5,0.5])
 ```
 """
-function interfacial_tension(model::EoSModel,p,T,n)
+function interfacial_tension(model::EoSModel,p,T,x,xx)
     L = length_scale(model)
 
-    (x,n,G) = tp_flash(model, p, T, n, RRTPFlash(equilibrium=:lle))
+    v1 = volume(model,p,T,x)
+    v2 = volume(model,p,T,xx)
 
-    structure = InterfacialTension1DCart((p, T, x[1,:]),[-10L,10L], 201, x[2,:])
+    ρ1 = x./v1
+    ρ2 = xx./v2
+
+    structure = TwoPhase1DCart((p, T), ρ1, ρ2,[-20L,20L], 201)
 
     system = DFTSystem(model, structure)
+    ρ = initialize_profiles(system)
 
-    converge!(system)
-
-    ρ = system.profiles
-    ngrid = system.structure.ngrid
-
-    F = free_energy(system)
-
-    ρl =[ρ[i].boundary_conditions[2].value for i in @comps]
-    x = ρl/sum(ρl)
-    vl = 1/sum(ρl)
-
-    μ = Clapeyron.VT_chemical_potential(model,vl,T,x)
-
-    return F*k_B*T-sum([μ[i]*∫(ρ[i].density,ρ[i].mesh_size) for i in @comps])+p*∫(ones(ngrid),ρ[1].mesh_size)
+    ρ = converge!(system,ρ)
+    return interfacial_tension(system,ρ)/2
 end
 
 """
@@ -53,6 +46,6 @@ julia> converge!(system)
 julia> interfacial_tension(system)
 ```
 """
-interfacial_tension(system::DFTSystem) = surface_tension(system)
+interfacial_tension(system::DFTSystem, ρ) = surface_tension(system, ρ)
 
 export interfacial_tension
