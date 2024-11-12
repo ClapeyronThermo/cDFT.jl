@@ -121,5 +121,5 @@ struct TwoPhase1DCart <: DFTStructure1DCart
     ngrid::Int64
 end
 
-export SurfaceTension1DCart, InterfacialTension1DCart, Uniform1DCart
-export Uniform1DSphr, InterfacialTension1DSphr
+export TwoPhase1DCart, Uniform1DCart, ExternalField1DCart
+export Uniform1DSphr
