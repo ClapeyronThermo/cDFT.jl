@@ -43,7 +43,7 @@ function δFδρ_res(system::DFTSystem, ρ)
 
     n = evaluate_field(system,ρ)
     nf = length_fields(system)
-    @assert nf == length(system.fields) "define length_fields(model::EoSModel) = nf"
+    # @assert nf == length(system.fields) "define length_fields(model::EoSModel) = nf"
     f(x) = f_res(system,model,x)
     n_first = @view(n[1,:,:])
     cfg = ForwardDiff.GradientConfig(f, n_first, ForwardDiff.Chunk{nf}())

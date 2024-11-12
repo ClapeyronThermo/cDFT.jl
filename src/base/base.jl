@@ -55,8 +55,7 @@ function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions
     return DFTSystem(model, species, structure, fields, propagator, options)
 end
 
-length_fields(system::DFTSystem) = length_fields(system.model)
-length_fields(system::Clapeyron.EoSModel) = 7
+length_fields(system::DFTSystem) = length(system.fields)
 
 export DFTSystem
 
