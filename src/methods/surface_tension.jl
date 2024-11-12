@@ -24,7 +24,7 @@ function surface_tension(model::EoSModel, T, x = [1.0])
 
     ρ = initialize_profiles(system)
 
-    ρ = converge!(system, ρ)
+    converge!(system, ρ)
     return surface_tension(system,ρ)/2
 end
 

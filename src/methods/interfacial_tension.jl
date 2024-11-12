@@ -26,7 +26,7 @@ function interfacial_tension(model::EoSModel,p,T,x,xx)
     system = DFTSystem(model, structure)
     ρ = initialize_profiles(system)
 
-    ρ = converge!(system,ρ)
+    converge!(system,ρ)
     return interfacial_tension(system,ρ)/2
 end
 

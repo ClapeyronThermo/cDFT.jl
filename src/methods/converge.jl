@@ -23,7 +23,7 @@ function converge!(system::DFTSystem,ρ)
         ln_x = reshape(ln_x, (ngrid, nbeads))
         ln_Gx = reshape(ln_G, (ngrid, nbeads))
         
-        ρ = exp.(ln_x)
+        ρ .= exp.(ln_x)
 
         δfδρ_res = δFδρ_res(system, ρ)
         Gcα, Gp = propagate(system, system.propagator, δfδρ_res, ρ)
@@ -55,8 +55,7 @@ function converge!(system::DFTSystem,ρ)
 
     ρ_new = Solvers.fixpoint(f,ln_X0, method; rtol = 1e-4, max_iters = 100000)
 
-    ρ = exp.(ρ_new)
-    ρ = reshape(ρ,(ngrid,nbeads))
+    ρ .= reshape(exp.(ρ_new),(ngrid,nbeads))
 end
 
 export converge!
