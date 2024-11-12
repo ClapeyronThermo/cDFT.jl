@@ -122,8 +122,8 @@ function f_disp(system::DFTSystem, model::PCSAFTModel, ρ̄)
         for i in 1:length(m)
             η += m[i]*ρ̄z[i]*HSd[i]^3
         end
-        η = π/6*η       
-        m2ϵσ3₁,m2ϵσ3₂ =  Clapeyron.m2ϵσ3(model,zero(T), T, ρ̄)
+        η = π/6*η
+        m2ϵσ3₁,m2ϵσ3₂ =  Clapeyron.m2ϵσ3(model,zero(T), T, ρ̄z)
     end
     ηm1 = (1-η)
     ηm2 = ηm1*ηm1
