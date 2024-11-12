@@ -13,17 +13,21 @@ function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStruc
     nc = length(model)
     ψ = 1.3862
 
+    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
+    ω = fftfreq(structure.ngrid, f)
+    d = species.size
+
     λ_r = diagvalues(model.params.lambda_r.values)
     λ_a = diagvalues(model.params.lambda_a.values)
     σ   = diagvalues(model.params.sigma.values)
     C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
     x = species.size ./ σ
     ψ1 = @. cbrt(3*C*x^3*(x^-λ_a/(λ_a-3)-x^-λ_r/(λ_r-3)))
-    return [WeightedDensity(:∫ρdz,0.5*ones(nc)),
-            WeightedDensity(:∫ρz²dz,0.5*ones(nc)),
-            WeightedDensity(:∫ρzdz,0.5*ones(nc)),
-            WeightedDensity(:∫ρz²dz,ψ*ones(nc)),
-            WeightedDensity(:∫ρz²dz,ψ1)]
+    return [WeightedDensity(:∫ρdz,0.5*d,ω),
+            WeightedDensity(:∫ρz²dz,0.5*d,ω),
+            WeightedDensity(:∫ρzdz,0.5*d,ω),
+            WeightedDensity(:∫ρz²dz,ψ*d,ω),
+            WeightedDensity(:∫ρz²dz,ψ1.*d,ω)]
 end
 
 function f_res(system::DFTSystem, model::COFFEEModel,n)
