@@ -2,6 +2,7 @@ module cDFT
 
 using LinearAlgebra
 using ForwardDiff, NLSolvers, FFTW
+import AbstractFFTs: Plan
 using Clapeyron
 using Clapeyron: d, N_A, k_B, R̄
 using Clapeyron: @comps, @groups
@@ -29,6 +30,7 @@ include("utils/profiles.jl")
 include("utils/integrals.jl")
 include("utils/fft.jl")
 include("utils/anderson.jl")
+include("utils/matmul.jl")
 
 include("fields/fields.jl")
 include("models/models.jl")

@@ -5,11 +5,15 @@ Generic `WeightedDensity` type used to calculate the weighted densities of the s
 - `type`: The type of weighted density to be calculated. Options are `:∫ρdz` (``n_0``), `:∫ρzdz` (``n_v``), `:∫ρz²dz` (``n_3``), and `:ρ` (unweighted).
 - `width`: The width of the weighted density profile.
 - `map`: The Fourier transform of the weights.
+- `plan`: The Fourier transform plan.
+- `iplan`: The inverse Fourier transform plan.
 """
 struct WeightedDensity <: DFTField 
     type::Symbol
     width::Vector{Float64}
     map::Array{ComplexF64}
+    plan::Plan
+    iplan::Plan
 end
 
 function WeightedDensity(type::Symbol,width::Vector{Float64},ω::Frequencies{Float64})
@@ -30,28 +34,37 @@ function WeightedDensity(type::Symbol,width::Vector{Float64},ω::Frequencies{Flo
     else
         error("Invalid type of field")
     end
-    return WeightedDensity(type,width,Ω)
+
+    plan = plan_fft(Ω[:,1])
+    iplan = inv(plan)
+    return WeightedDensity(type,width,Ω,plan,iplan)
 end
 
 function evaluate_field(system::DFTSystem,field::WeightedDensity, ρ)
     structure = system.structure
     nb = size(ρ,2)
     ngrid = structure.ngrid
-    n = zeros(ngrid,nb)
 
-    map = field.map
     if field.type == :ρ
         return ρ.*N_A
     end
 
+    map = field.map
+    P = field.plan
+    iP = field.iplan
+    n = zeros(eltype(map),ngrid,nb)
+
     for i in 1:nb
-        n[:,i] = real.(ifft(fft(ρ[:,i]).*map[:,i]))*N_A
+        matmul!(@view(n[:,i]),P,@view(ρ[:,i]))
+        elmul!(@view(n[:,i]),@view(n[:,i]),map[:,i])
+        matmul!(@view(n[:,i]),iP,@view(n[:,i]))
     end
-    return n
+    return real.(n).*N_A
 end
 
 function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
-    map = field.map 
+    
+
     type = field.type
     nb = size(profile,2)
     ngrid = system.structure.ngrid
@@ -66,10 +79,18 @@ function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
         error("Invalid type of field")
     end
 
-    ∫field = zeros(ngrid,nb)
+    map = field.map 
+    P = field.plan
+    iP = field.iplan
+
+    ∫field = zeros(eltype(map),ngrid,nb)
 
     for i in 1:nb
-        ∫field[:,i] = prefactor*real.(ifft(fft(profile[:,i]).*map[:,i]))
+        matmul!(@view(∫field[:,i]),P,@view(profile[:,i]))
+        elmul!(@view(∫field[:,i]),@view(∫field[:,i]),map[:,i])
+        matmul!(@view(∫field[:,i]),iP,@view(∫field[:,i]))
+        ∫field[:,i] .*= prefactor
+        # ∫field[:,i] = prefactor*real.(ifft(fft(profile[:,i]).*map[:,i]))
     end
-    return ∫field
+    return real.(∫field)
 end
