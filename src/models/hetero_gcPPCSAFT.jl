@@ -4,11 +4,8 @@ function DFTSystem(model::HeterogcPCPSAFT,structure::DFTStructure,options::DFTOp
     model = expand_model(model)
     species = get_species(model, structure)
     fields = get_fields(model, species, structure)
-    propagator = get_propagator(model)
-    profiles = initialize_profiles(model,structure, species)
-    group_idx = reduce(vcat,model.groups.i_groups)
-    profiles[group_idx] = profiles
-    return DFTSystem(model, species, structure, profiles, fields, propagator, options)
+    propagator = get_propagator(model, species, structure)
+    return DFTSystem(model, species, structure, fields, propagator, options)
 end
 
 struct gcPCPSAFTSpecies <: DFTSpecies
@@ -20,11 +17,12 @@ struct gcPCPSAFTSpecies <: DFTSpecies
 end
 
 function get_species(model::HeterogcPCPSAFT,structure::DFTStructure)
-    (p,T,z) = structure.conditions
+    (p,T) = structure.conditions
+    z = structure.ρbulk
+    v = 1/sum(z)
+
     HSd = d(model,1e-3,T,z)
-    v = volume(model, p, T, z; phase=:l)
-    ρbulk = z./v
-    μres = Clapeyron.VT_chemical_potential_res(model, v, T, z) / Clapeyron.R̄ / T
+    μres = Clapeyron.VT_chemical_potential_res(model, v, T, z/sum(z)) / Clapeyron.R̄ / T
     nbeads = length.(model.groups.groups)
 
     levels = zeros(Int, sum(nbeads))
@@ -47,21 +45,24 @@ function get_species(model::HeterogcPCPSAFT,structure::DFTStructure)
             k+=1
         end
     end
-    return gcPCPSAFTSpecies(nbeads,HSd,levels,ρbulk,μres)
+    return gcPCPSAFTSpecies(nbeads,HSd,levels,structure.ρbulk,μres)
 end
 
 function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure)
-    nb = length(model.groups.flattenedgroups)
-    return [WeightedDensity(:ρ,zeros(nb)),
-            WeightedDensity(:∫ρdz,0.5*ones(nb)),
-            WeightedDensity(:∫ρz²dz,0.5*ones(nb)),
-            WeightedDensity(:∫ρzdz,0.5*ones(nb)),
-            WeightedDensity(:∫ρz²dz,ones(nb)),
-            WeightedDensity(:∫ρz²dz,1.5357*ones(nb))]
+    nb = sum(species.nbeads)
+    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
+    ω = fftfreq(structure.ngrid, f)
+    d = species.size
+    return [WeightedDensity(:ρ,zeros(nb),ω),
+            WeightedDensity(:∫ρdz,0.5*d,ω),
+            WeightedDensity(:∫ρz²dz,0.5*d,ω),
+            WeightedDensity(:∫ρzdz,0.5*d,ω),
+            WeightedDensity(:∫ρz²dz,d,ω),
+            WeightedDensity(:∫ρz²dz,1.5357*d,ω)]
 end
 
-function get_propagator(model::HeterogcPCPSAFT)
-    return TangentHSPropagator()
+function get_propagator(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure)
+    return TangentHSPropagator(model, species, structure)
 end
 
 function f_res(system::DFTSystem, model::HeterogcPCPSAFT,n)
@@ -129,7 +130,7 @@ end
 function f_disp(system::DFTSystem, model::HeterogcPCPSAFT, n)
     ρ̄ = deepcopy(n)
     nbeads = length(ρ̄)
-    (_, T, _) = system.structure.conditions
+    (_, T) = system.structure.conditions
     ψ = 1.5357
     σ = model.params.sigma.values
     ϵ = model.params.epsilon.values
@@ -221,7 +222,7 @@ end
 
 function f_polar(system::DFTSystem, model::HeterogcPCPSAFT, ρ̄)
     species = system.species
-    (_, T, _) = system.structure.conditions
+    (_, T) = system.structure.conditions
     μ̄² = pcp_dipole2(model)
     has_dp = !all(iszero, μ̄²)
     if !has_dp return zero(T+first(ρ̄)) end

@@ -3,8 +3,7 @@ module PlotscDFTExt
 using cDFT
 using Plots
 
-function Plots.plot(system::cDFT.DFTSystem; x_units=:normalized, y_units=:mass)
-    profiles = system.profiles
+function Plots.plot(system::cDFT.DFTSystem, profiles; x_units=:normalized, y_units=:mass)
     structure = system.structure
     model = system.model
     species = system.species
@@ -12,7 +11,7 @@ function Plots.plot(system::cDFT.DFTSystem; x_units=:normalized, y_units=:mass)
 
     bounds = structure.bounds
 
-    z = LinRange(bounds[1],bounds[2],structure.ngrid*10)
+    z = LinRange(bounds[1],bounds[2],structure.ngrid)
     L = cDFT.length_scale(model)
 
     plt = Plots.plot(grid=:off,
@@ -51,17 +50,17 @@ function Plots.plot(system::cDFT.DFTSystem; x_units=:normalized, y_units=:mass)
             end
 
             if y_units == :normalized
-                Y = profiles[k].(z).*norm_const
+                Y = profiles[:,k].*norm_const
                 y_norm = "σ³"
             elseif y_units == :mass
                 Mw = model.params.Mw[k]
-                Y = profiles[k].(z).*Mw/1e3
+                Y = profiles[:,k].*Mw/1e3
                 y_norm = " / (kg/m³)"
             elseif y_units == :angstrom
-                Y = profiles[k].(z).*cDFT.N_A/1e30
+                Y = profiles[:,k].*cDFT.N_A/1e30
                 y_norm = " / (kg/m³)"
             else
-                Y = profiles[k].(z)
+                Y = profiles[:,k]
                 y_norm = " / (mol/m³)"
             end
         

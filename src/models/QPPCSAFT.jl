@@ -7,7 +7,7 @@ end
 
 function f_polar(system::DFTSystem, model::QPCPSAFTModel, ρ̄)
     species = system.species
-  (_, T, _) = system.structure.conditions
+  (_, T) = system.structure.conditions
   μ̄² = model.params.dipole2.values
   Q̄² = model.params.quadrupole2.values
   has_dp = !all(iszero, μ̄²)

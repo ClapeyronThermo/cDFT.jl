@@ -1,5 +1,5 @@
 """
-    converge!(system::DFTSystem)
+    converge!(system::DFTSystem, ρ)
 
 For a given system, converge the profiles using the solver specified under `system.options.solver`. Convergence is achieved by solving the generic equation:
 ```julia
@@ -11,25 +11,23 @@ ln(ρi) = ln(ρi_bulk) + β(μi_res - δFδρ_res)
 ```
 The default solver uses Anderson Mixing with 100 initial Picard iterations, 50 memory points, 1e-2 damping, and an infinite drop tolerance. 
 """
-function converge!(system::DFTSystem)
-    (p, T, z) = system.structure.conditions
+function converge!(system::DFTSystem,ρ)
     ngrid = system.structure.ngrid
-    nbeads = length(system.profiles)
+    nbeads = size(ρ,2)
     species = system.species
     model = system.model
     method = system.options.solver
-    ρ = system.profiles
+    z = vec(LinRange(system.structure.bounds[1],system.structure.bounds[2],ngrid))
 
     function obj(system,ln_G,ln_x)
-        ln_x = reshape(ln_x, (ngrid, length(ρ)))
-        ln_Gx = reshape(ln_G, (ngrid, length(ρ)))
-        for i in 1:nbeads
-            update_profile!(system.profiles[i], exp.(@view(ln_x[:,i])))
-        end
+        ln_x = reshape(ln_x, (ngrid, nbeads))
+        ln_Gx = reshape(ln_G, (ngrid, nbeads))
+        
+        ρ = exp.(ln_x)
 
-        δfδρ_res = δFδρ_res(system)
-        Gcα, Gp = propagate(system, system.propagator, δfδρ_res)
-        Vext = evaluate_external_field(system)
+        δfδρ_res = δFδρ_res(system, ρ)
+        Gcα, Gp = propagate(system, system.propagator, δfδρ_res, ρ)
+        Vext = evaluate_external_field(system, ρ, z)
         # println(δfδρ_res)
         # println(species.chempot_res)
         for i in @comps
@@ -50,23 +48,15 @@ function converge!(system::DFTSystem)
         return ln_G
     end
 
-    ln_X0 = zeros(ngrid,nbeads)
-    ln_GX0 = copy(ln_X0)
+    ln_GX0 = copy(ρ)
     f(ln_x) = obj(system, ln_GX0, ln_x)
-    
-    for i in 1:nbeads
-        ln_X0[:,i] = log.(ρ[i].density)
-    end
 
-    ln_X0 = vec(ln_X0)
+    ln_X0 = vec(log.(ρ))
 
     ρ_new = Solvers.fixpoint(f,ln_X0, method; rtol = 1e-4, max_iters = 100000)
 
-    ρ_new = exp.(ρ_new)
-    ρ_new = reshape(ρ_new,(ngrid,length(ρ)))
-    for i in 1:nbeads
-        update_profile!(system.profiles[i],ρ_new[:,i])
-    end
+    ρ = exp.(ρ_new)
+    ρ = reshape(ρ,(ngrid,nbeads))
 end
 
 export converge!

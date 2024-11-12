@@ -1,7 +1,7 @@
 module cDFT
 
 using LinearAlgebra
-using ForwardDiff, NLSolvers
+using ForwardDiff, NLSolvers, FFTW
 using Clapeyron
 using Clapeyron: d, N_A, k_B, R̄
 using Clapeyron: @comps, @groups
@@ -27,6 +27,7 @@ include("utils/expand_model.jl")
 include("utils/boundary_conditions.jl")
 include("utils/profiles.jl")
 include("utils/integrals.jl")
+include("utils/fft.jl")
 include("utils/anderson.jl")
 
 include("fields/fields.jl")

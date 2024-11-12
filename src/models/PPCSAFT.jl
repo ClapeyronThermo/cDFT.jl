@@ -15,7 +15,7 @@ end
 
 function f_polar(system::DFTSystem, model::PCPSAFTModel, ρ̄)
     species = system.species
-    (_, T, _) = system.structure.conditions
+    (_, T) = system.structure.conditions
     μ̄² = pcp_dipole2(model)
     has_dp = !all(iszero, μ̄²)
     if !has_dp return zero(T+first(ρ̄)) end

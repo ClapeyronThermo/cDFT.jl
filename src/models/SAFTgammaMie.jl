@@ -5,11 +5,8 @@ function DFTSystem(model::SAFTgammaMieModel,structure::DFTStructure,options::DFT
     model = expand_model(model)
     species = get_species(model, structure)
     fields = get_fields(model, species, structure)
-    propagator = get_propagator(model)
-    profiles = initialize_profiles(model,structure, species)
-    group_idx = reduce(vcat,model.groups.i_groups)
-    profiles[group_idx] = profiles
-    return DFTSystem(model, species, structure, profiles, fields, propagator, options)
+    propagator = get_propagator(model, species, structure)
+    return DFTSystem(model, species, structure, fields, propagator, options)
 end
 
 struct SAFTgammaMieSpecies <: DFTSpecies
@@ -21,11 +18,11 @@ struct SAFTgammaMieSpecies <: DFTSpecies
 end
 
 function get_species(model::SAFTgammaMie,structure::DFTStructure)
-    (p,T,z) = structure.conditions
+    (p,T) = structure.conditions
+    ρbulk = structure.ρbulk 
     HSd = d(model,1e-3,T,ones(length(model.groups.flattenedgroups)))
-    v = volume(model, p, T, z)
-    ρbulk = z./v
-    μres = Clapeyron.VT_chemical_potential_res(model, v, T, z) / Clapeyron.R̄ / T
+
+    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), T, ρbulk./sum(ρbulk)) / Clapeyron.R̄ / T
     nbeads = length.(model.groups.groups)
 
     levels = zeros(Int, sum(nbeads))
@@ -52,25 +49,28 @@ function get_species(model::SAFTgammaMie,structure::DFTStructure)
 end
 
 function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure)
-    nb = length(model.groups.flattenedgroups)
+    nb = sum(species.nbeads)
+    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
+    ω = fftfreq(structure.ngrid, f)
+    d = species.size
     λ_r = diagvalues(model.params.lambda_r.values)
     λ_a = diagvalues(model.params.lambda_a.values)
     σ   = diagvalues(model.params.sigma.values)
     C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
-    x = species.size ./ σ
+    x = d ./ σ
     ψ = @. cbrt(3*C*(1/(λ_a-3)-1/(λ_r-3)))
-    return [WeightedDensity(:ρ,zeros(nb)),
-            WeightedDensity(:∫ρdz,0.5*ones(nb)),
-            WeightedDensity(:∫ρz²dz,0.5*ones(nb)),
-            WeightedDensity(:∫ρzdz,0.5*ones(nb)),
-            WeightedDensity(:∫ρz²dz,ones(nb)),
-            WeightedDensity(:∫ρdz,ones(nb)),
-            WeightedDensity(:∫ρz²dz,ψ)]
+    return [WeightedDensity(:ρ,zeros(nb),ω),
+            WeightedDensity(:∫ρdz,0.5*d,ω),
+            WeightedDensity(:∫ρz²dz,0.5*d,ω),
+            WeightedDensity(:∫ρzdz,0.5*d,ω),
+            WeightedDensity(:∫ρz²dz,d,ω),
+            WeightedDensity(:∫ρdz,d,ω),
+            WeightedDensity(:∫ρz²dz,ψ.*d,ω)]
 end
 
 
-function get_propagator(model::SAFTgammaMieModel)
-    return TangentHSPropagator()
+function get_propagator(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure)
+    return TangentHSPropagator(model, species, structure)
 end
 
 function expand_model(model::SAFTgammaMieModel)
@@ -382,7 +382,7 @@ function f_disp(system::DFTSystem, model::SAFTgammaMieModel, ρ̄)
     V = nothing
     ψ = system.fields[end].width
     _d = system.species.size
-    (_, T, _) = system.structure.conditions
+    (_, T) = system.structure.conditions
     m = model.params.segment.values
     S = model.params.shapefactor.values
     _ϵ = model.params.epsilon
@@ -392,7 +392,7 @@ function f_disp(system::DFTSystem, model::SAFTgammaMieModel, ρ̄)
 
     m = m.*S
 
-    ρ̄ = ρ̄*3 ./(4*ψ.^3 .*_d.^3)/π
+    ρ̄ = ρ̄*3 ./(4*ψ.^3)/π
     ∑ρ̄ = sum(ρ̄)
     z = ρ̄ /∑ρ̄
     m̄ = dot(z,m)
@@ -511,7 +511,8 @@ end
 
 function f_chain(system::DFTSystem, model::SAFTgammaMieModel, ρhc, ρ̄hc, _λ)
     V = nothing
-    (_, T, x) = system.structure.conditions
+    (_, T) = system.structure.conditions
+    x = system.structure.ρbulk / sum(system.structure.ρbulk)
     
     m = model.vrmodel.params.segment
     m_gc = model.params.segment.values .* model.params.shapefactor.values

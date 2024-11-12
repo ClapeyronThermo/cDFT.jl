@@ -1,20 +1,20 @@
 """
-    free_energy(system::DFTSystem)
+    free_energy(system::DFTSystem, ρ)
 
-Obtain the total free energy of the system. This is done by summing the ideal and residual free energies.
+Obtain the total free energy of the system for a given profile. This is done by summing the ideal and residual free energies.
 
 The output is a scalar of units J.
 """
-function free_energy(system::DFTSystem)
-    return F_ideal(system)+F_res(system)
+function free_energy(system::DFTSystem,ρ)
+    return F_ideal(system,ρ)+F_res(system,ρ)
 end
 
 onevec(model) = Clapeyron.FillArrays.Ones(length(model))
 
 macro chain(component, args...)
     quote
-        if hasfield(typeof(system.model), :groups)
-            system.model.groups.i_groups[$(component)]
+        if hasfield(typeof(model), :groups)
+            model.groups.i_groups[$(component)]
         else
             $(component)
         end

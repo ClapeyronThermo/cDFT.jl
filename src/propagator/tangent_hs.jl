@@ -1,15 +1,38 @@
+function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTStructure)
+    ngrid = structure.ngrid
+    nbeads = sum(species.nbeads)
+    map = zeros(ComplexF64, ngrid, nbeads, nbeads)
+    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
+    ω = fftfreq(structure.ngrid, f)
 
-function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res)
-    ρ = system.profiles
+    for i in @comps
+        l = 1
+        for j in @chain(i)
+            for k in @chain(i)[l:end]
+                R = (species.size[j] + species.size[k])*π
+                Ω = 2*R .* (ω .== 0.0) + 2*sin.(ω.*R)./ω .*(ω .!= 0.0)
+                Ω ./= 2
+                map[:,j,k] = Ω./(R)
+                map[:,k,j] = Ω./(R)
+            end
+            l+=1
+        end
+    end
+    return TangentHSPropagator(map)
+end
+
+
+function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res, ρ)
     model = system.model
     structure = system.structure
     ngrid = structure.ngrid
     species = system.species
     nbeads = sum(system.species.nbeads)
-    z = system.profiles[1].coords
 
     Gcα = ones(Float64, ngrid, nbeads, nbeads)
     Gp  = ones(Float64, ngrid, nbeads)
+
+    map = propagate.map
 
     levels = species.levels
     for i in @comps
@@ -35,15 +58,7 @@ function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res)
                                 _Gcα = exp.(-δf_res[:,α]).*prod(Gcα[:,α,β],dims=(2,3))
                             end
 
-                            lim = (system.species.size[k]+system.species.size[α])/2
-                            bounds = system.structure.bounds.+(-lim,lim)
-                            boundary_conditions = ρ[k].boundary_conditions
-                            bc1 = typeof(boundary_conditions[1])(_Gcα[1],-1)
-                            bc2 = typeof(boundary_conditions[2])(_Gcα[end],1)
-                            _Gcα = DensityProfile(_Gcα,z,bounds,(bc1,bc2))
-                            for j in 1:ngrid
-                                Gcα[j,k,α] = ∫ρdz(structure, _Gcα, z[j], lim)./(2*lim)
-                            end
+                            Gcα[:,k,α] = real.(ifft(fft(_Gcα).*map[:,k,α]))
                         end
                     end
                 end
@@ -63,15 +78,7 @@ function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res)
                     
                         _Gp = exp.(-δf_res[:,l]).*Gp[:,l].*prod(Gcα[:,l,α],dims=(2,3))
 
-                        lim = (system.species.size[k]+system.species.size[l])/2
-                        bounds = system.structure.bounds.+(-lim,lim)
-                        boundary_conditions = ρ[k].boundary_conditions
-                        bc1 = typeof(boundary_conditions[1])(_Gp[1],-1)
-                        bc2 = typeof(boundary_conditions[2])(_Gp[end],1)
-                        _Gp = DensityProfile(_Gp,z,bounds,(bc1,bc2))
-                        for j in 1:ngrid
-                            Gp[j,k] = ∫ρdz(structure, _Gp, z[j], lim)./(2*lim)
-                        end
+                        Gp[:,k] = real.(ifft(fft(_Gp).*map[:,k,l]))
                     end
                 end
             end
