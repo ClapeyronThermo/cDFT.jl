@@ -37,15 +37,18 @@ The output is a 2D array with the dimensions `(ngrid,nb)`, where `ngrid` is the 
 function δFδρ_res(system::DFTSystem, ρ)
     model = system.model
     fields = system.fields
-    nb = size(ρ,2)
+    
     nf = length(fields)
     ngrid = system.structure.ngrid
+    nd = length(ngrid)
+    nb = size(ρ,nd+1)
 
     n = evaluate_field(system,ρ)
     nf = length_fields(system)
     # @assert nf == length(system.fields) "define length_fields(model::EoSModel) = nf"
     f(x) = f_res(system,model,x)
-    n_first = @view(n[1,:,:])
+    idx_first = [1 for i in 1:nd]
+    n_first = @view(n[idx_first...,:,:])
     cfg = ForwardDiff.GradientConfig(f, n_first, ForwardDiff.Chunk{nf}())
     df!(df,x) = ForwardDiff.gradient!(df,f,x,cfg)
 

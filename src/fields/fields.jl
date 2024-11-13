@@ -10,13 +10,14 @@ This is the macro function that will call `evaluate_field(system,field,profiles)
 function evaluate_field(system::DFTSystem, ρ)
     fields = system.fields
     nf = length(fields)
-    nb = size(ρ,2)
     ngrid = system.structure.ngrid
+    nd = length(ngrid)
+    nb = size(ρ,nd+1)
 
     n = zeros(Float64,ngrid...,nf,nb)
 
     for i in 1:nf
-        n[:,i,:] = evaluate_field(system,fields[i], ρ)
+        selectdim(n,nd+1,i) .= evaluate_field(system,fields[i], ρ)
     end
     
     return n
@@ -33,13 +34,14 @@ function integrate_field(system::DFTSystem, δf, ρ)
     fields = system.fields
 
     ngrid = system.structure.ngrid
+    nd = length(ngrid)
     nb  = size(ρ,2)
     nf = length(fields)
 
     δFδρ_res = zeros(ngrid...,nb)
 
     for j in 1:nf        
-        δFδρ_res += integrate_field(system,fields[j],@view(δf[:,j,:]))
+        δFδρ_res += integrate_field(system,fields[j],selectdim(δf,nd+1,j))
     end
 
     return δFδρ_res

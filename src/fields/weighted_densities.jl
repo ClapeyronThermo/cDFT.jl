@@ -19,6 +19,7 @@ end
 function WeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}, ngrid)
     
     R = 2π.*width'
+    nd = length(ngrid)
 
     if type != :∫ρzdz
         Ω = zeros(ComplexF64,ngrid...,length(width))
@@ -52,19 +53,16 @@ function WeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64},
         error("Invalid type of field")
     end
 
-    if length(ngrid) == 1
-        plan = plan_fft(Ω[:,1])
-    else 
-        plan = plan_fft(Ω, 1:length(ngrid))
-    end
+    plan = plan_fft(selectdim(Ω,nd+1,1), 1:length(ngrid))
     iplan = inv(plan)
     return WeightedDensity(type,width,Ω,plan,iplan)
 end
 
 function evaluate_field(system::DFTSystem,field::WeightedDensity, ρ)
     structure = system.structure
-    nb = size(ρ,2)
     ngrid = structure.ngrid
+    nd = length(ngrid)
+    nb = size(ρ,nd+1)
 
     if field.type == :ρ
         return ρ.*N_A
@@ -76,9 +74,9 @@ function evaluate_field(system::DFTSystem,field::WeightedDensity, ρ)
     n = zeros(eltype(map),ngrid...,nb)
 
     for i in 1:nb
-        matmul!(@view(n[:,i]),P,@view(ρ[:,i]))
-        elmul!(@view(n[:,i]),@view(n[:,i]),map[:,i])
-        matmul!(@view(n[:,i]),iP,@view(n[:,i]))
+        matmul!(selectdim(n,nd+1,i),P,selectdim(ρ,nd+1,i))
+        elmul!(selectdim(n,nd+1,i),selectdim(n,nd+1,i),selectdim(map,nd+1,i))
+        matmul!(selectdim(n,nd+1,i),iP,selectdim(n,nd+1,i))
     end
     return real.(n).*N_A
 end
@@ -87,6 +85,7 @@ function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
     type = field.type
     nb = size(profile,2)
     ngrid = system.structure.ngrid
+    nd = length(ngrid)
 
     if type == :∫ρdz || type == :∫ρz²dz
         prefactor = 1
@@ -105,10 +104,10 @@ function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
     ∫field = zeros(eltype(map),ngrid...,nb)
 
     for i in 1:nb
-        matmul!(@view(∫field[:,i]),P,@view(profile[:,i]))
-        elmul!(@view(∫field[:,i]),@view(∫field[:,i]),map[:,i])
-        matmul!(@view(∫field[:,i]),iP,@view(∫field[:,i]))
-        ∫field[:,i] .*= prefactor
+        matmul!(selectdim(∫field,nd+1,i),P,selectdim(profile,nd+1,i))
+        elmul!(selectdim(∫field,nd+1,i),selectdim(∫field,nd+1,i),selectdim(map,nd+1,i))
+        matmul!(selectdim(∫field,nd+1,i),iP,selectdim(∫field,nd+1,i))
+        selectdim(∫field,nd+1,i) .*= prefactor
         # ∫field[:,i] = prefactor*real.(ifft(fft(profile[:,i]).*map[:,i]))
     end
     return real.(∫field)
