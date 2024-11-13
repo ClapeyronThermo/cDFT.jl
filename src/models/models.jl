@@ -43,7 +43,7 @@ function δFδρ_res(system::DFTSystem, ρ)
     nd = length(ngrid)
     nb = size(ρ,nd+1)
 
-    n = evaluate_field(system,ρ)
+    n, nV = evaluate_field(system,ρ)
     nf = length_fields(system)
     # @assert nf == length(system.fields) "define length_fields(model::EoSModel) = nf"
     f(x) = f_res(system,model,x)
@@ -57,7 +57,7 @@ function δFδρ_res(system::DFTSystem, ρ)
     for k in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
         df!(@view(δf[k...,:,:]),@view(n[k...,:,:]))
     end
-    δFδρ_res = integrate_field(system, δf, ρ)
+    δFδρ_res = integrate_field(system, δf, nV)
     return δFδρ_res
 end
 

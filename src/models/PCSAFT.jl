@@ -35,13 +35,13 @@ function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStruc
     end
 
     d = species.size
-    return [WeightedDensity(:ρ,zeros(nc),ω,ngrid),
-            WeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
-            WeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
-            WeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
-            WeightedDensity(:∫ρz²dz,d,ω,ngrid),
-            WeightedDensity(:∫ρdz,d,ω,ngrid),
-            WeightedDensity(:∫ρz²dz,1.3862*d,ω,ngrid)]
+    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid),
+            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,d,ω,ngrid),
+            SWeightedDensity(:∫ρdz,d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,1.3862*d,ω,ngrid)]
 end
 
 """
@@ -70,7 +70,7 @@ end
 
 function f_res(system::DFTSystem, model::PCSAFTModel,n)
     n1,n2,n3,n4,n5,n6,n7 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4,:]),@view(n[5,:]),@view(n[6,:]),@view(n[7,:])
-    return f_hs(system,model,n2,n3,n4) + f_hc(system,model,n1,n5,n6) + f_disp(system,model,n7) + f_assoc(system,model,n2,n3,n4)
+    return f_hs(system,model,n2,n3,n4) + f_hc(system,model,n1,n5,n6) + f_disp(system,model,n7) # + f_assoc(system,model,n2,n3,n4)
 end
 
 function f_hc(system::DFTSystem, model::PCSAFTModel,n)
@@ -162,7 +162,7 @@ function I(model::PCSAFTModel,m̄,n₃,n)
     return res
 end
 
-function Δ(model::PCSAFTModel, T, n, n₃, nᵥ, i, j, a, b)
+function Δ(model::PCSAFTModel, T, n, n₃, nᵥnᵥ, i, j, a, b)
     ϵ_assoc = model.params.epsilon_assoc.values
     κ = model.params.bondvol.values
     κijab = κ[i,j][a,b]
@@ -174,18 +174,18 @@ function Δ(model::PCSAFTModel, T, n, n₃, nᵥ, i, j, a, b)
     HSd = d(model,1e-3,T,onevec(model))
     dij = (HSd[i]*HSd[j])/(HSd[i]+HSd[j])
 
-    n₂, nᵥ₂, n₃₃ = _0,_0,_0
+    n₂, nᵥ₂nᵥ₂, n₃₃ = _0,_0,_0
     for i in 1:length(n)
-        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[i],HSd[i]
+        nᵢ,mᵢ,nᵥnᵥᵢ,HSdᵢ = n[i],m[i],nᵥnᵥ[i],HSd[i]
         n₂ += π*HSdᵢ*nᵢ*mᵢ
-        nᵥ₂ += -2π*nᵥᵢ*mᵢ
+        nᵥ₂nᵥ₂ += -4π^2*nᵥnᵥᵢ*mᵢ^2
         n₃₃ += n₃[i]*mᵢ
     end
     #n₂ = sum(π.*HSd.*n.*m)
     #nᵥ₂ = sum(-2π.*nᵥ.*m)
     #n₃  = sum(n₃.*m)
 
-    ξ = 1-nᵥ₂^2/n₂^2
+    ξ = 1-nᵥ₂nᵥ₂/n₂^2
     g_hs = 1/(1-n₃₃)+dij*ξ*n₂/(2*(1-n₃₃)^2)+dij^2*n₂^2*ξ/(18*(1-n₃₃)^3)
     return g_hs*σ^3*expm1(ϵ_assoc[i,j][a,b]/T)*κijab
 end
