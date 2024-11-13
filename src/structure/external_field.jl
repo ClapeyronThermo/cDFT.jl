@@ -6,7 +6,7 @@ function evaluate_external_field(system::DFTSystem, ρ, z)
     if !hasfield(typeof(structure),:external_field)
         ngrid = structure.ngrid
         nbeads = length(ρ)
-        return zeros(ngrid,nbeads)
+        return zeros(ngrid...,nbeads)
     end
 
     model = system.model

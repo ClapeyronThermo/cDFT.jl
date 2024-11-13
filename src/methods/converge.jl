@@ -13,21 +13,22 @@ The default solver uses Anderson Mixing with 100 initial Picard iterations, 50 m
 """
 function converge!(system::DFTSystem,ρ)
     ngrid = system.structure.ngrid
-    nbeads = size(ρ,2)
+    nd = length(ngrid)
+    nbeads = size(ρ,nd+1)
     species = system.species
     model = system.model
     method = system.options.solver
-    z = vec(LinRange(system.structure.bounds[1],system.structure.bounds[2],ngrid))
+    Z = get_coords(system.structure)
 
     function obj(system,ln_G,ln_x)
-        ln_x = reshape(ln_x, (ngrid, nbeads))
-        ln_Gx = reshape(ln_G, (ngrid, nbeads))
+        ln_x = reshape(ln_x, (ngrid..., nbeads))
+        ln_Gx = reshape(ln_G, (ngrid..., nbeads))
         
         ρ .= exp.(ln_x)
 
         δfδρ_res = δFδρ_res(system, ρ)
         Gcα, Gp = propagate(system, system.propagator, δfδρ_res, ρ)
-        Vext = evaluate_external_field(system, ρ, z)
+        Vext = evaluate_external_field(system, ρ, Z)
         # println(δfδρ_res)
         # println(species.chempot_res)
         for i in @comps
@@ -38,8 +39,8 @@ function converge!(system::DFTSystem,ρ)
                     α = k
                 end
 
-                Threads.@threads for j in 1:ngrid
-                    ln_Gx[j,k] = log(species.bulk_density[i]) + (species.chempot_res[i] - δfδρ_res[j,k]) + log(Gp[j,k]) + sum(log.(Gcα[j,k,α])) - Vext[j,k]
+                for j in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+                    ln_Gx[j...,k] = log(species.bulk_density[i]) + (species.chempot_res[i] - δfδρ_res[j...,k]) + log(Gp[j...,k]) + sum(log.(Gcα[j...,k,α])) - Vext[j...,k]
                 end
             end
         end
@@ -55,7 +56,7 @@ function converge!(system::DFTSystem,ρ)
 
     ρ_new = Solvers.fixpoint(f,ln_X0, method; rtol = 1e-4, max_iters = 100000)
 
-    ρ .= reshape(exp.(ρ_new),(ngrid,nbeads))
+    ρ .= reshape(exp.(ρ_new),(ngrid...,nbeads))
 end
 
 export converge!
