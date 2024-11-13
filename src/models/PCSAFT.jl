@@ -23,16 +23,25 @@ For a given `model`, obtain all of the fields that will be needed to perform the
 """
 function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure)
     nc = length(model)
-    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
-    ω = fftfreq(structure.ngrid, f)
+    ngrid = structure.ngrid
+    f = [ngrid[i]/(structure.bounds[i,2]-structure.bounds[i,1]) for i in 1:length(ngrid)]
+    ω̂ = fftfreq.(ngrid, f)
+    ω = zeros(ngrid...,length(ngrid))
+
+    for k in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+        for i in 1:length(ngrid)
+            ω[k...,i] = ω̂[i][k[i]]
+        end
+    end
+
     d = species.size
-    return [WeightedDensity(:ρ,zeros(nc),ω),
-            WeightedDensity(:∫ρdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,0.5*d,ω),
-            WeightedDensity(:∫ρzdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,d,ω),
-            WeightedDensity(:∫ρdz,d,ω),
-            WeightedDensity(:∫ρz²dz,1.3862*d,ω)]
+    return [WeightedDensity(:ρ,zeros(nc),ω,ngrid),
+            WeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
+            WeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
+            WeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
+            WeightedDensity(:∫ρz²dz,d,ω,ngrid),
+            WeightedDensity(:∫ρdz,d,ω,ngrid),
+            WeightedDensity(:∫ρz²dz,1.3862*d,ω,ngrid)]
 end
 
 """

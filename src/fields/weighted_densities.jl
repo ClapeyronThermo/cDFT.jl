@@ -16,26 +16,47 @@ struct WeightedDensity <: DFTField
     iplan::Plan
 end
 
-function WeightedDensity(type::Symbol,width::Vector{Float64},ω::Frequencies{Float64})
+function WeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}, ngrid)
     
     R = 2π.*width'
 
+    if type != :∫ρzdz
+        Ω = zeros(ComplexF64,ngrid...,length(width))
+    else
+        Ω = zeros(ComplexF64,ngrid...,length(ngrid),length(width))
+    end
+
     if type == :∫ρdz
-        Ω = 2*R .* (ω .== 0.0) + 2*sin.(ω.*R)./ω .*(ω .!= 0.0)
+        for k in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+            ω̄ = norm(ω[k...,:])
+            Ω[k...,:] = 2*R .* (ω̄ .== 0.0) + 2*sin.(ω̄.*R)./ω̄ .*(ω̄ .!= 0.0)
+        end
         Ω ./= 2π
     elseif type == :∫ρzdz
-        Ω = 4π*im./ω.^2 .*(sin.(ω.*R)-R.*ω.*cos.(ω.*R)) .*(ω .!= 0.0) .+ 0.0
+        for k in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+            ω̄ = norm(ω[k...,:])
+            Ω[k...,:,:] = 0.0 .+ 4π*im.*ω[k...,:]./ω̄.^3 .*(sin.(ω̄.*R)-R.*ω̄ .*cos.(ω̄.*R)) .*(ω̄ .!= 0.0)
+        end
+        # Ω = 4π*im./ω.^2 .*(sin.(ω.*R)-R.*ω.*cos.(ω.*R)) .*(ω .!= 0.0) .+ 0.0
         Ω ./= (2π)^3
     elseif type == :∫ρz²dz
-        Ω = 4π./ω.^3 .*(sin.(ω.*R)-R.*ω.*cos.(ω.*R)) .*(ω .!= 0.0) + R.^3/3*4π .*(ω .== 0.0)
+        for k in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+            ω̄ = norm(ω[k...,:])
+            Ω[k...,:] = 4π./ω̄.^3 .*(sin.(ω̄.*R)-R.*ω̄.*cos.(ω̄.*R)) .*(ω̄ .!= 0.0) + R.^3/3*4π .*(ω̄ .== 0.0)
+        end
+        # Ω = 4π./ω.^3 .*(sin.(ω.*R)-R.*ω.*cos.(ω.*R)) .*(ω .!= 0.0) + R.^3/3*4π .*(ω .== 0.0)
         Ω ./= (2π)^3
     elseif type == :ρ
-        Ω = ones(length(ω),length(width))
+        Ω = ones(ngrid...,length(width))
     else
         error("Invalid type of field")
     end
 
-    plan = plan_fft(Ω[:,1])
+    if length(ngrid) == 1
+        plan = plan_fft(Ω[:,1])
+    else 
+        plan = plan_fft(Ω, 1:length(ngrid))
+    end
     iplan = inv(plan)
     return WeightedDensity(type,width,Ω,plan,iplan)
 end
@@ -52,7 +73,7 @@ function evaluate_field(system::DFTSystem,field::WeightedDensity, ρ)
     map = field.map
     P = field.plan
     iP = field.iplan
-    n = zeros(eltype(map),ngrid,nb)
+    n = zeros(eltype(map),ngrid...,nb)
 
     for i in 1:nb
         matmul!(@view(n[:,i]),P,@view(ρ[:,i]))
@@ -63,8 +84,6 @@ function evaluate_field(system::DFTSystem,field::WeightedDensity, ρ)
 end
 
 function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
-    
-
     type = field.type
     nb = size(profile,2)
     ngrid = system.structure.ngrid
@@ -83,7 +102,7 @@ function integrate_field(system::DFTSystem,field::WeightedDensity,profile)
     P = field.plan
     iP = field.iplan
 
-    ∫field = zeros(eltype(map),ngrid,nb)
+    ∫field = zeros(eltype(map),ngrid...,nb)
 
     for i in 1:nb
         matmul!(@view(∫field[:,i]),P,@view(profile[:,i]))

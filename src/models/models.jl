@@ -49,10 +49,10 @@ function δFδρ_res(system::DFTSystem, ρ)
     cfg = ForwardDiff.GradientConfig(f, n_first, ForwardDiff.Chunk{nf}())
     df!(df,x) = ForwardDiff.gradient!(df,f,x,cfg)
 
-    δf = zeros(ngrid,nf,nb)
+    δf = zeros(ngrid...,nf,nb)
 
-    for i in 1:ngrid
-        df!(@view(δf[i,:,:]),@view(n[i,:,:]))
+    for k in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+        df!(@view(δf[k...,:,:]),@view(n[k...,:,:]))
     end
     δFδρ_res = integrate_field(system, δf, ρ)
     return δFδρ_res
