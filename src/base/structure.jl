@@ -6,6 +6,7 @@ abstract type DFTStructure1DSphr <: DFTStructure1D end
 abstract type DFTStructure2D <: DFTStructure end
 abstract type DFTStructure2DCart <: DFTStructure2D end
 abstract type DFTStructure3D <: DFTStructure end
+abstract type DFTStructure3DCart <: DFTStructure3D end
 
 """
     ExternalField1DCart(conditions::Tuple{Float64,Float64}, ρbulk::Vector{Float64}, bounds::Vector{Float64}, ngrid::Int64, external_field::ExternalFieldModel, width::Float64)
@@ -159,6 +160,14 @@ struct TwoPhase2DLamCart <: DFTStructure2DCart
     ρbulk2::Vector{Float64}
     bounds::Array{Float64}
     ngrid::Tuple{Int64,Int64}
+end
+
+struct TwoPhase3DLamCart <: DFTStructure3DCart 
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    ρbulk2::Vector{Float64}
+    bounds::Array{Float64}
+    ngrid::Tuple{Int64,Int64,Int64}
 end
 
 export TwoPhase1DCart, Uniform1DCart, ExternalField1DCart
