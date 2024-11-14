@@ -12,27 +12,29 @@ This is the macro function that will call `evaluate_field(system,field,profiles)
 """
 function evaluate_field(system::DFTSystem, ρ)
     fields = system.fields
-    nf = length(fields)
-    nvf = length(filter(x -> typeof(x) <: VectorField, fields))
+    nf = length_fields(system)
+    # nvf = length(filter(x -> typeof(x) <: VectorField, fields))
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(ρ,nd+1)
 
     n = zeros(Float64,ngrid...,nf,nb)
-    nV = zeros(Float64,ngrid...,nvf,nb,nd)
 
-    iv = 1
-    for i in 1:nf
-        if typeof(fields[i]) <: ScalarField
-            selectdim(n,nd+1,i) .= evaluate_field(system,fields[i], ρ)
-        elseif typeof(fields[i]) <: VectorField
-            selectdim(nV,nd+1,iv) .= evaluate_field(system,fields[i], ρ)
-            selectdim(n,nd+1,i) .= sum(selectdim(nV,nd+1,iv).^2,dims=nd+2)
-            iv += 1
+    i = 1
+    idxf = 1
+    while i <= nf
+        if typeof(fields[idxf]) <: ScalarField
+            selectdim(n,nd+1,i) .= evaluate_field(system,fields[idxf], ρ)
+            i += 1
+        elseif typeof(fields[idxf]) <: VectorField
+            selectdim(n,nd+1,i:i+nd-1) .= evaluate_field(system,fields[idxf], ρ)
+            # selectdim(n,nd+1,i) .= dropdims(sum(selectdim(nV,nd+1,iv).^2,dims=nd+2),dims=nd+2)
+            i += nd
         end
+        idxf += 1
     end
     
-    return n, nV
+    return n
 end
 
 """
@@ -42,24 +44,28 @@ This function will obtain, for all fields, the functional derivative for each sp
 
 This is the macro function that will call `integrate_field(system,field,δf,ρ)` for each field in the system.
 """
-function integrate_field(system::DFTSystem, δf, nV)
+function integrate_field(system::DFTSystem, δf)
     fields = system.fields
 
     ngrid = system.structure.ngrid
     nd = length(ngrid)
-    nb  = size(nV,nd+2)
-    nf = length(fields)
+    nb  = size(δf,nd+2)
+    nf = length_fields(system)
 
     δFδρ_res = zeros(ngrid...,nb)
     iv = 1
 
-    for j in 1:nf        
-        if typeof(fields[j]) <: ScalarField
-            δFδρ_res += integrate_field(system,fields[j],selectdim(δf,nd+1,j))
-        elseif typeof(fields[j]) <: VectorField
-            δFδρ_res += integrate_field(system,fields[j],selectdim(δf,nd+1,j),selectdim(nV,nd+1,iv))
-            iv += 1
+    j = 1
+    idxf = 1
+    while j <= nf      
+        if typeof(fields[idxf]) <: ScalarField
+            δFδρ_res += integrate_field(system,fields[idxf],selectdim(δf,nd+1,j))
+            j += 1
+        elseif typeof(fields[idxf]) <: VectorField
+            δFδρ_res += integrate_field(system,fields[idxf],selectdim(δf,nd+1,j:j+nd-1))
+            j += nd
         end
+        idxf += 1
     end
 
     return δFδρ_res
