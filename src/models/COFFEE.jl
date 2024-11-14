@@ -13,7 +13,6 @@ function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStruc
     nc = length(model)
     ψ = 1.3862
 
-    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
     ω = structure_ω(structure)
     d = species.size
     ngrid = structure.ngrid

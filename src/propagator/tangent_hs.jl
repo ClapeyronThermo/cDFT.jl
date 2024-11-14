@@ -1,9 +1,8 @@
 function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTStructure)
     ngrid = structure.ngrid
     nbeads = sum(species.nbeads)
-    map = zeros(ComplexF64, ngrid, nbeads, nbeads)
-    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
-    ω = fftfreq(structure.ngrid, f)
+    map = zeros(ComplexF64, ngrid..., nbeads, nbeads)
+    ω = structure_ω(structure)
 
     for i in @comps
         l = 1
