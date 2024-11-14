@@ -8,6 +8,42 @@ abstract type DFTStructure2DCart <: DFTStructure2D end
 abstract type DFTStructure3D <: DFTStructure end
 abstract type DFTStructure3DCart <: DFTStructure3D end
 
+
+dimension(x::DFTStructure) = dimension(typeof(x))
+dimension(::Type{<:DFTStructure1D}) = 1
+dimension(::Type{<:DFTStructure2D}) = 2
+dimension(::Type{<:DFTStructure3D}) = 3
+
+struct DFTBounds{N}
+    lb::NTuple{N,Float64}
+    ub::NTuple{N,Float64}
+end
+
+function DFTBounds{1}(x::Vector{Float64})
+    DFTBounds((x[1],),(x[2],))
+end
+
+function DFTBounds{2}(x::Vector{Float64})
+    DFTBounds((x[1,1],x[2,1]),(x[1,2],x[2,2]))
+end
+
+function DFTBounds{3}(x::Matrix{Float64})
+    DFTBounds((x[1,1],x[2,1],x[3,1]),(x[1,2],x[2,2],x[3,2]))
+end
+
+function uniform_range(structure::DFTStructure,dim::Int)
+    bounds = DFTBounds{dimension((structure))}(structure.bounds)
+    lb,ub = bounds.lb,bounds.ub
+    grid = structure.grid
+    if dim == 1
+        return LinRange(only(lb),only(ub),only(grid))
+    else
+        return LinRange(lb[dim],ub[dim],grid[dim])
+    end
+end
+
+uniform_range(structure::DFTStructure) = uniform_range(structure,1)
+
 """
     ExternalField1DCart(conditions::Tuple{Float64,Float64}, ρbulk::Vector{Float64}, bounds::Vector{Float64}, ngrid::Int64, external_field::ExternalFieldModel, width::Float64)
 
@@ -38,7 +74,7 @@ struct ExternalField1DCart <: DFTStructure1DCart
     conditions::Tuple{Float64,Float64}
     ρbulk::Vector{Float64}
     bounds::Vector{Float64}
-    ngrid::Int64
+    ngrid::Tuple{Int64}
     external_field::ExternalFieldModel
     width::Float64
 end
@@ -61,7 +97,7 @@ struct Uniform1DCart <: DFTStructure1DCart
     conditions::Tuple{Float64,Float64}
     ρbulk::Vector{Float64}
     bounds::Vector{Float64}
-    ngrid::Int64
+    ngrid::Tuple{Int64}
 end
 
 """
@@ -81,7 +117,7 @@ julia> structure = Uniform1DSphr((p, T), ρbulk, [0L, 10L], 201)
 struct Uniform1DSphr <: DFTStructure1DSphr
     conditions::Tuple{Float64,Float64,Vector{Float64}}
     bounds::Vector{Float64}
-    ngrid::Int64
+    ngrid::Tuple{Int64}
 end
 
 """
@@ -119,7 +155,7 @@ struct TwoPhase1DCart <: DFTStructure1DCart
     conditions::Tuple{Float64,Float64}
     ρbulk::Vector{Float64}
     ρbulk2::Vector{Float64}
-    bounds::Array{Float64}
+    bounds::Vector{Float64}
     ngrid::Tuple{Int64}
 end
 
@@ -158,7 +194,7 @@ struct TwoPhase2DLamCart <: DFTStructure2DCart
     conditions::Tuple{Float64,Float64}
     ρbulk::Vector{Float64}
     ρbulk2::Vector{Float64}
-    bounds::Array{Float64}
+    bounds::Matrix{Float64}
     ngrid::Tuple{Int64,Int64}
 end
 
@@ -166,7 +202,7 @@ struct TwoPhase3DLamCart <: DFTStructure3DCart
     conditions::Tuple{Float64,Float64}
     ρbulk::Vector{Float64}
     ρbulk2::Vector{Float64}
-    bounds::Array{Float64}
+    bounds::Matrix{Float64}
     ngrid::Tuple{Int64,Int64,Int64}
 end
 
