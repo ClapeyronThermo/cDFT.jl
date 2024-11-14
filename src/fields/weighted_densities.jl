@@ -8,7 +8,7 @@ Generic `SWeightedDensity` type used to calculate the scalar weighted densities 
 - `plan`: The Fourier transform plan.
 - `iplan`: The inverse Fourier transform plan.
 """
-struct SWeightedDensity <: ScalarField 
+struct SWeightedDensity{M,P,iP} <: ScalarField 
     type::Symbol
     width::Vector{Float64}
     map::M
@@ -30,14 +30,14 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
     if type == :∫ρdz
         for kk in CartesianIndices(ngrid)
             k = Tuple(kk)
-            ω̄ = norm(ω[k...,:])
+            ω̄ = norm(@view(ω[k...,:]))
             Ω[k...,:] = 2*R .* (ω̄ .== 0.0) + 2*sin.(ω̄.*R)./ω̄ .*(ω̄ .!= 0.0)
         end
         Ω ./= 2π
     elseif type == :∫ρz²dz
         for kk in CartesianIndices(ngrid)
             k = Tuple(kk)
-            ω̄ = norm(ω[k...,:])
+            ω̄ = norm(@view(ω[k...,:]))
             Ω[k...,:] = 4π./ω̄.^3 .*(sin.(ω̄.*R)-R.*ω̄.*cos.(ω̄.*R)) .*(ω̄ .!= 0.0) + R.^3/3*4π .*(ω̄ .== 0.0)
         end
         # Ω = 4π./ω.^3 .*(sin.(ω.*R)-R.*ω.*cos.(ω.*R)) .*(ω .!= 0.0) + R.^3/3*4π .*(ω .== 0.0)
@@ -135,14 +135,14 @@ function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
     if type == :∫ρdz
         for kk in CartesianIndices(ngrid)
             k = Tuple(kk)
-            ω̄ = norm(ω[k...,:])
+            ω̄ = norm(@view(ω[k...,:]))
             Ω[k...,:] = 2*R .* (ω̄ .== 0.0) + 2*sin.(ω̄.*R)./ω̄ .*(ω̄ .!= 0.0)
         end
         Ω ./= 2π
     elseif type == :∫ρzdz
         for kk in CartesianIndices(ngrid)
             k = Tuple(kk)
-            ω̄ = norm(ω[k...,:])
+            ω̄ = norm(@view(ω[k...,:]))
             Ω[k...,:,:] = @. 0.0 - 4π*im*abs(ω[k...,:]')/ω̄^3*(sin(ω̄*R)-R*ω̄*cos(ω̄*R)) *(ω̄ != 0.0)
         end
         # Ω = 4π*im./ω.^2 .*(sin.(ω.*R)-R.*ω.*cos.(ω.*R)) .*(ω .!= 0.0) .+ 0.0
@@ -150,7 +150,7 @@ function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
     elseif type == :∫ρz²dz
         for kk in CartesianIndices(ngrid)
             k = Tuple(kk)
-            ω̄ = norm(ω[k...,:])
+            ω̄ = norm(@view(ω[k...,:]))
             Ω[k...,:] = 4π./ω̄.^3 .*(sin.(ω̄.*R)-R.*ω̄.*cos.(ω̄.*R)) .*(ω̄ .!= 0.0) + R.^3/3*4π .*(ω̄ .== 0.0)
         end
         # Ω = 4π./ω.^3 .*(sin.(ω.*R)-R.*ω.*cos.(ω.*R)) .*(ω .!= 0.0) + R.^3/3*4π .*(ω .== 0.0)

@@ -34,11 +34,21 @@ end
 function uniform_range(structure::DFTStructure,dim::Int)
     bounds = DFTBounds{dimension((structure))}(structure.bounds)
     lb,ub = bounds.lb,bounds.ub
-    grid = structure.grid
+    grid = structure.ngrid
     if dim == 1
         return LinRange(only(lb),only(ub),only(grid))
     else
         return LinRange(lb[dim],ub[dim],grid[dim])
+    end
+end
+
+function bounds(structure::DFTStructure,dim::Int)
+    bounds = DFTBounds{dimension((structure))}(structure.bounds)
+    lb,ub = bounds.lb,bounds.ub
+    if dim == 1
+        return only(lb),only(ub)
+    else
+        return lb[i], ub[i]
     end
 end
 
@@ -79,6 +89,10 @@ struct ExternalField1DCart <: DFTStructure1DCart
     width::Float64
 end
 
+function ExternalField1DCart(conditions,ρbulk,bounds,ngrid::Int64,external_field,width)
+    ExternalField1DCart(conditions,bounds,(ngrid,),external_field,width)
+end
+
 """
     Uniform1DCart(conditions::Tuple{Float64,Float64}, ρbulk, bounds::Vector{Float64}, ngrid::Int64)
 
@@ -100,6 +114,10 @@ struct Uniform1DCart <: DFTStructure1DCart
     ngrid::Tuple{Int64}
 end
 
+function Uniform1DCart(conditions,ρbulk,bounds,ngrid::Int64)
+    Uniform1DCart(conditions,ρbulk,bounds,(ngrid,))
+end
+
 """
     Uniform1DSphr(conditions::Tuple{Float64,Float64}, ρbulk::Vector{Float64}, bounds::Vector{Float64}, ngrid::Int64)
 
@@ -118,6 +136,10 @@ struct Uniform1DSphr <: DFTStructure1DSphr
     conditions::Tuple{Float64,Float64,Vector{Float64}}
     bounds::Vector{Float64}
     ngrid::Tuple{Int64}
+end
+
+function Uniform1DSphr(conditions,ρbulk,ρbulk2,bounds,ngrid::Int64)
+    Uniform1DSphr(conditions,bounds,(ngrid,))
 end
 
 """
@@ -158,6 +180,11 @@ struct TwoPhase1DCart <: DFTStructure1DCart
     bounds::Vector{Float64}
     ngrid::Tuple{Int64}
 end
+
+function TwoPhase1DCart(conditions,ρbulk,ρbulk2,bounds,ngrid::Int64)
+    TwoPhase1DCart(conditions,ρbulk,ρbulk2,bounds,(ngrid,))
+end
+
 
 """
     TwoPhase1DCart(conditions::Tuple{Float64,Float64}, ρbulk, ρbulk2, bounds::Vector{Float64}, ngrid::Int64)

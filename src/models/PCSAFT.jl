@@ -24,7 +24,14 @@ For a given `model`, obtain all of the fields that will be needed to perform the
 function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure)
     nc = length(model)
     ngrid = structure.ngrid
-    f = [ngrid[i]/(structure.bounds[i,2]-structure.bounds[i,1]) for i in 1:length(ngrid)]
+    nd = dimension(structure)
+    function ff(i)
+        lb,ub = bounds(structure,i)
+        return ngrid[i]/(ub - lb)
+    end
+
+    f = ntuple(ff,nd)
+    #f = [ngrid[i]/(structure.bounds[i,2]-structure.bounds[i,1]) for i in 1:length(ngrid)]
     ω̂ = fftfreq.(ngrid, f)
     ω = zeros(ngrid...,length(ngrid))
 
