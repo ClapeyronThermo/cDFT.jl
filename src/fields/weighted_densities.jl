@@ -79,7 +79,7 @@ end
 function integrate_field(system::DFTSystem,field::SWeightedDensity,profile)
     type = field.type
     ngrid = system.structure.ngrid
-    nd = length(ngrid)
+    nd = dimension(structure)
     nb = size(profile,nd+1)
 
 
@@ -124,7 +124,7 @@ end
 function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}, ngrid)
     
     R = 2π.*width
-    nd = length(ngrid)
+    nd = dimension(structure)
 
     if type != :∫ρzdz
         Ω = zeros(ComplexF64,ngrid...,length(width))

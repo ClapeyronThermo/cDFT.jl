@@ -1,7 +1,6 @@
 function initialize_profiles(model::EoSModel,structure::InterfacialTension1DCart, species)
     nc = length(model)
     bounds = structure.bounds
-    ngrid = structure.ngrid
     (p, T, n) = structure.conditions
     n_II = structure.composition_II
     bounds = structure.bounds
@@ -54,7 +53,6 @@ function initialize_profiles(model::EoSModel,structure::InterfacialTension1DSphr
     L = length_scale(model)
     nc = length(model)
     bounds = structure.bounds
-    ngrid = structure.ngrid
     (p, T, n) = structure.conditions
     n_core = structure.core_composition
     r_interface = structure.r_interface

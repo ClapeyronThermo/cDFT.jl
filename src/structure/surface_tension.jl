@@ -15,10 +15,9 @@ function initialize_profiles(model::EoSModel,structure::SurfaceTension1DCart, sp
     shift_hi = (3*ub/4+lb/4)
     ρ = zeros(ngrid...,sum(species.nbeads))
     for i in @comps
+        coef = (2.4728-2.3625*T/Tc[i])/L
         for j in @chain(i)
-            coef_j = (2.4728-2.3625*T/Tc[i])/L
-            ρ_points = @. ifelse(z<=midpoint,tanh_prof(z,ρl[i],ρv[i],shift_lo,coef_j),tanh_prof(z,ρl[i],ρv[i],shift_hi,coef_j))
-
+            ρ_points = @. ifelse(z<=midpoint,tanh_prof(z,ρl[i],ρv[i],shift_lo,coef),tanh_prof(z,ρl[i],ρv[i],shift_hi,coef_j))
             ρ[:,j] = ρ_points
         end
     end

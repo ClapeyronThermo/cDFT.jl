@@ -9,8 +9,8 @@ function F_res(system::DFTSystem, ρ)
     ngrid = system.structure.ngrid
     bounds = system.structure.bounds
     model = system.model
-    dz = (bounds[2]-bounds[1])/ngrid
-    ngrid = system.structure.ngrid
+
+    dz = structure_dz(structure)
 
     n = evaluate_field(system,ρ)
 

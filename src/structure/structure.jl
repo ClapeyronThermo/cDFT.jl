@@ -105,3 +105,13 @@ function structure_ω(structure::DFTStructure)
     end
     ω
 end
+
+function structure_dz(structure::DFTStructure)
+    ngrid = structure.ngrid
+    nd = dimension(structure)
+    function ff(i)
+        lb,ub = bounds(structure,i)
+        return (ub - lb)/ngrid[i]
+    end
+    return ntuple(ff,nd)
+end
