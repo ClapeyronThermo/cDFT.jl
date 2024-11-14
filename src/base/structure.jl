@@ -8,7 +8,7 @@ abstract type DFTStructure2DCart <: DFTStructure2D end
 abstract type DFTStructure3D <: DFTStructure end
 abstract type DFTStructure3DCart <: DFTStructure3D end
 
-
+dimension(x::DFTSystem) = dimension(x.structure)
 dimension(x::DFTStructure) = dimension(typeof(x))
 dimension(::Type{<:DFTStructure1D}) = 1
 dimension(::Type{<:DFTStructure2D}) = 2
@@ -23,7 +23,7 @@ function DFTBounds{1}(x::Vector{Float64})
     DFTBounds((x[1],),(x[2],))
 end
 
-function DFTBounds{2}(x::Vector{Float64})
+function DFTBounds{2}(x::Matrix{Float64})
     DFTBounds((x[1,1],x[2,1]),(x[1,2],x[2,2]))
 end
 
@@ -35,21 +35,13 @@ function uniform_range(structure::DFTStructure,dim::Int)
     bounds = DFTBounds{dimension((structure))}(structure.bounds)
     lb,ub = bounds.lb,bounds.ub
     grid = structure.ngrid
-    if dim == 1
-        return LinRange(only(lb),only(ub),only(grid))
-    else
-        return LinRange(lb[dim],ub[dim],grid[dim])
-    end
+    return LinRange(lb[dim],ub[dim],grid[dim])
 end
 
 function bounds(structure::DFTStructure,dim::Int)
-    bounds = DFTBounds{dimension((structure))}(structure.bounds)
-    lb,ub = bounds.lb,bounds.ub
-    if dim == 1
-        return only(lb),only(ub)
-    else
-        return lb[i], ub[i]
-    end
+    _bounds = DFTBounds{dimension((structure))}(structure.bounds)
+    lb,ub = _bounds.lb,_bounds.ub
+    return lb[dim], ub[dim]  
 end
 
 uniform_range(structure::DFTStructure) = uniform_range(structure,1)
