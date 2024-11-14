@@ -1,20 +1,22 @@
 import Clapeyron: getsites
 
-function f_assoc(system::DFTSystem, model::SAFTModel, n, n₃, nᵥnᵥ)
+function f_assoc(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
     species = system.species
     HSd = species.size
     T = system.structure.conditions[2]
-    _0 = zero(T+first(n)+first(n₃)+first(nᵥnᵥ))
+    _0 = zero(T+first(n)+first(n₃)+first(nᵥ))
     nn = assoc_pair_length(model)
     iszero(nn) && return _0
 
     n₀ = n./HSd
     n₂ = π.*HSd.*n
-    nᵥ₂nᵥ₂ = -4π^2 .*nᵥnᵥ
+    
+    nᵥ₂ = -2π.*nᵥ
+    nᵥ₂nᵥ₂ = sum(nᵥ₂.^2, dims=1)
     ξ = 1 .-nᵥ₂nᵥ₂ ./ n₂.^2
-    isone(nn) && return f_assoc_exact_1(model, T, n, n₃, nᵥnᵥ, n₀, ξ)
+    isone(nn) && return f_assoc_exact_1(model, T, n, n₃, nᵥ, n₀, ξ)
 
-    X_ = X(model,T,n,n₃,nᵥnᵥ,n₀,ξ)
+    X_ = X(model,T,n,n₃,nᵥ,n₀,ξ)
     _0 = zero(first(X_.v))
 
     ns = model.sites.n_sites
@@ -40,47 +42,49 @@ function f_assoc(system::DFTSystem, model::SAFTModel, n, n₃, nᵥnᵥ)
     return res
 end
 
-function Δ(model::EoSModel, T, n, n₃, nᵥnᵥ)
-    Δout = assoc_similar(model,typeof(T+first(n₃)+first(n)+first(nᵥnᵥ)))
+function Δ(model::EoSModel, T, n, n₃, nᵥ)
+    Δout = assoc_similar(model,typeof(T+first(n₃)+first(n)+first(nᵥ)))
     Δout.values .= false
     for (idx,(i,j),(a,b)) in indices(Δout)
-        Δout[idx] =Δ(model,T,n,n₃,nᵥnᵥ,i,j,a,b)
+        Δout[idx] =Δ(model,T,n,n₃,nᵥ,i,j,a,b)
     end
     return Δout
 end
 
-function X(system::DFTSystem, model::EoSModel, n, n₃, nᵥnᵥ)
+function X(system::DFTSystem, model::EoSModel, n, n₃, nᵥ)
     species = system.species
     HSd = species.size
     n₀ = n./HSd
     n₂ = π.*HSd.*n
-    nᵥ₂nᵥ₂ = -4π^2 .*nᵥnᵥ
+    nᵥ₂ = -2π.*nᵥ
+    nᵥ₂nᵥ₂ = sum(nᵥ₂.^2, dims=1)
     ξ = 1 .-nᵥ₂nᵥ₂ ./ n₂.^2
-    return X(model,T,n,n₃,nᵥnᵥ,n₀,ξ)
+    return X(model,T,n,n₃,nᵥ,n₀,ξ)
 end
 
-function X(model::EoSModel,T,n,n₃,nᵥnᵥ,n₀,ξ)
+function X(model::EoSModel,T,n,n₃,nᵥ,n₀,ξ)
     options = assoc_options(model)
     nn = assoc_pair_length(model)
-    isone(nn) && return X_exact1(model,T,n,n₃,nᵥnᵥ,n₀,ξ)
-    K = assoc_site_matrix(model,T,n,n₃,nᵥnᵥ,n₀,ξ)
+    isone(nn) && return X_exact1(model,T,n,n₃,nᵥ,n₀,ξ)
+    K = assoc_site_matrix(model,T,n,n₃,nᵥ,n₀,ξ)
     idxs = model.sites.n_sites.p
     Xsol = assoc_matrix_solve(K,options)
     return PackedVofV(idxs,Xsol)
 end
 
-function assoc_site_matrix(system::DFTSystem, model::EoSModel, n, n₃, nᵥnᵥ)
+function assoc_site_matrix(system::DFTSystem, model::EoSModel, n, n₃, nᵥ)
     species = system.species
     HSd = species.size
     n₀ = n./HSd
     n₂ = π.*HSd.*n
-    nᵥ₂nᵥ₂ = -4π^2 .*nᵥnᵥ
+    nᵥ₂ = -2π.*nᵥ
+    nᵥ₂nᵥ₂ = sum(nᵥ₂.^2, dims=1)
     ξ = 1 .-nᵥ₂nᵥ₂ ./ n₂.^2
-    return assoc_site_matrix(model,T,n,n₃,nᵥnᵥ,n₀,ξ)
+    return assoc_site_matrix(model,T,n,n₃,nᵥ,n₀,ξ)
 end
 
-function assoc_site_matrix(model::EoSModel,T,n,n₃,nᵥnᵥ,n₀,ξ)
-    delta = Δ(model,T,n,n₃,nᵥnᵥ)
+function assoc_site_matrix(model::EoSModel,T,n,n₃,nᵥ,n₀,ξ)
+    delta = Δ(model,T,n,n₃,nᵥ)
     sitesparam = Clapeyron.getsites(model)
     _sites = sitesparam.n_sites
     p = _sites.p
@@ -117,8 +121,8 @@ function assoc_site_matrix(model::EoSModel,T,n,n₃,nᵥnᵥ,n₀,ξ)
     return K
 end
 
-function f_assoc_exact_1(model, T, n, n₃, nᵥnᵥ, n₀, ξ)
-    xia,xjb,i,j,a,b,_n,idxs = _X_exact1(model, T, n, n₃, nᵥnᵥ, n₀, ξ)
+function f_assoc_exact_1(model, T, n, n₃, nᵥ, n₀, ξ)
+    xia,xjb,i,j,a,b,_n,idxs = _X_exact1(model, T, n, n₃, nᵥ, n₀, ξ)
     _0 = zero(xia)
     sites = getsites(model)
     nn = sites.n_sites
@@ -136,16 +140,16 @@ function f_assoc_exact_1(model, T, n, n₃, nᵥnᵥ, n₀, ξ)
     return res
 end
 
-function X_exact1(model, T, n, n₃, nᵥnᵥ, n₀, ξ)
-    xia,xjb,i,j,a,b,n,idxs = _X_exact1(model, T, n, n₃, nᵥnᵥ, n₀, ξ)
+function X_exact1(model, T, n, n₃, nᵥ, n₀, ξ)
+    xia,xjb,i,j,a,b,n,idxs = _X_exact1(model, T, n, n₃, nᵥ, n₀, ξ)
     Clapeyron.pack_X_exact1(xia,xjb,i,j,a,b,n,idxs)
 end
 
-function _X_exact1(model, T, n, n₃, nᵥnᵥ, n₀, ξ)
+function _X_exact1(model, T, n, n₃, nᵥ, n₀, ξ)
     κ = model.params.bondvol.values
     i,j = κ.outer_indices[1]
     a,b = κ.inner_indices[1]
-    _Δ = Δ(model, T, n, n₃, nᵥnᵥ, i, j, a, b)
+    _Δ = Δ(model, T, n, n₃, nᵥ, i, j, a, b)
     _1 = one(eltype(_Δ))
     sitesparam = getsites(model)
     idxs = sitesparam.n_sites.p

@@ -65,7 +65,8 @@ end
 
 
 function f_res(system::DFTSystem, model::PCSAFTModel,n)
-    n1,n2,n3,n4,n5,n6,n7 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4,:]),@view(n[5,:]),@view(n[6,:]),@view(n[7,:])
+    nd = dimension(system)
+    n1,n2,n3,n4,n5,n6,n7 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4:4+nd-1,:]),@view(n[4+nd,:]),@view(n[5+nd,:]),@view(n[6+nd,:])
     return f_hs(system,model,n2,n3,n4) + f_hc(system,model,n1,n5,n6) + f_disp(system,model,n7) + f_assoc(system,model,n2,n3,n4)
 end
 
@@ -158,11 +159,11 @@ function I(model::PCSAFTModel,m̄,n₃,n)
     return res
 end
 
-function Δ(model::PCSAFTModel, T, n, n₃, nᵥnᵥ, i, j, a, b)
+function Δ(model::PCSAFTModel, T, n, n₃, nᵥ, i, j, a, b)
     ϵ_assoc = model.params.epsilon_assoc.values
     κ = model.params.bondvol.values
     κijab = κ[i,j][a,b]
-    _0 = zero(T+first(n)+first(n₃)+first(nᵥnᵥ)+first(κijab))
+    _0 = zero(T+first(n)+first(n₃)+first(nᵥ)+first(κijab))
     iszero(κijab) && return _0
 
     σ = model.params.sigma.values[i,j]
@@ -170,15 +171,15 @@ function Δ(model::PCSAFTModel, T, n, n₃, nᵥnᵥ, i, j, a, b)
     HSd = d(model,1e-3,T,onevec(model))
     dij = (HSd[i]*HSd[j])/(HSd[i]+HSd[j])
 
-    n₂, nᵥ₂nᵥ₂, n₃₃ = _0,_0,_0
+    n₂, nᵥ₂, n₃₃ = _0,zero(nᵥ),_0
     for i in 1:length(n)
-        nᵢ,mᵢ,nᵥnᵥᵢ,HSdᵢ = n[i],m[i],nᵥnᵥ[i],HSd[i]
+        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[i],HSd[i]
         n₂ += π*HSdᵢ*nᵢ*mᵢ
-        nᵥ₂nᵥ₂ += -4π^2*nᵥnᵥᵢ*mᵢ^2
+        nᵥ₂ .+= -2π*nᵥᵢ*mᵢ
         n₃₃ += n₃[i]*mᵢ
     end
     #n₂ = sum(π.*HSd.*n.*m)
-    #nᵥ₂ = sum(-2π.*nᵥ.*m)
+    nᵥ₂nᵥ₂ = dot(nᵥ₂,nᵥ₂)
     #n₃  = sum(n₃.*m)
 
     ξ = 1-nᵥ₂nᵥ₂/n₂^2

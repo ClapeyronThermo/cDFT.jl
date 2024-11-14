@@ -22,11 +22,11 @@ function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStruc
     C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
     x = species.size ./ σ
     ψ1 = @. cbrt(3*C*x^3*(x^-λ_a/(λ_a-3)-x^-λ_r/(λ_r-3)))
-    return [WeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
-            WeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
-            WeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
-            WeightedDensity(:∫ρz²dz,ψ*d,ω,ngrid),
-            WeightedDensity(:∫ρz²dz,ψ1.*d,ω,ngrid)]
+    return [SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,ψ*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,ψ1.*d,ω,ngrid)]
 end
 #TODO: remove when length(system.fields) can be statically determined
 length_fields(model::COFFEEModel) = 5

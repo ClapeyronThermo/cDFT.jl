@@ -10,16 +10,19 @@ function F_res(system::DFTSystem, ρ)
     bounds = system.structure.bounds
     model = system.model
 
-    dz = structure_dz(structure)
+    _bounds = system.structure.bounds
+
+    dz = (_bounds[2,:]-_bounds[1,:])./ngrid
 
     n = evaluate_field(system,ρ)
 
     f(x) = f_res(system,model,x)
 
-    ϕ = similar(ρ,ngrid)
+    ϕ = similar(ρ,ngrid...)
     ϕ .= 0
-    for i in 1:ngrid
-        ϕ[i] = f(@view n[i,:,:])
+    for kk in CartesianIndices(ngrid)
+        k = Tuple(kk)
+        ϕ[k...] = f(@view(n[k...,:,:]))
     end
 
     return ∫(ϕ,dz)
@@ -43,7 +46,7 @@ function δFδρ_res(system::DFTSystem, ρ)
     nd = dimension(system)
     nb = size(ρ,nd+1)
 
-    n, nV = evaluate_field(system,ρ)
+    n = evaluate_field(system,ρ)
     nf = length_fields(system)
     # @assert nf == length(system.fields) "define length_fields(model::EoSModel) = nf"
     f(x) = f_res(system,model,x)
@@ -58,7 +61,7 @@ function δFδρ_res(system::DFTSystem, ρ)
         k = Tuple(kk)
         df!(@view(δf[k...,:,:]),@view(n[k...,:,:]))
     end
-    δFδρ_res = integrate_field(system, δf, nV)
+    δFδρ_res = integrate_field(system, δf)
     return δFδρ_res
 end
 

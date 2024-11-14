@@ -79,7 +79,7 @@ end
 function integrate_field(system::DFTSystem,field::SWeightedDensity,profile)
     type = field.type
     ngrid = system.structure.ngrid
-    nd = dimension(structure)
+    nd = dimension(system)
     nb = size(profile,nd+1)
 
 
@@ -123,14 +123,14 @@ end
 
 function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}, ngrid)
     
-    R = 2π.*width
-    nd = dimension(structure)
+    R = 2π.*width'
+    nd = length(ngrid)
 
-    if type != :∫ρzdz
-        Ω = zeros(ComplexF64,ngrid...,length(width))
-    else
-        Ω = zeros(ComplexF64,ngrid...,length(width),length(ngrid))
-    end
+    # if type != :∫ρzdz
+    #     Ω = zeros(ComplexF64,ngrid...,length(width))
+    # else
+    Ω = zeros(ComplexF64,ngrid...,length(ngrid),length(width))
+    # end
 
     if type == :∫ρdz
         for kk in CartesianIndices(ngrid)
@@ -143,7 +143,7 @@ function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
         for kk in CartesianIndices(ngrid)
             k = Tuple(kk)
             ω̄ = norm(@view(ω[k...,:]))
-            Ω[k...,:,:] = @. 0.0 - 4π*im*abs(ω[k...,:]')/ω̄^3*(sin(ω̄*R)-R*ω̄*cos(ω̄*R)) *(ω̄ != 0.0)
+            Ω[k...,:,:] = @. 0.0 - 4π*im*abs(ω[k...,:])/ω̄^3*(sin(ω̄*R)-R*ω̄*cos(ω̄*R)) *(ω̄ != 0.0)
         end
         # Ω = 4π*im./ω.^2 .*(sin.(ω.*R)-R.*ω.*cos.(ω.*R)) .*(ω .!= 0.0) .+ 0.0
         Ω ./= (2π)^3
@@ -179,23 +179,23 @@ function evaluate_field(system::DFTSystem,field::VWeightedDensity, ρ)
     map = field.map
     P = field.plan
     iP = field.iplan
-    nV = zeros(eltype(map),ngrid...,nb,nd)
+    nV = zeros(eltype(map),ngrid...,nd,nb)
 
     for i in 1:nb
         for j in 1:nd
-            matmul!(selectdim(selectdim(nV,nd+1,i),nd+1,j),P,selectdim(ρ,nd+1,i))
-            elmul!(selectdim(selectdim(nV,nd+1,i),nd+1,j),selectdim(selectdim(nV,nd+1,i),nd+1,j),selectdim(selectdim(map,nd+1,i),nd+1,j))
-            matmul!(selectdim(selectdim(nV,nd+1,i),nd+1,j),iP,selectdim(selectdim(nV,nd+1,i),nd+1,j))
+            matmul!(selectdim(selectdim(nV,nd+1,j),nd+1,i),P,selectdim(ρ,nd+1,i))
+            elmul!(selectdim(selectdim(nV,nd+1,j),nd+1,i),selectdim(selectdim(nV,nd+1,j),nd+1,i),selectdim(selectdim(map,nd+1,j),nd+1,i))
+            matmul!(selectdim(selectdim(nV,nd+1,j),nd+1,i),iP,selectdim(selectdim(nV,nd+1,j),nd+1,i))
         end
     end
     return real.(nV).*N_A
 end
 
-function integrate_field(system::DFTSystem,field::VWeightedDensity,profile,nV)
+function integrate_field(system::DFTSystem,field::VWeightedDensity,profile)
     type = field.type
     ngrid = system.structure.ngrid
     nd = length(ngrid)
-    nb = size(profile,nd+1)
+    nb = size(profile,nd+2)
 
     if type == :∫ρdz || type == :∫ρz²dz
         prefactor = 1
@@ -211,17 +211,16 @@ function integrate_field(system::DFTSystem,field::VWeightedDensity,profile,nV)
     P = field.plan
     iP = field.iplan
 
-    ∫field = zeros(eltype(map),ngrid...,nb,nd)
+    ∫field = zeros(eltype(map),ngrid...,nd,nb)
     # println(size(nV))
-    # println(size(profile))
 
     for i in 1:nb
         for j in 1:nd
-            matmul!(selectdim(selectdim(∫field,nd+1,i),nd+1,j),P,selectdim(profile,nd+1,i).*abs.(selectdim(selectdim(nV,nd+1,i),nd+1,j)))
-            elmul!(selectdim(selectdim(∫field,nd+1,i),nd+1,j),selectdim(selectdim(∫field,nd+1,i),nd+1,j),selectdim(selectdim(map,nd+1,i),nd+1,j))
-            matmul!(selectdim(selectdim(∫field,nd+1,i),nd+1,j),iP,selectdim(selectdim(∫field,nd+1,i),nd+1,j))
+            matmul!(selectdim(selectdim(∫field,nd+1,j),nd+1,i),P,selectdim(selectdim(profile,nd+1,j),nd+1,i))
+            elmul!(selectdim(selectdim(∫field,nd+1,j),nd+1,i),selectdim(selectdim(∫field,nd+1,j),nd+1,i),selectdim(selectdim(map,nd+1,j),nd+1,i))
+            matmul!(selectdim(selectdim(∫field,nd+1,j),nd+1,i),iP,selectdim(selectdim(∫field,nd+1,j),nd+1,i))
         end
         # ∫field[:,i] = prefactor*real.(ifft(fft(profile[:,i]).*map[:,i]))
     end
-    return dropdims(sum(real.(∫field),dims=nd+2);dims=nd+2).*-2
+    return dropdims(sum(real.(∫field),dims=nd+1);dims=nd+1).*-2
 end
