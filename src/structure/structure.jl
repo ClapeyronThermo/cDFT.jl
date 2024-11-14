@@ -73,9 +73,9 @@ function get_coords(structure::DFTStructure)
     bounds = structure.bounds
     z = [LinRange(bounds[i,1],bounds[i,2],ngrid[i]) |> collect for i in 1:nd]
     Z = zeros(ngrid...,nd)
-    for i in 1:nd
-        for k in 1:ngrid[i]
-            selectdim(Z,i,k) .= z[i][k]
+    for j in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+        for i in 1:nd
+            Z[j...,i] = z[i][j[i]]
         end
     end
     return Z
