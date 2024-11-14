@@ -52,7 +52,7 @@ end
 
 function f_chain(system::DFTSystem, model::SAFTVRMieModel, ρhc, ρ̄hc, _λ)
     V = nothing
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     _d = system.species.size
     m = model.params.segment
     _ϵ = model.params.epsilon
@@ -151,7 +151,7 @@ function f_disp(system::DFTSystem, model::SAFTVRMieModel, ρ̄)
     V = nothing
     ψ = system.fields[end].width
     _d = system.species.size
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     m = model.params.segment
     _ϵ = model.params.epsilon
     _λr = model.params.lambda_r

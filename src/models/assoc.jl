@@ -3,7 +3,7 @@ import Clapeyron: getsites
 function f_assoc(system::DFTSystem, model::SAFTModel, n, n₃, nᵥnᵥ)
     species = system.species
     HSd = species.size
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     _0 = zero(T+first(n)+first(n₃)+first(nᵥnᵥ))
     nn = assoc_pair_length(model)
     iszero(nn) && return _0

@@ -6,8 +6,8 @@ end
 
 
 function f_polar(system::DFTSystem, model::QPCPSAFTModel, ρ̄)
-    species = system.species
-  (_, T) = system.structure.conditions
+  species = system.species
+  T = system.structure.conditions[2]
   μ̄² = model.params.dipole2.values
   Q̄² = model.params.quadrupole2.values
   has_dp = !all(iszero, μ̄²)

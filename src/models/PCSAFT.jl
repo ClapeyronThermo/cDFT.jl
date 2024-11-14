@@ -28,7 +28,8 @@ function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStruc
     ω̂ = fftfreq.(ngrid, f)
     ω = zeros(ngrid...,length(ngrid))
 
-    for k in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+    for kk in CartesianIndices(ngrid)
+        k = Tuple(kk)
         for i in 1:length(ngrid)
             ω[k...,i] = ω̂[i][k[i]]
         end
@@ -107,7 +108,7 @@ end
 
 function f_disp(system::DFTSystem, model::PCSAFTModel, ρ̄)
     species = system.species
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     ψ = 1.3862
     σ = model.params.sigma.values
     m = model.params.segment.values

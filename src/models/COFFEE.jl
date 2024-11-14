@@ -36,7 +36,7 @@ end
 
 function f_ff(system::DFTSystem, model::COFFEEModel, ρ̄)
     species = system.species
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     μ̄² = pcp_dipole2(model)
     has_dp = !all(iszero, μ̄²)
     if !has_dp return zero(T+first(ρ̄)) end
@@ -127,7 +127,7 @@ end
 
 function f_nf(system::DFTSystem, model::COFFEEModel, n, n₃, nᵥ)
     HSd = system.species.size
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     
     ϵ = model.params.epsilon[1]
     σ = diagvalues(model.params.sigma.values)
@@ -177,7 +177,7 @@ function cosΘ(system::DFTSystem)
     HSd = system.species.size
     n = evaluate_field(system)
     η = n[:,2]
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     ϵ = model.params.epsilon[1]
     σ = diagvalues(model.params.sigma.values)
     d = model.params.shift[1] / σ[1]

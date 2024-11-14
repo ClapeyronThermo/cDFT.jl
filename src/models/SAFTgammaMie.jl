@@ -382,7 +382,7 @@ function f_disp(system::DFTSystem, model::SAFTgammaMieModel, ρ̄)
     V = nothing
     ψ = system.fields[end].width
     _d = system.species.size
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     m = model.params.segment.values
     S = model.params.shapefactor.values
     _ϵ = model.params.epsilon
@@ -511,7 +511,7 @@ end
 
 function f_chain(system::DFTSystem, model::SAFTgammaMieModel, ρhc, ρ̄hc, _λ)
     V = nothing
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     x = system.structure.ρbulk / sum(system.structure.ρbulk)
     
     m = model.vrmodel.params.segment

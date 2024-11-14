@@ -130,7 +130,7 @@ end
 function f_disp(system::DFTSystem, model::HeterogcPCPSAFT, n)
     ρ̄ = deepcopy(n)
     nbeads = length(ρ̄)
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     ψ = 1.5357
     σ = model.params.sigma.values
     ϵ = model.params.epsilon.values
@@ -222,7 +222,7 @@ end
 
 function f_polar(system::DFTSystem, model::HeterogcPCPSAFT, ρ̄)
     species = system.species
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     μ̄² = pcp_dipole2(model)
     has_dp = !all(iszero, μ̄²)
     if !has_dp return zero(T+first(ρ̄)) end
