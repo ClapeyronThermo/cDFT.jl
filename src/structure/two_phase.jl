@@ -7,7 +7,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species)
 
     pure = Clapeyron.split_model(model)
 
-    z = range(first(bounds),last(bounds),ngrid[1]) |> collect
+    z = uniform_range(structure) |> collect
     L = length_scale(model)
 
     ρ = zeros(ngrid...,sum(species.nbeads))
@@ -32,8 +32,8 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase2DLamCart, speci
 
     pure = Clapeyron.split_model(model)
 
-    x = range(first(bounds[1,:]),last(bounds[1,:]),ngrid[1]) |> collect
-    y = range(first(bounds[2,:]),last(bounds[2,:]),ngrid[2]) |> collect
+    x = uniform_range(structure,1) |> collect
+    y = uniform_range(structure,2) |> collect
 
     X = zeros(ngrid[1],ngrid[2])
     Y = zeros(ngrid[1],ngrid[2])
@@ -64,7 +64,7 @@ end
 function initialize_profiles(model::EoSModel,structure::TwoPhase3DLamCart, species)
     bounds = structure.bounds
     ngrid = structure.ngrid
-    nd = length(ngrid)
+    nd = dimension(structure)
     (p, T) = structure.conditions
     ρ1 = structure.ρbulk
     ρ2 = structure.ρbulk2

@@ -54,7 +54,8 @@ function δFδρ_res(system::DFTSystem, ρ)
 
     δf = zeros(ngrid...,nf,nb)
 
-    for k in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+    for kk in CartesianIndices(ngrid)
+        k = Tuple(kk)
         df!(@view(δf[k...,:,:]),@view(n[k...,:,:]))
     end
     δFδρ_res = integrate_field(system, δf, nV)

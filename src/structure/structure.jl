@@ -48,7 +48,7 @@ function initialize_profiles(model::EoSModel,structure::Uniform1DSphr,species)
     ngrid = structure.ngrid
     (p, T, x) = structure.conditions
 
-    z = LinRange(first(bounds),last(bounds),ngrid) |> collect
+    z = uniform_range(structure) |> collect
     L = length_scale(model)
 
     vol = Clapeyron.volume(model,p,T,x)
@@ -71,9 +71,10 @@ function get_coords(structure::DFTStructure)
     ngrid = structure.ngrid
     nd = length(ngrid)
     bounds = structure.bounds
-    z = [LinRange(bounds[i,1],bounds[i,2],ngrid[i]) |> collect for i in 1:nd]
+    z = [uniform_range(structure,i) |> collect for i in 1:nd]
     Z = zeros(ngrid...,nd)
-    for j in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+    for jj in CartesianIndices(ngrid)
+        j = Tuple(jj)
         for i in 1:nd
             Z[j...,i] = z[i][j[i]]
         end

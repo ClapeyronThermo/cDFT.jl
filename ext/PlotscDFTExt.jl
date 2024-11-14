@@ -17,7 +17,7 @@ function Plots.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure1DCart, 
 
     bounds = structure.bounds
 
-    z = LinRange(bounds[1],bounds[2],structure.ngrid[1])
+    z = uniform_range(structure)
     L = cDFT.length_scale(model)
 
     plt = Plots.plot(grid=:off,
@@ -119,8 +119,8 @@ function Plots.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure2DCart, 
 
     bounds = structure.bounds
 
-    x = LinRange(bounds[1,1],bounds[1,2],structure.ngrid[1])
-    y = LinRange(bounds[2,1],bounds[2,2],structure.ngrid[2])
+    x = uniform_range(structure,1)
+    y = uniform_range(structure,2)
     X = zeros(length(x),length(y))
     Y = zeros(length(x),length(y))
 

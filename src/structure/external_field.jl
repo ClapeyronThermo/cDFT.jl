@@ -22,7 +22,7 @@ function initialize_profiles(model::EoSModel,structure::ExternalField1DCart, spe
     (p, T) = structure.conditions
     bounds = structure.bounds
 
-    z = range(first(bounds),last(bounds),ngrid) |> collect
+    z = uniform_range(structure) |> collect
     L = length_scale(model)
 
     ρbulk = structure.ρbulk

@@ -5,11 +5,9 @@ function initialize_profiles(model::EoSModel,structure::InterfacialTension1DCart
     (p, T, n) = structure.conditions
     n_II = structure.composition_II
     bounds = structure.bounds
-    z_interface = sum(bounds)/2
-
-    z = range(first(bounds),last(bounds),ngrid) |> collect
+    z = uniform_range(structure) |> collect
     L = length_scale(model)
-
+    z_interface = 0.5*(first(z) + last(z))
     v1 = volume(model,p,T,n)
     v2 = volume(model,p,T,n_II)
 
@@ -61,7 +59,7 @@ function initialize_profiles(model::EoSModel,structure::InterfacialTension1DSphr
     n_core = structure.core_composition
     r_interface = structure.r_interface
 
-    r = range(first(bounds),last(bounds),ngrid) |> collect
+    r = uniform_range(structure) |> collect
 
     v_bulk = volume(model,p,T,n)
     v_core = volume(model,p,T,n_core)
