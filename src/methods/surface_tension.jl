@@ -32,13 +32,10 @@ function surface_tension(system::DFTSystem,ρ)
     model = system.model
     ngrid = system.structure.ngrid
     nd = dimension(system)
-    bounds = system.structure.bounds
-    function dzi(i)
-        lb,ub = bounds(structure,i)
-        return (ub - lb)/ngrid[i]
-    end
+    # bounds = system.structure.bounds
+    _bounds = system.structure.bounds
 
-    dz = ntuple(dzi,nd)
+    dz = (_bounds[2,:]-_bounds[1,:])./ngrid
 
     F = free_energy(system,ρ)
 
@@ -56,7 +53,7 @@ function surface_tension(system::DFTSystem,ρ)
             chem_pot_term += μ[i]*∫(ρ[:,k],dz)/system.species.nbeads[i]
         end
     end
-    return F*k_B*T-chem_pot_term+p*∫(ones(only(ngrid)),dz)
+    return F*k_B*T-chem_pot_term+p*∫(ones(only(ngrid...)),dz)
 end
 
 export surface_tension

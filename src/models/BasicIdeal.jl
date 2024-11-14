@@ -10,23 +10,24 @@ The output is a scalar of units J.
 function F_ideal(system::DFTSystem,ρ)
     model = system.model
     ngrid = system.structure.ngrid
-    bounds = system.structure.bounds
+    nd = length(ngrid)
+    _bounds = system.structure.bounds
 
-    dz = (bounds[2]-bounds[1])/ngrid
+    dz = (_bounds[2,:]-_bounds[1,:])./ngrid
 
-    n = zeros(ngrid,length(model))
+    n = zeros(ngrid...,length(model))
     for i in @comps
         for k in @chain(i)
-            n[:,i] += ρ[:,k]/system.species.nbeads[i]
+            selectdim(n,nd+1,i) .+= selectdim(ρ,nd+1,k)/system.species.nbeads[i]
         end
     end
     
     f(x) = f_ideal(system,model.idealmodel,x)    
 
-    ϕ = zeros(ngrid)
+    ϕ = zeros(ngrid...)
     
-    for i in 1:ngrid
-        ϕ[i] = f(@view n[i,:])
+    for j in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+        ϕ[j...] = f(@view n[j...,:])
     end
 
     return ∫(ϕ,dz)

@@ -1,5 +1,6 @@
 function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species)
-    bounds = structure.bounds
+    lb,ub = bounds(structure,1)
+    mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
     (p, T) = structure.conditions
     ρ1 = structure.ρbulk
@@ -14,8 +15,6 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species)
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
         for j in @chain(i)
-            lb,ub = bounds(structure)
-            mb = 0.5*(lb + ub)
             coef = (2.4728-2.3625*T/Tc)/L
             ρ_points = @. tanh_prof(z,ρ1[i],ρ2[i],(ub/4+3*lb/4),coef)*(z<=mb) +
                           tanh_prof(z,ρ2[i],ρ1[i],(3*ub/4+lb/4),coef)*(z>mb)
@@ -27,7 +26,8 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species)
 end
 
 function initialize_profiles(model::EoSModel,structure::TwoPhase2DLamCart, species)
-    bounds = structure.bounds
+    lb,ub = bounds(structure,1)
+    mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
     (p, T) = structure.conditions
     ρ1 = structure.ρbulk
@@ -48,8 +48,6 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase2DLamCart, speci
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
         coef = (2.4728-2.3625*T/Tc)/L
-        lb,ub = bounds(structure,1)
-        mb = 0.5*(lb + ub)
         for j in @chain(i)
             ρ_points = @. tanh_prof(X,ρ1[i],ρ2[i],(ub/4+3*lb/4),coef)*(X<=mb) +
                           tanh_prof(X,ρ2[i],ρ1[i],(3*ub/4+lb/4),coef)*(X>mb)
@@ -61,7 +59,8 @@ end
 
 
 function initialize_profiles(model::EoSModel,structure::TwoPhase3DLamCart, species)
-    bounds = structure.bounds
+    lb,ub = bounds(structure,1)
+    mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
     nd = dimension(structure)
     (p, T) = structure.conditions
@@ -83,8 +82,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DLamCart, speci
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
         coef = (2.4728-2.3625*T/Tc)/L
-        lb,ub = bounds(structure,1)
-        mb = 0.5*(lb + ub)
+        
         for j in @chain(i)
             ρ_points = @. tanh_prof(X,ρ1[i],ρ2[i],(ub/4+3*lb/4),coef)*(X<=mb) +
                           tanh_prof(X,ρ2[i],ρ1[i],(3*ub/4+lb/4),coef)*(X>mb)

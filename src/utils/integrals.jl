@@ -11,16 +11,9 @@ Integrates a collection of points `f`, with constant `dz`, using simpson rule.
 #    return 1/3*dz*(f[1]+f[end]+4*sum(@view(f[2:2:end-1]))+2*sum(@view(f[3:2:end-1])))
 #end
 
-function _∫(f::Vector{Float64},dz::Number,last = 0)
-    ∑f = zero(typeof(dz))
-    for (i,fi) in enumerate(f)
-        if i == 1 || i == last
-            ∑f += fi
-        else
-            ∑f += (4 - 2*(i % 2)) * fi #4 if is even, 2 if is odd
-        end
-    end
-    return ∑f*dz/3
+function _∫(f::Vector{Float64},dz::Vector{Float64},last = 0)
+    ∑f = sum(f)
+    return ∑f*prod(dz)
 end
 
 function _∫(f::DensityProfile,dz::Number)
