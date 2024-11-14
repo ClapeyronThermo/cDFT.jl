@@ -17,7 +17,7 @@ function Plots.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure1DCart, 
 
     bounds = structure.bounds
 
-    z = uniform_range(structure)
+    z = cDFT.uniform_range(structure)
     L = cDFT.length_scale(model)
 
     plt = Plots.plot(grid=:off,
@@ -119,8 +119,8 @@ function Plots.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure2DCart, 
 
     bounds = structure.bounds
 
-    x = uniform_range(structure,1)
-    y = uniform_range(structure,2)
+    x = cDFT.uniform_range(structure,1)
+    y = cDFT.uniform_range(structure,2)
     X = zeros(length(x),length(y))
     Y = zeros(length(x),length(y))
 
@@ -196,8 +196,8 @@ function Plots.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure2DCart, 
             #     Y = profiles[:,k]
             #     y_norm = " / (mol/m³)"
             # end
-        
-            Plots.heatmap!(plt,X,Y,Z,label="$name", c=cgrad([:white, colors[k]]))
+            csalpha = cgrad([Colors.RGBA(colors[k].r, colors[k].g, colors[k].b, 0), Colors.RGBA(colors[k].r, colors[k].g, colors[k].b, 1)])
+            Plots.heatmap!(plt,X,Y,Z,label="$name", c=csalpha)
         end
     end
     
