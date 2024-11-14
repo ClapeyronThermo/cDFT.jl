@@ -56,7 +56,15 @@ function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions
     return DFTSystem(model, species, structure, fields, propagator, options)
 end
 
-length_fields(system::DFTSystem) = length_fields(system.model)
+# length_fields(system::DFTSystem) = length_fields(system.model)
+
+function length_fields(system::DFTSystem)
+    fields = system.fields
+    nd = dimension(system)
+    nfscalar = sum(typeof.(fields) .<: ScalarField)
+    nfvector = sum(typeof.(fields) .<: VectorField)
+    return nfscalar + nfvector*nd
+end
 
 export DFTSystem
 
