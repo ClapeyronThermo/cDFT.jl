@@ -13,7 +13,7 @@ function initialize_profiles(model::EoSModel,structure::SurfaceTension1DCart, sp
     ρv = y./vv
     shift_lo = (ub/4+3*lb/4)
     shift_hi = (3*ub/4+lb/4)
-    ρ = zeros(ngrid,sum(species.nbeads))
+    ρ = zeros(ngrid...,sum(species.nbeads))
     for i in @comps
         for j in @chain(i)
             coef_j = (2.4728-2.3625*T/Tc[i])/L

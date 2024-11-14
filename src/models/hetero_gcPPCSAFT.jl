@@ -50,15 +50,18 @@ end
 
 function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure)
     nb = sum(species.nbeads)
-    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
-    ω = fftfreq(structure.ngrid, f)
+    ngrid = structure.ngrid
+    ω = structure_ω(structure)
     d = species.size
-    return [WeightedDensity(:ρ,zeros(nb),ω),
-            WeightedDensity(:∫ρdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,0.5*d,ω),
-            WeightedDensity(:∫ρzdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,d,ω),
-            WeightedDensity(:∫ρz²dz,1.5357*d,ω)]
+    ψ = 1.5357
+    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid),
+            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,d,ω,ngrid),
+            SWeightedDensity(:∫ρdz,d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
+
 end
 
 function get_propagator(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure)

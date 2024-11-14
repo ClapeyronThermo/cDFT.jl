@@ -32,7 +32,7 @@ function initialize_profiles(model::EoSModel,structure::ExternalField1DCart, spe
 
     coef = 1/(0.1L)
 
-    ρ = zeros(ngrid,sum(species.nbeads))
+    ρ = zeros(ngrid...,sum(species.nbeads))
     for i in @comps
         for j in @chain(i)
             if H == 0

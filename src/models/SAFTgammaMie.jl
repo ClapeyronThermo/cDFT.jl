@@ -50,8 +50,9 @@ end
 
 function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure)
     nb = sum(species.nbeads)
-    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
-    ω = fftfreq(structure.ngrid, f)
+    ngrid = structure.ngrid
+    nd = dimension(structure)
+    ω = structure_ω(structure)
     d = species.size
     λ_r = diagvalues(model.params.lambda_r.values)
     λ_a = diagvalues(model.params.lambda_a.values)
@@ -59,15 +60,17 @@ function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DF
     C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
     x = d ./ σ
     ψ = @. cbrt(3*C*(1/(λ_a-3)-1/(λ_r-3)))
-    return [WeightedDensity(:ρ,zeros(nb),ω),
-            WeightedDensity(:∫ρdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,0.5*d,ω),
-            WeightedDensity(:∫ρzdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,d,ω),
-            WeightedDensity(:∫ρdz,d,ω),
-            WeightedDensity(:∫ρz²dz,ψ.*d,ω)]
+    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid),
+            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,d,ω,ngrid),
+            SWeightedDensity(:∫ρdz,d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
 end
 
+#TODO: remove when length(system.fields) can be statically determined
+length_fields(model::SAFTgammaMieModel) = 7
 
 function get_propagator(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure)
     return TangentHSPropagator(model, species, structure)

@@ -43,6 +43,8 @@ struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F<:DFTField,P<:DFTPro
     options::O
 end
 
+dimension(::Type{DFTSystem{<:Any,<:Any,T}}) where T = dimension(T) 
+
 function DFTSystem(model::EoSModel,structure::DFTStructure,profile::Vector{DFTProfile},fields::Vector{DFTField},options::DFTOptions)
     return DFTSystem(model,species,structure,profile,fields,options)
 end
@@ -54,7 +56,7 @@ function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions
     return DFTSystem(model, species, structure, fields, propagator, options)
 end
 
-length_fields(system::DFTSystem) = length(system.fields)
+length_fields(system::DFTSystem) = length_fields(system.model)
 
 export DFTSystem
 

@@ -33,7 +33,7 @@ function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species)
     ngrid = structure.ngrid
     ρbulk = structure.ρbulk
 
-    ρ = zeros(ngrid,sum(species.nbeads))
+    ρ = zeros(ngrid...,sum(species.nbeads))
 
     for i in @comps
         for j in @chain(i)
@@ -80,4 +80,28 @@ function get_coords(structure::DFTStructure)
         end
     end
     return Z
+end
+
+function structure_fftfreq(structure::DFTStructure)
+    ngrid = structure.ngrid
+    nd = dimension(structure)
+    function ff(i)
+        lb,ub = bounds(structure,i)
+        return ngrid[i]/(ub - lb)
+    end
+    f = ntuple(ff,nd)
+    ω = fftfreq.(ngrid, f)
+end
+
+function structure_ω(structure::DFTStructure)
+    ngrid = structure.ngrid
+    ω̂ = structure_fftfreq(structure)
+    ω = zeros(ngrid...,length(ngrid))
+    for kk in CartesianIndices(ngrid)
+        k = Tuple(kk)
+        for i in 1:length(ngrid)
+            ω[k...,i] = ω̂[i][k[i]]
+        end
+    end
+    ω
 end

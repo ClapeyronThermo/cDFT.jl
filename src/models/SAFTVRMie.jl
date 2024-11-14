@@ -12,8 +12,8 @@ end
 
 function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTStructure)
     nc = length(model)
-    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
-    ω = fftfreq(structure.ngrid, f)
+    ngrid = structure.ngrid
+    ω = structure_ω(structure)
     d = species.size
 
     λ_r = diagvalues(model.params.lambda_r.values)
@@ -22,14 +22,19 @@ function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTSt
     C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
     x = species.size ./ σ
     ψ = @. cbrt(3*C*x^3*(x^-λ_a/(λ_a-3)-x^-λ_r/(λ_r-3)))
-    return [WeightedDensity(:ρ,zeros(nc),ω),
-            WeightedDensity(:∫ρdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,0.5*d,ω),
-            WeightedDensity(:∫ρzdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,d,ω),
-            WeightedDensity(:∫ρdz,d,ω),
-            WeightedDensity(:∫ρz²dz,ψ.*d,ω)]
+
+    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid),
+            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,d,ω,ngrid),
+            SWeightedDensity(:∫ρdz,d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
 end
+
+
+#TODO: remove when this is statically determined
+length_fields(model::SAFTVRMieModel) = 7
 
 function get_species(model::SAFTVRMieModel,structure::DFTStructure)
     (p,T) = structure.conditions

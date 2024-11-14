@@ -14,21 +14,23 @@ function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStruc
     ψ = 1.3862
 
     f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
-    ω = fftfreq(structure.ngrid, f)
+    ω = structure_ω(structure)
     d = species.size
-
+    ngrid = structure.ngrid
     λ_r = diagvalues(model.params.lambda_r.values)
     λ_a = diagvalues(model.params.lambda_a.values)
     σ   = diagvalues(model.params.sigma.values)
     C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
     x = species.size ./ σ
     ψ1 = @. cbrt(3*C*x^3*(x^-λ_a/(λ_a-3)-x^-λ_r/(λ_r-3)))
-    return [WeightedDensity(:∫ρdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,0.5*d,ω),
-            WeightedDensity(:∫ρzdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,ψ*d,ω),
-            WeightedDensity(:∫ρz²dz,ψ1.*d,ω)]
+    return [WeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
+            WeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
+            WeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
+            WeightedDensity(:∫ρz²dz,ψ*d,ω,ngrid),
+            WeightedDensity(:∫ρz²dz,ψ1.*d,ω,ngrid)]
 end
+#TODO: remove when length(system.fields) can be statically determined
+length_fields(model::COFFEEModel) = 5
 
 function f_res(system::DFTSystem, model::COFFEEModel,n)
     return f_hs(system,model,n[1,:],n[2,:],n[3,:])+f_disp(system,model,n[5,:])+f_ff(system,model,n[4,:])+f_nf(system,model,n[1,:],n[2,:],n[3,:])

@@ -24,24 +24,9 @@ For a given `model`, obtain all of the fields that will be needed to perform the
 function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure)
     nc = length(model)
     ngrid = structure.ngrid
-    nd = dimension(structure)
-    function ff(i)
-        lb,ub = bounds(structure,i)
-        return ngrid[i]/(ub - lb)
-    end
-
-    f = ntuple(ff,nd)
     #f = [ngrid[i]/(structure.bounds[i,2]-structure.bounds[i,1]) for i in 1:length(ngrid)]
-    ω̂ = fftfreq.(ngrid, f)
-    ω = zeros(ngrid...,length(ngrid))
-
-    for kk in CartesianIndices(ngrid)
-        k = Tuple(kk)
-        for i in 1:length(ngrid)
-            ω[k...,i] = ω̂[i][k[i]]
-        end
-    end
-
+    ω = structure_ω(structure)
+    ψ = 1.3862
     d = species.size
     return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid),
             SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
@@ -49,8 +34,11 @@ function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStruc
             VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
             SWeightedDensity(:∫ρz²dz,d,ω,ngrid),
             SWeightedDensity(:∫ρdz,d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,1.3862*d,ω,ngrid)]
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
 end
+
+#TODO: remove when this is statically determined
+length_fields(model::Clapeyron.PCSAFTModel) = 7
 
 """
     get_species(model::EoSModel, structure::DFTStructure)

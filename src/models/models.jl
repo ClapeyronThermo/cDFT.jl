@@ -40,14 +40,14 @@ function δFδρ_res(system::DFTSystem, ρ)
     
     nf = length(fields)
     ngrid = system.structure.ngrid
-    nd = length(ngrid)
+    nd = dimension(system)
     nb = size(ρ,nd+1)
 
     n, nV = evaluate_field(system,ρ)
     nf = length_fields(system)
     # @assert nf == length(system.fields) "define length_fields(model::EoSModel) = nf"
     f(x) = f_res(system,model,x)
-    idx_first = [1 for i in 1:nd]
+    idx_first = ntuple(Returns(1),nd)
     n_first = @view(n[idx_first...,:,:])
     cfg = ForwardDiff.GradientConfig(f, n_first, ForwardDiff.Chunk{nf}())
     df!(df,x) = ForwardDiff.gradient!(df,f,x,cfg)
