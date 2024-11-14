@@ -11,9 +11,9 @@ Generic `SWeightedDensity` type used to calculate the scalar weighted densities 
 struct SWeightedDensity <: ScalarField 
     type::Symbol
     width::Vector{Float64}
-    map::Array{ComplexF64}
-    plan::Plan
-    iplan::Plan
+    map::M
+    plan::P
+    iplan::iP
 end
 
 function SWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}, ngrid)
@@ -28,13 +28,15 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
     end
 
     if type == :∫ρdz
-        for k in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+        for kk in CartesianIndices(ngrid)
+            k = Tuple(kk)
             ω̄ = norm(ω[k...,:])
             Ω[k...,:] = 2*R .* (ω̄ .== 0.0) + 2*sin.(ω̄.*R)./ω̄ .*(ω̄ .!= 0.0)
         end
         Ω ./= 2π
     elseif type == :∫ρz²dz
-        for k in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+        for kk in CartesianIndices(ngrid)
+            k = Tuple(kk)
             ω̄ = norm(ω[k...,:])
             Ω[k...,:] = 4π./ω̄.^3 .*(sin.(ω̄.*R)-R.*ω̄.*cos.(ω̄.*R)) .*(ω̄ .!= 0.0) + R.^3/3*4π .*(ω̄ .== 0.0)
         end
@@ -111,12 +113,12 @@ Generic `VWeightedDensity` type used to calculate the vector weighted densities 
 - `plan`: The Fourier transform plan.
 - `iplan`: The inverse Fourier transform plan.
 """
-struct VWeightedDensity <: VectorField 
+struct VWeightedDensity{M,P,iP} <: VectorField 
     type::Symbol
     width::Vector{Float64}
-    map::Array{ComplexF64}
-    plan::Plan
-    iplan::Plan
+    map::M
+    plan::P
+    iplan::iP
 end
 
 function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}, ngrid)
@@ -131,20 +133,23 @@ function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
     end
 
     if type == :∫ρdz
-        for k in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+        for kk in CartesianIndices(ngrid)
+            k = Tuple(kk)
             ω̄ = norm(ω[k...,:])
             Ω[k...,:] = 2*R .* (ω̄ .== 0.0) + 2*sin.(ω̄.*R)./ω̄ .*(ω̄ .!= 0.0)
         end
         Ω ./= 2π
     elseif type == :∫ρzdz
-        for k in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+        for kk in CartesianIndices(ngrid)
+            k = Tuple(kk)
             ω̄ = norm(ω[k...,:])
             Ω[k...,:,:] = @. 0.0 - 4π*im*abs(ω[k...,:]')/ω̄^3*(sin(ω̄*R)-R*ω̄*cos(ω̄*R)) *(ω̄ != 0.0)
         end
         # Ω = 4π*im./ω.^2 .*(sin.(ω.*R)-R.*ω.*cos.(ω.*R)) .*(ω .!= 0.0) .+ 0.0
         Ω ./= (2π)^3
     elseif type == :∫ρz²dz
-        for k in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
+        for kk in CartesianIndices(ngrid)
+            k = Tuple(kk)
             ω̄ = norm(ω[k...,:])
             Ω[k...,:] = 4π./ω̄.^3 .*(sin.(ω̄.*R)-R.*ω̄.*cos.(ω̄.*R)) .*(ω̄ .!= 0.0) + R.^3/3*4π .*(ω̄ .== 0.0)
         end
