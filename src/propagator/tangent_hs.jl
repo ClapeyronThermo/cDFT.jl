@@ -1,37 +1,50 @@
 function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTStructure)
     ngrid = structure.ngrid
     nbeads = sum(species.nbeads)
-    map = zeros(ComplexF64, ngrid..., nbeads, nbeads)
+    nd = dimension(structure)
+    Ω = zeros(ComplexF64, ngrid..., nbeads, nbeads)
     ω = structure_ω(structure)
 
     for i in @comps
         l = 1
         for j in @chain(i)
             for k in @chain(i)[l:end]
+                
                 R = (species.size[j] + species.size[k])*π
-                Ω = 2*R .* (ω .== 0.0) + 2*sin.(ω.*R)./ω .*(ω .!= 0.0)
-                Ω ./= 2
-                map[:,j,k] = Ω./(R)
-                map[:,k,j] = Ω./(R)
+                for kk in CartesianIndices(ngrid)
+                    n = Tuple(kk)
+                    ω̄ = norm(@view(ω[k...,:]))
+                    Ω[n...,j,k] = (2*R .* (ω̄ .== 0.0) + 2*sin.(ω̄.*R)./ω̄ .*(ω̄ .!= 0.0))/R/2
+                    Ω[n...,k,j] = (2*R .* (ω̄ .== 0.0) + 2*sin.(ω̄.*R)./ω̄ .*(ω̄ .!= 0.0))/R/2
+                end
+                # selectdim(selectdim(map,nd+1,j),nd+1,k) .= Ω./(R)
+                # selectdim(selectdim(map,nd+1,k),nd+1,j) .= Ω./(R)
             end
             l+=1
         end
     end
-    return TangentHSPropagator(map)
+
+    plan = plan_fft(selectdim(selectdim(Ω,nd+1,1),nd+1,2), 1:nd)
+    iplan = inv(plan)
+
+    return TangentHSPropagator(Ω,plan,iplan)
 end
 
 
 function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res, ρ)
+    nd = dimension(system)
     model = system.model
     structure = system.structure
     ngrid = structure.ngrid
     species = system.species
     nbeads = sum(system.species.nbeads)
 
-    Gcα = ones(Float64, ngrid, nbeads, nbeads)
-    Gp  = ones(Float64, ngrid, nbeads)
+    Gcα = ones(Float64, ngrid..., nbeads, nbeads)
+    Gp  = ones(Float64, ngrid..., nbeads)
 
     map = propagate.map
+    P = propagate.plan
+    iP = propagate.iplan
 
     levels = species.levels
     for i in @comps
@@ -52,12 +65,21 @@ function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res, �
                         for α in k_children
                             β = findall(n_intergroups[α,:] .&& levels.==L+2)
                             if isempty(β)
-                                _Gcα = @. exp(-δf_res[:,α])
+                                _Gcα = exp.(-selectdim(δf_res,nd+1,α))
                             else
-                                _Gcα = exp.(-δf_res[:,α]).*prod(Gcα[:,α,β],dims=(2,3))
+                                _Gcα = exp.(-selectdim(δf_res,nd+1,α)).*prod(selectdim(selectdim(Gcα,nd+1,α),nd+1,β),dims=(nd+1,nd+2))
                             end
+                            println(size(Gcα))
 
-                            Gcα[:,k,α] = real.(ifft(fft(_Gcα).*map[:,k,α]))
+
+                            # ifft(fft(_Gcα).*map[:,k,α])
+                            # P = plan_fft(_Gcα)
+                            # iP = inv(P)
+                            # matmul!(_Gcα,P,_Gcα)
+                            # elmul!(_Gcα,_Gcα,selectdim(selectdim(map,nd+1,k),nd+1,α))
+                            # matmul!(_Gcα,iP,_Gcα)
+                            # selectdim(selectdim(Gcα,nd+1,k),nd+1,α) .= real.(_Gcα)
+                            selectdim(selectdim(Gcα,nd+1,k),nd+1,α) .= real.(ifft(fft(_Gcα).*map[:,k,α]))
                         end
                     end
                 end
@@ -75,9 +97,15 @@ function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res, �
                         α = findall(n_intergroups[l,:] .&& levels.==L)
                         α = α[α.!=k]
                     
-                        _Gp = exp.(-δf_res[:,l]).*Gp[:,l].*prod(Gcα[:,l,α],dims=(2,3))
+                        _Gp = dropdims(exp.(-selectdim(δf_res,nd+1,l)).*selectdim(Gp,nd+1,l).*prod(selectdim(selectdim(Gcα,nd+1,l),nd+1,α),dims=(nd+1,nd+2)); dims=nd+1)
+                        # println(_Gp)
+                        # matmul!(_Gp,P,_Gp)
+                        # elmul!(_Gp,_Gp,selectdim(selectdim(map,nd+1,k),nd+1,l))
+                        # matmul!(_Gp,iP,_Gp)
+                        # selectdim(Gp,nd+1,k) .= real.(_Gp)
 
-                        Gp[:,k] = real.(ifft(fft(_Gp).*map[:,k,l]))
+                        # ifft(fft(_Gp).*map[:,k,α])
+                        selectdim(Gp,nd+1,k) .= real.(ifft(fft(_Gp).*map[:,k,l]))
                     end
                 end
             end
