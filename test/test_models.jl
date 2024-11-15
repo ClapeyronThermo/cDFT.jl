@@ -5,6 +5,7 @@ using cDFT.Clapeyron
     p = 1e5
     T = 298.15
     x = [0.5,0.5]
+    x1 = [1.]
     x3 = [0.333, 0.333,0.333]
 
     @testset "PCSAFT" begin
@@ -73,9 +74,9 @@ using cDFT.Clapeyron
             shift = [3*0.15],
             dipole = [1.0*1.0575091914494172],))
 
-        μ1 = Clapeyron.chemical_potential_res(model,p,T,x)/T/Clapeyron.Rgas()
-        vl = volume(model, p, T, x)
-        ρ = x/vl
+        μ1 = Clapeyron.chemical_potential_res(model,p,T,x1)/T/Clapeyron.Rgas()
+        vl = volume(model, p, T, x1)
+        ρ = x1/vl
         
         L = cDFT.length_scale(model)
         structure = Uniform1DCart((p, T),ρ,[-10L,10L], (3,))
