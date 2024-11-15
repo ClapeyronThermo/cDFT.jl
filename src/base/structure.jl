@@ -224,6 +224,19 @@ struct TwoPhase3DLamCart <: DFTStructure3DCart
     ngrid::Tuple{Int64,Int64,Int64}
 end
 
-export TwoPhase1DCart, Uniform1DCart, ExternalField1DCart
+struct TwoPhase2DHexCart <: DFTStructure2DCart 
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    ρbulk2::Vector{Float64}
+    bounds::Matrix{Float64}
+    ngrid::Tuple{Int64,Int64}
+end
+
+function TwoPhase2DHexCart(conditions,ρbulk,ρbulk2,bounds::Vector{Float64},ngrid::Tuple{Int64})
+    TwoPhase2DHexCart(conditions,ρbulk,ρbulk2,[bounds[1] bounds[2]; bounds[1] bounds[2]],(ngrid[1],ngrid[1]))
+end
+
+export Uniform1DCart, ExternalField1DCart
 export Uniform1DSphr
-export TwoPhase2DLamCart
+export TwoPhase1DCart, TwoPhase2DLamCart, TwoPhase3DLamCart
+export TwoPhase2DHexCart
