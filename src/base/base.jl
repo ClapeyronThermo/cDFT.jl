@@ -66,6 +66,8 @@ function length_fields(system::DFTSystem)
     return nfscalar + nfvector*nd
 end
 
+dimension(x::DFTSystem) = dimension(x.structure)
+
 export DFTSystem
 
 include("show.jl")

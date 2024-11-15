@@ -8,7 +8,6 @@ abstract type DFTStructure2DCart <: DFTStructure2D end
 abstract type DFTStructure3D <: DFTStructure end
 abstract type DFTStructure3DCart <: DFTStructure3D end
 
-dimension(x::DFTSystem) = dimension(x.structure)
 dimension(x::DFTStructure) = dimension(typeof(x))
 dimension(::Type{<:DFTStructure1D}) = 1
 dimension(::Type{<:DFTStructure2D}) = 2
