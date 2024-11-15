@@ -169,7 +169,7 @@ function Δ(model::PCSAFTModel, T, n, n₃, nᵥ, i, j, a, b)
     HSd = d(model,1e-3,T,onevec(model))
     dij = (HSd[i]*HSd[j])/(HSd[i]+HSd[j])
 
-    n₂, nᵥ₂, n₃₃ = _0,zero(nᵥ),_0
+    n₂, nᵥ₂, n₃₃ = _0,zero(nᵥ[:,1]),_0
     for i in 1:length(n)
         nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[i],HSd[i]
         n₂ += π*HSdᵢ*nᵢ*mᵢ

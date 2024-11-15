@@ -61,4 +61,28 @@ using cDFT.Clapeyron
 
         @test μ1[1] ≈ μ2[1] rtol = 1e-6
     end
+
+    @testset "COFFEE" begin
+        model = COFFEE(["a1"]; userlocations = (;
+            Mw = [1.],
+            segment = [1.],
+            sigma = [3.;;],
+            epsilon = [300.;;],
+            lambda_r = [12;;],
+            lambda_a = [6;;],
+            shift = [3*0.15],
+            dipole = [1.0*1.0575091914494172],))
+
+        μ1 = Clapeyron.chemical_potential_res(model,p,T,x)/T/Clapeyron.Rgas()
+        vl = volume(model, p, T, x)
+        ρ = x/vl
+        
+        L = cDFT.length_scale(model)
+        structure = Uniform1DCart((p, T),ρ,[-10L,10L], (3,))
+        system = DFTSystem(model, structure)
+        ρ = cDFT.initialize_profiles(system)
+        μ2 = cDFT.δFδρ_res(system, ρ)
+
+        @test μ1[1] ≈ μ2[1] rtol = 1e-6
+    end
 end

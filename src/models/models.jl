@@ -12,7 +12,7 @@ function F_res(system::DFTSystem, ρ)
 
     _bounds = system.structure.bounds
 
-    dz = structure_dz(structure)
+    dz = structure_dz(system.structure)
     n = evaluate_field(system,ρ)
 
     f(x) = f_res(system,model,x)

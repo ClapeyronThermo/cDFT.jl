@@ -13,7 +13,7 @@ function f_hs(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
     HSd = species.size
 
     n₀ = zero(first(n) + first(m) + first(HSd))
-    n₁,n₂,nᵥ₁,nᵥ₂,n₃₃ = zero(n₀), zero(n₀), zero(nᵥ), zero(nᵥ), zero(n₀)
+    n₁,n₂,nᵥ₁,nᵥ₂,n₃₃ = zero(n₀), zero(n₀), zero(nᵥ[:,1]), zero(nᵥ[:,1]), zero(n₀)
     for i in 1:length(n)
         mᵢ,HSdᵢ,nᵥᵢ = m[i],HSd[i],nᵥ[i]
         nᵢmᵢ = n[i]*mᵢ

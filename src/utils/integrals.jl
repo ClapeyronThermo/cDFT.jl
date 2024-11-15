@@ -6,13 +6,11 @@ Integrates a collection of points `f`, with constant `dz`, using simpson rule.
 
 """
 ∫(f,dz) = _∫(f,dz)
-∫(f,dz,lastidx) = _∫(f,dz,lastidx)
 #function _∫(f::AbstractArray,dz::Number,lastidx)
 #    return 1/3*dz*(f[1]+f[end]+4*sum(@view(f[2:2:end-1]))+2*sum(@view(f[3:2:end-1])))
 #end
 
-function _∫(f::Array{Float64},dz::Vector{Float64},last = 0)
-    # Integrate using simpson's rule in 1-3D 
+function _∫(f::Array{Float64},dz)
     ∑f = zero(typeof(first(dz)))
     for i in CartesianIndices(size(f))
         k = Tuple(i)
