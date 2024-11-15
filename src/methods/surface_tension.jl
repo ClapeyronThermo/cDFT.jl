@@ -18,7 +18,7 @@ function surface_tension(model::EoSModel, T, x = [1.0])
     ρ1 = x./vl
     ρ2 = y./vv
 
-    structure = TwoPhase1DCart((p, T), ρ1, ρ2, [-10L,10L], 201)
+    structure = TwoPhase1DCart((p, T), ρ1, ρ2, [-10L,10L], (201,))
 
     system = DFTSystem(model, structure)
 
