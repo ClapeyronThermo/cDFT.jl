@@ -45,27 +45,33 @@ struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,P<:DFTPropagator,O<
 end
 
 dimension(::Type{DFTSystem{<:Any,<:Any,T}}) where T = dimension(T) 
+dimension(x::DFTSystem) = dimension(x.structure)
 
 function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
     species = get_species(model, structure)
     fields = get_fields(model, species, structure)
     typed_fields = tuple(fields...)
     propagator = get_propagator(model, species, structure)
-    chunksize = ForwardDiff.Chunk()
+    NF = compute_field_len(fields,dimension(structure))
+    chunksize = ForwardDiff.Chunk{NF}()
     return DFTSystem(model, species, structure, typed_fields, propagator, options,chunksize)
 end
 
-# length_fields(system::DFTSystem) = length_fields(system.model)
+length_fields(system::DFTSystem) = length_fields(system.chunksize)
+length_fields(::ForwardDiff.Chunk{N}) where N = N
 
-function length_fields(system::DFTSystem)
-    fields = system.fields
-    nd = dimension(system)
-    nfscalar = sum(typeof.(fields) .<: ScalarField)
-    nfvector = sum(typeof.(fields) .<: VectorField)
-    return nfscalar + nfvector*nd
+function compute_field_len(fields,nd)
+    field_len = 0
+    for field in fields
+        if field isa ScalarField
+            field_len += 1
+        elseif field isa VectorField
+            field_len += nd
+        end
+    end
+    return field_len
 end
 
-dimension(x::DFTSystem) = dimension(x.structure)
 
 export DFTSystem
 
