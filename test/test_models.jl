@@ -16,7 +16,7 @@ using cDFT.Clapeyron
         
         L = cDFT.length_scale(model)
         
-        structure = Uniform1DCart((p, T), ρ,[-10L,10L], 3)
+        structure = Uniform1DCart((p, T), ρ,[-10L,10L], (3,))
         system = DFTSystem(model, structure)
         ρ = cDFT.initialize_profiles(system)
         μ2 = cDFT.δFδρ_res(system, ρ)
@@ -38,7 +38,7 @@ using cDFT.Clapeyron
         ρ = x3/vl
         
         L = cDFT.length_scale(model)
-        structure = Uniform1DCart((p, T), ρ,[-10L,10L], 3)
+        structure = Uniform1DCart((p, T), ρ,[-10L,10L], (3,))
         system = DFTSystem(model, structure)
         ρ = cDFT.initialize_profiles(system)
         μ2 = cDFT.δFδρ_res(system, ρ)
@@ -54,7 +54,7 @@ using cDFT.Clapeyron
         ρ = x/vl
         
         L = cDFT.length_scale(model)
-        structure = Uniform1DCart((p, T),ρ,[-10L,10L], 3)
+        structure = Uniform1DCart((p, T),ρ,[-10L,10L], (3,))
         system = DFTSystem(model, structure)
         ρ = cDFT.initialize_profiles(system)
         μ2 = cDFT.δFδρ_res(system, ρ)
