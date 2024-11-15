@@ -213,7 +213,7 @@ function Δ(model::HeterogcPCPSAFT, T, n, n₃, nᵥ, i, j, a, b)
 
     n₂, nᵥ₂, n₃₃ = _0,zero(nᵥ[:,i]),_0
     for k in 1:length(n)
-        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[k],m[k],nᵥ[k],HSd[k]
+        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[k],m[k],nᵥ[:,k],HSd[k]
         n₂ += π*HSdᵢ*nᵢ*mᵢ
         nᵥ₂ .+= -2π*nᵥᵢ*mᵢ
         n₃₃ += n₃[k]*mᵢ
