@@ -69,9 +69,6 @@ function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DF
             SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
 end
 
-#TODO: remove when length(system.fields) can be statically determined
-length_fields(model::SAFTgammaMieModel) = 7
-
 function get_propagator(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure)
     return TangentHSPropagator(model, species, structure)
 end

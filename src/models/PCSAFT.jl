@@ -37,8 +37,6 @@ function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStruc
             SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
 end
 
-#TODO: remove when this is statically determined
-length_fields(model::Clapeyron.PCSAFTModel) = 7
 
 """
     get_species(model::EoSModel, structure::DFTStructure)

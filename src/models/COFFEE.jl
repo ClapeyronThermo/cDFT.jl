@@ -28,8 +28,6 @@ function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStruc
             SWeightedDensity(:∫ρz²dz,ψ*d,ω,ngrid),
             SWeightedDensity(:∫ρz²dz,ψ1.*d,ω,ngrid)]
 end
-#TODO: remove when length(system.fields) can be statically determined
-length_fields(model::COFFEEModel) = 5
 
 function f_res(system::DFTSystem, model::COFFEEModel,n)
     return f_hs(system,model,n[1,:],n[2,:],n[3,:])+f_disp(system,model,n[5,:])+f_ff(system,model,n[4,:])+f_nf(system,model,n[1,:],n[2,:],n[3,:])

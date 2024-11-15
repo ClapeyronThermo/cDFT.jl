@@ -32,10 +32,6 @@ function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTSt
             SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
 end
 
-
-#TODO: remove when this is statically determined
-length_fields(model::SAFTVRMieModel) = 7
-
 function get_species(model::SAFTVRMieModel,structure::DFTStructure)
     (p,T) = structure.conditions
     ρbulk = structure.ρbulk
