@@ -11,9 +11,18 @@ Integrates a collection of points `f`, with constant `dz`, using simpson rule.
 #    return 1/3*dz*(f[1]+f[end]+4*sum(@view(f[2:2:end-1]))+2*sum(@view(f[3:2:end-1])))
 #end
 
-function _∫(f::Vector{Float64},dz::Vector{Float64},last = 0)
-    ∑f = sum(f)
-    return ∑f*prod(dz)
+function _∫(f::Array{Float64},dz::Vector{Float64},last = 0)
+    # Integrate using simpson's rule in 1-3D 
+    ∑f = zero(typeof(first(dz)))
+    for i in CartesianIndices(size(f))
+        k = Tuple(i)
+        # check if the indices in each dimension is even or odd
+        coef = (k.==1 .|| k.==size(f)) .+ (2 .*(k .% 2 .== 0) .+ 4 .*(k .% 2 .!= 0)).*.!(k.==1 .|| k.==size(f))
+        ∑f += prod(coef)*f[k...]
+    end
+
+    ∑f *= prod(dz./3)
+    return ∑f
 end
 
 function _∫(f::DensityProfile,dz::Number)
