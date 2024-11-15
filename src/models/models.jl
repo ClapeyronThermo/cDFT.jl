@@ -12,8 +12,7 @@ function F_res(system::DFTSystem, ρ)
 
     _bounds = system.structure.bounds
 
-    dz = (_bounds[2,:]-_bounds[1,:])./ngrid
-
+    dz = structure_dz(structure)
     n = evaluate_field(system,ρ)
 
     f(x) = f_res(system,model,x)
@@ -52,11 +51,10 @@ function δFδρ_res(system::DFTSystem, ρ)
     f(x) = f_res(system,model,x)
     idx_first = ntuple(Returns(1),nd)
     n_first = @view(n[idx_first...,:,:])
-    cfg = ForwardDiff.GradientConfig(f, n_first, ForwardDiff.Chunk{nf}())
+    cfg = ForwardDiff.GradientConfig(f, n_first, system.chunksize)
     df!(df,x) = ForwardDiff.gradient!(df,f,x,cfg)
 
     δf = zeros(ngrid...,nf,nb)
-
     for kk in CartesianIndices(ngrid)
         k = Tuple(kk)
         df!(@view(δf[k...,:,:]),@view(n[k...,:,:]))
