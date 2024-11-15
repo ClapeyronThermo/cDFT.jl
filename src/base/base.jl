@@ -34,26 +34,25 @@ DFTSystem
   device: CPU
 ```
 """
-struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F<:DFTField,P<:DFTPropagator,O<:DFTOptions}
+struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,P<:DFTPropagator,O<:DFTOptions,C<:ForwardDiff.Chunk}
     model::M
     species::S
     structure::T
-    fields::Vector{F}
+    fields::F
     propagator::P
     options::O
+    chunksize::C
 end
 
 dimension(::Type{DFTSystem{<:Any,<:Any,T}}) where T = dimension(T) 
 
-function DFTSystem(model::EoSModel,structure::DFTStructure,profile::Vector{DFTProfile},fields::Vector{DFTField},options::DFTOptions)
-    return DFTSystem(model,species,structure,profile,fields,options)
-end
-
 function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
     species = get_species(model, structure)
     fields = get_fields(model, species, structure)
+    typed_fields = tuple(fields...)
     propagator = get_propagator(model, species, structure)
-    return DFTSystem(model, species, structure, fields, propagator, options)
+    chunksize = ForwardDiff.Chunk()
+    return DFTSystem(model, species, structure, typed_fields, propagator, options,chunksize)
 end
 
 # length_fields(system::DFTSystem) = length_fields(system.model)
