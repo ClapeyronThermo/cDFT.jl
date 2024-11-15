@@ -143,7 +143,7 @@ function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
         for kk in CartesianIndices(ngrid)
             k = Tuple(kk)
             ω̄ = norm(@view(ω[k...,:]))
-            Ω[k...,:,:] = @. 0.0 - 4π*im*abs(ω[k...,:])/ω̄^3*(sin(ω̄*R)-R*ω̄*cos(ω̄*R)) *(ω̄ != 0.0)
+            Ω[k...,:,:] = @. 0.0 - 4π*im*ω[k...,:]/ω̄^3*(sin(ω̄*R)-R*ω̄*cos(ω̄*R)) *(ω̄ != 0.0)
         end
         # Ω = 4π*im./ω.^2 .*(sin.(ω.*R)-R.*ω.*cos.(ω.*R)) .*(ω .!= 0.0) .+ 0.0
         Ω ./= (2π)^3
@@ -222,5 +222,5 @@ function integrate_field(system::DFTSystem,field::VWeightedDensity,profile)
         end
         # ∫field[:,i] = prefactor*real.(ifft(fft(profile[:,i]).*map[:,i]))
     end
-    return dropdims(sum(real.(∫field),dims=nd+1);dims=nd+1).*-2
+    return dropdims(sum(real.(∫field),dims=nd+1);dims=nd+1).*-1
 end
