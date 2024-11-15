@@ -35,7 +35,7 @@ function surface_tension(system::DFTSystem,ρ)
     # bounds = system.structure.bounds
     _bounds = system.structure.bounds
 
-    dz = (_bounds[2,:]-_bounds[1,:])./ngrid
+    dz = structure_dz(structure)
 
     F = free_energy(system,ρ)
 

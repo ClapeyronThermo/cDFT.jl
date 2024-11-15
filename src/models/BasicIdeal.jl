@@ -13,7 +13,7 @@ function F_ideal(system::DFTSystem,ρ)
     nd = length(ngrid)
     _bounds = system.structure.bounds
 
-    dz = (_bounds[2,:]-_bounds[1,:])./ngrid
+    dz = structure_dz(structure)
 
     n = zeros(ngrid...,length(model))
     for i in @comps
