@@ -212,11 +212,11 @@ function Δ(model::HeterogcPCPSAFT, T, n, n₃, nᵥ, i, j, a, b)
     dij = (HSd[k]*HSd[l])/(HSd[k]+HSd[l])
 
     n₂, nᵥ₂, n₃₃ = _0,zero(nᵥ[:,i]),_0
-    for k in 1:length(n)
-        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[k],m[k],nᵥ[:,k],HSd[k]
+    for kk in 1:length(n)
+        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[kk],m[kk],nᵥ[:,kk],HSd[kk]
         n₂ += π*HSdᵢ*nᵢ*mᵢ
         nᵥ₂ .+= -2π*nᵥᵢ*mᵢ
-        n₃₃ += n₃[k]*mᵢ
+        n₃₃ += n₃[kk]*mᵢ
     end
     nᵥ₂nᵥ₂ = dot(nᵥ₂,nᵥ₂)
 
