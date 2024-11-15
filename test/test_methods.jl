@@ -34,6 +34,6 @@
 
         ad = adsorption(model, surface, p, T, n)
 
-        @test ad ≈ 639.2713478000009 rtol = 1e-4
+        @test ad[1] ≈ 639.2713478000009 rtol = 1e-4
     end
 end
