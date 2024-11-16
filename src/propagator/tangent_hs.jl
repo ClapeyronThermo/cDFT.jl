@@ -85,22 +85,22 @@ function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res, �
                 i_group_level = i_groups[findall(levels[i_groups].==L)]
                 for k in i_group_level
                     if k == i_root
-                        Gp[:,k] .= 1.
+                        selectdim(Gp,nd+1,k) .= 1.
                     else
                         l = findall(n_intergroups[k,:] .&& levels.==L-1)[1]
 
                         α = findall(n_intergroups[l,:] .&& levels.==L)
                         α = α[α.!=k]
                     
-                        _Gp = dropdims(exp.(-selectdim(δf_res,nd+1,l)).*selectdim(Gp,nd+1,l).*prod(selectdim(selectdim(Gcα,nd+1,l),nd+1,α),dims=(nd+1,nd+2)); dims=nd+1)
+                        _Gp = dropdims(exp.(-selectdim(δf_res,nd+1,l)).*selectdim(Gp,nd+1,l).*prod(selectdim(selectdim(Gcα,nd+1,l),nd+1,α),dims=(nd+1,nd+2)); dims=nd+1) .+ 0im
                         # println(_Gp)
-                        # matmul!(_Gp,P,_Gp)
-                        # elmul!(_Gp,_Gp,selectdim(selectdim(map,nd+1,k),nd+1,l))
-                        # matmul!(_Gp,iP,_Gp)
-                        # selectdim(Gp,nd+1,k) .= real.(_Gp)
+                        matmul!(_Gp,P,_Gp)
+                        elmul!(_Gp,_Gp,selectdim(selectdim(map,nd+1,k),nd+1,l))
+                        matmul!(_Gp,iP,_Gp)
+                        selectdim(Gp,nd+1,k) .= real.(_Gp)
 
                         # ifft(fft(_Gp).*map[:,k,α])
-                        selectdim(Gp,nd+1,k) .= real.(ifft(fft(_Gp).*map[:,k,l]))
+                        # selectdim(Gp,nd+1,k) .= real.(ifft(fft(_Gp).*selectdim(selectdim(map,nd+1,k),nd+1,l)))
                     end
                 end
             end
