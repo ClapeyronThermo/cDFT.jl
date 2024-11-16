@@ -136,9 +136,9 @@ function f_nf(system::DFTSystem, model::COFFEEModel, n, n₃, nᵥ)
     μ = sqrt(μ²)
 
     n₀ = zero(first(n) + first(m) + first(HSd))
-    n₂, nᵥ₂, η =zero(n₀), zero(n₀), zero(n₀)
+    n₂, nᵥ₂, η =zero(n₀), zero(nᵥ[:,1]), zero(n₀)
     for i in 1:length(n)
-        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[i],HSd[i]
+        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[:,i],HSd[i]
         nᵢmᵢ = nᵢ*mᵢ
         n₀ += nᵢmᵢ/HSdᵢ
         n₂ += π*HSdᵢ*nᵢmᵢ
@@ -146,8 +146,10 @@ function f_nf(system::DFTSystem, model::COFFEEModel, n, n₃, nᵥ)
         η += n₃[i]*mᵢ
     end
 
+    nᵥ₂nᵥ₂ = dot(nᵥ₂,nᵥ₂)
+
     ρ̄ = η*6/π*(σ[1]/HSd[1])^3
-    ξ = 1-nᵥ₂^2/n₂^2
+    ξ = 1-nᵥ₂nᵥ₂/n₂^2
 
     g_hs = 1/(1-η)+HSd[1]*ξ*n₂/(4*(1-η)^2)+HSd[1]^2/4*n₂^2*ξ/(18*(1-η)^3)
     T̄ = T/ϵ

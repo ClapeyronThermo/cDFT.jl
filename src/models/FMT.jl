@@ -15,7 +15,7 @@ function f_hs(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
     n₀ = zero(first(n) + first(m) + first(HSd))
     n₁,n₂,nᵥ₁,nᵥ₂,n₃₃ = zero(n₀), zero(n₀), zero(nᵥ[:,1]), zero(nᵥ[:,1]), zero(n₀)
     for i in 1:length(n)
-        mᵢ,HSdᵢ,nᵥᵢ = m[i],HSd[i],nᵥ[i]
+        mᵢ,HSdᵢ,nᵥᵢ = m[i],HSd[i],nᵥ[:,i]
         nᵢmᵢ = n[i]*mᵢ
         n₀ += nᵢmᵢ/HSdᵢ
         n₁ += 0.5nᵢmᵢ

@@ -171,7 +171,7 @@ function Δ(model::PCSAFTModel, T, n, n₃, nᵥ, i, j, a, b)
 
     n₂, nᵥ₂, n₃₃ = _0,zero(nᵥ[:,1]),_0
     for i in 1:length(n)
-        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[i],HSd[i]
+        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[:,i],HSd[i]
         n₂ += π*HSdᵢ*nᵢ*mᵢ
         nᵥ₂ .+= -2π*nᵥᵢ*mᵢ
         n₃₃ += n₃[i]*mᵢ

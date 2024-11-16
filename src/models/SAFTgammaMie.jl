@@ -6,7 +6,9 @@ function DFTSystem(model::SAFTgammaMieModel,structure::DFTStructure,options::DFT
     species = get_species(model, structure)
     fields = get_fields(model, species, structure)
     propagator = get_propagator(model, species, structure)
-    return DFTSystem(model, species, structure, fields, propagator, options)
+    NF = compute_field_len(fields,dimension(structure))
+    chunksize = ForwardDiff.Chunk{NF}()
+    return DFTSystem(model, species, structure, fields, propagator, options, chunksize)
 end
 
 struct SAFTgammaMieSpecies <: DFTSpecies
@@ -60,7 +62,7 @@ function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DF
     C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
     x = d ./ σ
     ψ = @. cbrt(3*C*(1/(λ_a-3)-1/(λ_r-3)))
-    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid),
+    return [SWeightedDensity(:ρ,zeros(nb),ω,ngrid),
             SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
             SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
             VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
@@ -351,7 +353,8 @@ function expand_model(model::SAFTgammaMieModel)
 end
 
 function f_res(system::DFTSystem, model::SAFTgammaMieModel, n)
-    n1,n2,n3,n4,n5,n6,n7 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4,:]),@view(n[5,:]),@view(n[6,:]),@view(n[7,:])
+    nd = dimension(system)
+    n1,n2,n3,n4,n5,n6,n7 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4:4+nd-1,:]),@view(n[4+nd,:]),@view(n[5+nd,:]),@view(n[6+nd,:])
 
     return f_hs(system,model,n2,n3,n4) + f_disp(system,model,n7) + f_chain(system,model,n1,n5,n6) + f_assoc(system,model,n2,n3,n4)
 end
@@ -363,19 +366,22 @@ function f_hs(system::DFTSystem, model::SAFTgammaMieModel, n, n₃, nᵥ)
     HSd = species.size
 
     n₀ = zero(first(n) + first(m) + first(HSd))
-    n₁,n₂,nᵥ₁,nᵥ₂,n₃₃ = zero(n₀), zero(n₀), zero(n₀), zero(n₀), zero(n₀)
+    n₁,n₂,nᵥ₁,nᵥ₂,n₃₃ = zero(n₀), zero(n₀), zero(nᵥ[:,1]), zero(nᵥ[:,1]), zero(n₀)
     for i in 1:length(n)
-        mᵢ,Sᵢ,HSdᵢ,nᵥᵢ = m[i],S[i],HSd[i],nᵥ[i]
+        mᵢ,Sᵢ,HSdᵢ,nᵥᵢ = m[i],S[i],HSd[i],nᵥ[:,i]
         nᵢmᵢ = n[i]*mᵢ*Sᵢ
         n₀ += nᵢmᵢ/HSdᵢ
         n₁ += 0.5nᵢmᵢ
         n₂ += π*nᵢmᵢ*HSdᵢ
-        nᵥ₁ += nᵥᵢ*mᵢ*Sᵢ/HSdᵢ
-        nᵥ₂ += -2π*nᵥᵢ*mᵢ*Sᵢ
+        nᵥ₁ .+= nᵥᵢ*mᵢ*Sᵢ/HSdᵢ
+        nᵥ₂ .+= -2π*nᵥᵢ*mᵢ*Sᵢ
         n₃₃ += n₃[i]*mᵢ*Sᵢ
     end
 
-    return -n₀*log(1-n₃₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃₃)/(12*π*n₃₃^2)+1/(12*π*n₃₃*(1-n₃₃)^2))
+    nᵥ₁nᵥ₂ = dot(nᵥ₁,nᵥ₂)
+    nᵥ₂nᵥ₂ = dot(nᵥ₂,nᵥ₂)
+
+    return -n₀*log(1-n₃₃)+(n₁*n₂-nᵥ₁nᵥ₂)/(1-n₃₃)+(n₂^3/3-n₂*nᵥ₂nᵥ₂)*(log(1-n₃₃)/(12*π*n₃₃^2)+1/(12*π*n₃₃*(1-n₃₃)^2))
 end
 
 function f_disp(system::DFTSystem, model::SAFTgammaMieModel, ρ̄)

@@ -12,7 +12,7 @@ function f_assoc(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
     n₂ = π.*HSd.*n
     
     nᵥ₂ = -2π.*nᵥ
-    nᵥ₂nᵥ₂ = sum(nᵥ₂.^2, dims=1)
+    nᵥ₂nᵥ₂ = dropdims(sum(nᵥ₂.^2; dims = 1); dims = 1)
     ξ = 1 .-nᵥ₂nᵥ₂ ./ n₂.^2
     isone(nn) && return f_assoc_exact_1(model, T, n, n₃, nᵥ, n₀, ξ)
 
@@ -57,7 +57,7 @@ function X(system::DFTSystem, model::EoSModel, n, n₃, nᵥ)
     n₀ = n./HSd
     n₂ = π.*HSd.*n
     nᵥ₂ = -2π.*nᵥ
-    nᵥ₂nᵥ₂ = sum(nᵥ₂.^2, dims=1)
+    nᵥ₂nᵥ₂ = dropdims(sum(nᵥ₂.^2; dims = 1); dims = 1)
     ξ = 1 .-nᵥ₂nᵥ₂ ./ n₂.^2
     return X(model,T,n,n₃,nᵥ,n₀,ξ)
 end
@@ -78,7 +78,7 @@ function assoc_site_matrix(system::DFTSystem, model::EoSModel, n, n₃, nᵥ)
     n₀ = n./HSd
     n₂ = π.*HSd.*n
     nᵥ₂ = -2π.*nᵥ
-    nᵥ₂nᵥ₂ = sum(nᵥ₂.^2, dims=1)
+    nᵥ₂nᵥ₂ = dropdims(sum(nᵥ₂.^2; dims = 1); dims = 1)
     ξ = 1 .-nᵥ₂nᵥ₂ ./ n₂.^2
     return assoc_site_matrix(model,T,n,n₃,nᵥ,n₀,ξ)
 end
