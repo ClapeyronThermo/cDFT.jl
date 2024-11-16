@@ -22,11 +22,3 @@ function _∫(f::Array{Float64},dz)
     ∑f *= prod(dz./3)
     return ∑f
 end
-
-function _∫(f::DensityProfile,dz::Number)
-    ∑f = zero(typeof(dz))
-    for i in 1:length(f.coeffs)
-        ∑f += evalpoly(f.coords[i+1]-f.coords[i],(0.0,(f.coeffs[i]./(1,2,3,4))...))
-    end
-    return ∑f
-end
