@@ -33,12 +33,9 @@ function Steele(surface::Array{String,1};
     return Steele(surface, packagedparams, references)
 end
 
-function evaluate_external_field(structure::DFTStructure,external_field::SteeleModel,model::SAFTModel,ρ::Array{Float64},z)
-    return evaluate_external_field(structure,external_field,model,z)
-end
 
 function evaluate_external_field(structure::DFTStructure,external_field::SteeleModel,model::SAFTModel,z)
-
+    nd = dimension(structure)
     H = structure.width
     (_,T) = structure.conditions
     ϵs = external_field.params.epsilon.values
@@ -52,16 +49,20 @@ function evaluate_external_field(structure::DFTStructure,external_field::SteeleM
     ngrid = structure.ngrid
     nbeads = length(ϵi)
     nsurf = length(ϵs)
-    external_field_values = zeros(ngrid,nbeads)
+    external_field_values = zeros(ngrid...,nbeads)
     for s in 1:nsurf
         ϵsi = sqrt.(ϵs[s].*ϵi)
         σsi = (σs[s].+σi)/2
         for i in 1:nbeads
-            external_field_values[:,i] += @. 2π*ρ[s]*ϵsi[i]*Δ[s]*σsi[i]^2*(2/5*(σsi[i]/z)^10-(σsi[i]/z)^4-σsi[i]^4/(3*Δ[s]*(z+0.61*Δ[s])^3))
+            selectdim(external_field_values,nd+1,i) .+= @. 2π*ρ[s]*ϵsi[i]*Δ[s]*σsi[i]^2*(2/5*(σsi[i]/z)^10-(σsi[i]/z)^4-σsi[i]^4/(3*Δ[s]*(z+0.61*Δ[s])^3))
             if H!=0
-                external_field_values[:,i] += @. 2π*ρ[s]*ϵsi[i]*Δ[s]*σsi[i]^2*(2/5*(σsi[i]/(H-z))^10-(σsi[i]/(H-z))^4-σsi[i]^4/(3*Δ[s]*((H-z)+0.61*Δ[s])^3))
+                selectdim(external_field_values,nd+1,i) .+= @. 2π*ρ[s]*ϵsi[i]*Δ[s]*σsi[i]^2*(2/5*(σsi[i]/(H-z))^10-(σsi[i]/(H-z))^4-σsi[i]^4/(3*Δ[s]*((H-z)+0.61*Δ[s])^3))
             end
         end
     end
     return external_field_values./T
+end
+
+function evaluate_external_field(structure::DFTStructure,external_field::SteeleModel,model::SAFTModel,ρ::Array{Float64},z)
+    return evaluate_external_field(structure,external_field,model,z)
 end

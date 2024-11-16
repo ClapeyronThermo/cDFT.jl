@@ -1,13 +1,14 @@
 using Clapeyron: QPCPSAFTModel
 
 function f_res(system::DFTSystem, model::QPCPSAFTModel,n)
-    return f_hs(system,model,n[2,:],n[3,:],n[4,:]) + f_hc(system,model,n[1,:],n[5,:],n[6,:]) + f_disp(system,model,n[7,:]) + f_polar(system,model,n[7,:]) + f_assoc(system,model,n[2,:],n[3,:],n[4,:])
+    nd = dimension(system)
+    return f_hs(system,model,n[2,:],n[3,:],n[4:4+nd-1,:]) + f_hc(system,model,n[1,:],n[4+nd,:],n[5+nd,:]) + f_disp(system,model,n[6+nd,:]) + f_polar(system,model,n[6+nd,:]) + f_assoc(system,model,n[2,:],n[3,:],n[4:4+nd-1,:])
 end
 
 
 function f_polar(system::DFTSystem, model::QPCPSAFTModel, ρ̄)
-    species = system.species
-  (_, T) = system.structure.conditions
+  species = system.species
+  T = system.structure.conditions[2]
   μ̄² = model.params.dipole2.values
   Q̄² = model.params.quadrupole2.values
   has_dp = !all(iszero, μ̄²)

@@ -9,17 +9,19 @@ function F_res(system::DFTSystem, ρ)
     ngrid = system.structure.ngrid
     bounds = system.structure.bounds
     model = system.model
-    dz = (bounds[2]-bounds[1])/ngrid
-    ngrid = system.structure.ngrid
 
+    _bounds = system.structure.bounds
+
+    dz = structure_dz(system.structure)
     n = evaluate_field(system,ρ)
 
     f(x) = f_res(system,model,x)
 
-    ϕ = similar(ρ,ngrid)
+    ϕ = similar(ρ,ngrid...)
     ϕ .= 0
-    for i in 1:ngrid
-        ϕ[i] = f(@view n[i,:,:])
+    for kk in CartesianIndices(ngrid)
+        k = Tuple(kk)
+        ϕ[k...] = f(@view(n[k...,:,:]))
     end
 
     return ∫(ϕ,dz)
@@ -37,24 +39,27 @@ The output is a 2D array with the dimensions `(ngrid,nb)`, where `ngrid` is the 
 function δFδρ_res(system::DFTSystem, ρ)
     model = system.model
     fields = system.fields
-    nb = size(ρ,2)
+    
     nf = length(fields)
     ngrid = system.structure.ngrid
+    nd = dimension(system)
+    nb = size(ρ,nd+1)
 
     n = evaluate_field(system,ρ)
     nf = length_fields(system)
     # @assert nf == length(system.fields) "define length_fields(model::EoSModel) = nf"
     f(x) = f_res(system,model,x)
-    n_first = @view(n[1,:,:])
-    cfg = ForwardDiff.GradientConfig(f, n_first, ForwardDiff.Chunk{nf}())
+    idx_first = ntuple(Returns(1),nd)
+    n_first = @view(n[idx_first...,:,:])
+    cfg = ForwardDiff.GradientConfig(f, n_first, system.chunksize)
     df!(df,x) = ForwardDiff.gradient!(df,f,x,cfg)
 
-    δf = zeros(ngrid,nf,nb)
-
-    for i in 1:ngrid
-        df!(@view(δf[i,:,:]),@view(n[i,:,:]))
+    δf = zeros(ngrid...,nf,nb)
+    for kk in CartesianIndices(ngrid)
+        k = Tuple(kk)
+        df!(@view(δf[k...,:,:]),@view(n[k...,:,:]))
     end
-    δFδρ_res = integrate_field(system, δf, ρ)
+    δFδρ_res = integrate_field(system, δf)
     return δFδρ_res
 end
 

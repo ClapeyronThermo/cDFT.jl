@@ -23,4 +23,17 @@
 
         @test γ1 ≈ 0.030742209755905244 rtol = 1e-4
     end
+
+    @testset "Adsorption" begin
+        model = PCSAFT(["carbon dioxide","methane"])
+        surface = Steele(["graphite"])
+
+        p = 1e6
+        T = 298.15
+        n = [0.5,0.5]
+
+        ad = adsorption(model, surface, p, T, n)
+
+        @test ad[1] ≈ 639.2713478000009 rtol = 1e-4
+    end
 end

@@ -1,21 +1,33 @@
 function adsorption(system,ρ)
     # Integrate over all profiles
-    return [∫(_ρ,_ρ.mesh_size)/diff(_ρ.bounds)[1] for _ρ in profiles]
+    nc = length(system.model)
+    nd = dimension(system)
+    dz = structure_dz(system.structure)
+    if nd == 1
+        V = prod(diff(system.structure.bounds))
+    else
+        V = prod(diff(system.structure.bounds; dims=2))
+    end
+    return [∫(selectdim(ρ,nd+1,i)[:],dz)/V for i in 1:nc]
 end
 
-function adsorption(model::EoSModel, surface::ExternalFieldModel, p, T, n=[1.0], width=0.0)
+function adsorption(model::EoSModel, surface::ExternalFieldModel, p, T, n=[1.0], width=10*length_scale(model))
     L = cDFT.length_scale(model)
 
-    if width == 0.
-        bounds = [0.7L,10L]
-    else
-        bounds = [0.7L,width-0.7L]
-    end
-    structure = cDFT.ExternalField1DCart((p, T, n),bounds, 201, surface, width)
+    bounds = [0.7L,width-0.7L]
+
+    v = volume(model,p,T,n)
+    ρ = n./v
+
+    structure = cDFT.ExternalField1DCart((p, T), ρ, bounds, (201,), surface, width)
 
     system = cDFT.DFTSystem(model, structure)
 
-    converge!(system)
+    ρ = initialize_profiles(system)
 
-    return adsorption(system)
+    converge!(system,ρ)
+
+    return adsorption(system, ρ)
 end
+
+export adsorption

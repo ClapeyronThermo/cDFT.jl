@@ -19,8 +19,10 @@ Uses the algorithm developed by Xu et al. (2009) to handle branching.
 # References
 1. Xu, X., Cao, D., Zhang, X. and Wang W. (2009). Universal version of density-functional theory for polymers with complex architecture. PHYSICAL REVIEW E, 79, 021805. [doi::10.1103/PhysRevE.79.021805](https://doi.org/10.1103/PhysRevE.79.021805)
 """
-struct TangentHSPropagator <: DFTPropagator 
-    map::Array{ComplexF64}
+struct TangentHSPropagator{M,P,iP} <: DFTPropagator 
+    map::M
+    plan::P
+    iplan::iP
 end
 
 include("ideal.jl")

@@ -34,27 +34,44 @@ DFTSystem
   device: CPU
 ```
 """
-struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F<:DFTField,P<:DFTPropagator,O<:DFTOptions}
+struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,P<:DFTPropagator,O<:DFTOptions,C<:ForwardDiff.Chunk}
     model::M
     species::S
     structure::T
-    fields::Vector{F}
+    fields::F
     propagator::P
     options::O
+    chunksize::C
 end
 
-function DFTSystem(model::EoSModel,structure::DFTStructure,profile::Vector{DFTProfile},fields::Vector{DFTField},options::DFTOptions)
-    return DFTSystem(model,species,structure,profile,fields,options)
-end
+dimension(::Type{DFTSystem{<:Any,<:Any,T}}) where T = dimension(T) 
+dimension(x::DFTSystem) = dimension(x.structure)
 
 function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
     species = get_species(model, structure)
     fields = get_fields(model, species, structure)
+    typed_fields = tuple(fields...)
     propagator = get_propagator(model, species, structure)
-    return DFTSystem(model, species, structure, fields, propagator, options)
+    NF = compute_field_len(fields,dimension(structure))
+    chunksize = ForwardDiff.Chunk{NF}()
+    return DFTSystem(model, species, structure, typed_fields, propagator, options,chunksize)
 end
 
-length_fields(system::DFTSystem) = length(system.fields)
+length_fields(system::DFTSystem) = length_fields(system.chunksize)
+length_fields(::ForwardDiff.Chunk{N}) where N = N
+
+function compute_field_len(fields,nd)
+    field_len = 0
+    for field in fields
+        if field isa ScalarField
+            field_len += 1
+        elseif field isa VectorField
+            field_len += nd
+        end
+    end
+    return field_len
+end
+
 
 export DFTSystem
 

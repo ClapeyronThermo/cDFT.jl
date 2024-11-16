@@ -3,15 +3,17 @@ import Clapeyron: getsites
 function f_assoc(system::DFTSystem, model::SAFTModel, n, n₃, nᵥ)
     species = system.species
     HSd = species.size
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     _0 = zero(T+first(n)+first(n₃)+first(nᵥ))
     nn = assoc_pair_length(model)
     iszero(nn) && return _0
 
     n₀ = n./HSd
     n₂ = π.*HSd.*n
+    
     nᵥ₂ = -2π.*nᵥ
-    ξ = 1 .-nᵥ₂.^2 ./ n₂.^2
+    nᵥ₂nᵥ₂ = dropdims(sum(nᵥ₂.^2; dims = 1); dims = 1)
+    ξ = 1 .-nᵥ₂nᵥ₂ ./ n₂.^2
     isone(nn) && return f_assoc_exact_1(model, T, n, n₃, nᵥ, n₀, ξ)
 
     X_ = X(model,T,n,n₃,nᵥ,n₀,ξ)
@@ -55,7 +57,8 @@ function X(system::DFTSystem, model::EoSModel, n, n₃, nᵥ)
     n₀ = n./HSd
     n₂ = π.*HSd.*n
     nᵥ₂ = -2π.*nᵥ
-    ξ = 1 .-nᵥ₂.^2 ./ n₂.^2
+    nᵥ₂nᵥ₂ = dropdims(sum(nᵥ₂.^2; dims = 1); dims = 1)
+    ξ = 1 .-nᵥ₂nᵥ₂ ./ n₂.^2
     return X(model,T,n,n₃,nᵥ,n₀,ξ)
 end
 
@@ -75,7 +78,8 @@ function assoc_site_matrix(system::DFTSystem, model::EoSModel, n, n₃, nᵥ)
     n₀ = n./HSd
     n₂ = π.*HSd.*n
     nᵥ₂ = -2π.*nᵥ
-    ξ = 1 .-nᵥ₂.^2 ./ n₂.^2
+    nᵥ₂nᵥ₂ = dropdims(sum(nᵥ₂.^2; dims = 1); dims = 1)
+    ξ = 1 .-nᵥ₂nᵥ₂ ./ n₂.^2
     return assoc_site_matrix(model,T,n,n₃,nᵥ,n₀,ξ)
 end
 

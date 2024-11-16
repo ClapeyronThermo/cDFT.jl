@@ -5,6 +5,7 @@ using cDFT.Clapeyron
     p = 1e5
     T = 298.15
     x = [0.5,0.5]
+    x1 = [1.]
     x3 = [0.333, 0.333,0.333]
 
     @testset "PCSAFT" begin
@@ -16,7 +17,7 @@ using cDFT.Clapeyron
         
         L = cDFT.length_scale(model)
         
-        structure = Uniform1DCart((p, T), ρ,[-10L,10L], 3)
+        structure = Uniform1DCart((p, T), ρ,[-10L,10L], (3,))
         system = DFTSystem(model, structure)
         ρ = cDFT.initialize_profiles(system)
         μ2 = cDFT.δFδρ_res(system, ρ)
@@ -38,12 +39,39 @@ using cDFT.Clapeyron
         ρ = x3/vl
         
         L = cDFT.length_scale(model)
-        structure = Uniform1DCart((p, T), ρ,[-10L,10L], 3)
+        structure = Uniform1DCart((p, T), ρ,[-10L,10L], (3,))
         system = DFTSystem(model, structure)
         ρ = cDFT.initialize_profiles(system)
         μ2 = cDFT.δFδρ_res(system, ρ)
 
         @test μ1[1] ≈ μ2[1] rtol = 1e-6
+    end
+
+    @testset "HeterogcPCPSAFT" begin
+        model = HeterogcPCPSAFT(["ethanol","hexane"])
+
+        μ1 = Clapeyron.chemical_potential_res(model,p,T,x)/T/Clapeyron.Rgas()
+        vl = volume(model, p, T, x)
+        ρ = x/vl
+        
+        L = cDFT.length_scale(model)
+        structure = Uniform1DCart((p, T), ρ,[-10L,10L], (3,))
+        system = DFTSystem(model, structure)
+        ρ = cDFT.initialize_profiles(system)
+        μ2 = cDFT.δFδρ_res(system, ρ)
+
+        model = system.model
+        Gcα,Gp = cDFT.propagate(system, system.propagator, μ2, ρ)
+        A = zeros(size(μ2))
+        levels = system.species.levels
+        for i in cDFT.@comps
+            for k in cDFT.@chain(i)
+                k_children = (system.model.groups.n_intergroups[i][k,:] .== 1 .&& levels .> levels[k])
+                A[:,k] = μ2[:,k] - log.(Gp[:,k]) - sum(log.(Gcα[:,k,k_children]),dims = (2,3))
+            end
+        end
+
+        @test μ1[1] ≈ A[1,1] rtol = 1e-6
     end
 
     @testset "SAFTVRMie" begin
@@ -54,7 +82,58 @@ using cDFT.Clapeyron
         ρ = x/vl
         
         L = cDFT.length_scale(model)
-        structure = Uniform1DCart((p, T),ρ,[-10L,10L], 3)
+        structure = Uniform1DCart((p, T),ρ,[-10L,10L], (3,))
+        system = DFTSystem(model, structure)
+        ρ = cDFT.initialize_profiles(system)
+        μ2 = cDFT.δFδρ_res(system, ρ)
+
+        @test μ1[1] ≈ μ2[1] rtol = 1e-6
+    end
+
+    @testset "SAFTgammaMie" begin
+        model = SAFTgammaMie(["ethanol","hexane"])
+
+        μ1 = Clapeyron.chemical_potential_res(model,p,T,x)/T/Clapeyron.Rgas()
+        vl = volume(model, p, T, x)
+        ρ = x/vl
+        
+        L = cDFT.length_scale(model)
+        structure = Uniform1DCart((p, T), ρ,[-10L,10L], (3,))
+        system = DFTSystem(model, structure)
+        ρ = cDFT.initialize_profiles(system)
+        μ2 = cDFT.δFδρ_res(system, ρ)
+
+        model = system.model
+        Gcα,Gp = cDFT.propagate(system, system.propagator, μ2, ρ)
+        A = zeros(size(μ2))
+        levels = system.species.levels
+        for i in cDFT.@comps
+            for k in cDFT.@chain(i)
+                k_children = (system.model.groups.n_intergroups[i][k,:] .== 1 .&& levels .> levels[k])
+                A[:,k] = μ2[:,k] - log.(Gp[:,k]) - sum(log.(Gcα[:,k,k_children]),dims = (2,3))
+            end
+        end
+
+        @test μ1[1] ≈ A[1,1] rtol = 1e-6
+    end
+
+    @testset "COFFEE" begin
+        model = COFFEE(["a1"]; userlocations = (;
+            Mw = [1.],
+            segment = [1.],
+            sigma = [3.;;],
+            epsilon = [300.;;],
+            lambda_r = [12;;],
+            lambda_a = [6;;],
+            shift = [3*0.15],
+            dipole = [1.0*1.0575091914494172],))
+
+        μ1 = Clapeyron.chemical_potential_res(model,p,T,x1)/T/Clapeyron.Rgas()
+        vl = volume(model, p, T, x1)
+        ρ = x1/vl
+        
+        L = cDFT.length_scale(model)
+        structure = Uniform1DCart((p, T),ρ,[-10L,10L], (3,))
         system = DFTSystem(model, structure)
         ρ = cDFT.initialize_profiles(system)
         μ2 = cDFT.δFδρ_res(system, ρ)

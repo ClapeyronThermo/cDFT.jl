@@ -21,7 +21,7 @@ function interfacial_tension(model::EoSModel,p,T,x,xx)
     ρ1 = x./v1
     ρ2 = xx./v2
 
-    structure = TwoPhase1DCart((p, T), ρ1, ρ2,[-20L,20L], 201)
+    structure = TwoPhase1DCart((p, T), ρ1, ρ2,[-20L,20L], (201,))
 
     system = DFTSystem(model, structure)
     ρ = initialize_profiles(system)

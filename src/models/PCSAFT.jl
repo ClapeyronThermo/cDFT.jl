@@ -23,17 +23,20 @@ For a given `model`, obtain all of the fields that will be needed to perform the
 """
 function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure)
     nc = length(model)
-    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
-    ω = fftfreq(structure.ngrid, f)
+    ngrid = structure.ngrid
+    #f = [ngrid[i]/(structure.bounds[i,2]-structure.bounds[i,1]) for i in 1:length(ngrid)]
+    ω = structure_ω(structure)
+    ψ = 1.3862
     d = species.size
-    return [WeightedDensity(:ρ,zeros(nc),ω),
-            WeightedDensity(:∫ρdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,0.5*d,ω),
-            WeightedDensity(:∫ρzdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,d,ω),
-            WeightedDensity(:∫ρdz,d,ω),
-            WeightedDensity(:∫ρz²dz,1.3862*d,ω)]
+    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid),
+            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,d,ω,ngrid),
+            SWeightedDensity(:∫ρdz,d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
 end
+
 
 """
     get_species(model::EoSModel, structure::DFTStructure)
@@ -60,7 +63,8 @@ end
 
 
 function f_res(system::DFTSystem, model::PCSAFTModel,n)
-    n1,n2,n3,n4,n5,n6,n7 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4,:]),@view(n[5,:]),@view(n[6,:]),@view(n[7,:])
+    nd = dimension(system)
+    n1,n2,n3,n4,n5,n6,n7 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4:4+nd-1,:]),@view(n[4+nd,:]),@view(n[5+nd,:]),@view(n[6+nd,:])
     return f_hs(system,model,n2,n3,n4) + f_hc(system,model,n1,n5,n6) + f_disp(system,model,n7) + f_assoc(system,model,n2,n3,n4)
 end
 
@@ -98,7 +102,7 @@ end
 
 function f_disp(system::DFTSystem, model::PCSAFTModel, ρ̄)
     species = system.species
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     ψ = 1.3862
     σ = model.params.sigma.values
     m = model.params.segment.values
@@ -165,18 +169,18 @@ function Δ(model::PCSAFTModel, T, n, n₃, nᵥ, i, j, a, b)
     HSd = d(model,1e-3,T,onevec(model))
     dij = (HSd[i]*HSd[j])/(HSd[i]+HSd[j])
 
-    n₂, nᵥ₂, n₃₃ = _0,_0,_0
+    n₂, nᵥ₂, n₃₃ = _0,zero(nᵥ[:,1]),_0
     for i in 1:length(n)
-        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[i],HSd[i]
+        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[:,i],HSd[i]
         n₂ += π*HSdᵢ*nᵢ*mᵢ
-        nᵥ₂ += -2π*nᵥᵢ*mᵢ
+        nᵥ₂ .+= -2π*nᵥᵢ*mᵢ
         n₃₃ += n₃[i]*mᵢ
     end
     #n₂ = sum(π.*HSd.*n.*m)
-    #nᵥ₂ = sum(-2π.*nᵥ.*m)
+    nᵥ₂nᵥ₂ = dot(nᵥ₂,nᵥ₂)
     #n₃  = sum(n₃.*m)
 
-    ξ = 1-nᵥ₂^2/n₂^2
+    ξ = 1-nᵥ₂nᵥ₂/n₂^2
     g_hs = 1/(1-n₃₃)+dij*ξ*n₂/(2*(1-n₃₃)^2)+dij^2*n₂^2*ξ/(18*(1-n₃₃)^3)
     return g_hs*σ^3*expm1(ϵ_assoc[i,j][a,b]/T)*κijab
 end

@@ -13,21 +13,20 @@ function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStruc
     nc = length(model)
     ψ = 1.3862
 
-    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
-    ω = fftfreq(structure.ngrid, f)
+    ω = structure_ω(structure)
     d = species.size
-
+    ngrid = structure.ngrid
     λ_r = diagvalues(model.params.lambda_r.values)
     λ_a = diagvalues(model.params.lambda_a.values)
     σ   = diagvalues(model.params.sigma.values)
     C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
     x = species.size ./ σ
     ψ1 = @. cbrt(3*C*x^3*(x^-λ_a/(λ_a-3)-x^-λ_r/(λ_r-3)))
-    return [WeightedDensity(:∫ρdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,0.5*d,ω),
-            WeightedDensity(:∫ρzdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,ψ*d,ω),
-            WeightedDensity(:∫ρz²dz,ψ1.*d,ω)]
+    return [SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,ψ*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,ψ1.*d,ω,ngrid)]
 end
 
 function f_res(system::DFTSystem, model::COFFEEModel,n)
@@ -36,7 +35,7 @@ end
 
 function f_ff(system::DFTSystem, model::COFFEEModel, ρ̄)
     species = system.species
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     μ̄² = pcp_dipole2(model)
     has_dp = !all(iszero, μ̄²)
     if !has_dp return zero(T+first(ρ̄)) end
@@ -127,7 +126,7 @@ end
 
 function f_nf(system::DFTSystem, model::COFFEEModel, n, n₃, nᵥ)
     HSd = system.species.size
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     
     ϵ = model.params.epsilon[1]
     σ = diagvalues(model.params.sigma.values)
@@ -137,9 +136,9 @@ function f_nf(system::DFTSystem, model::COFFEEModel, n, n₃, nᵥ)
     μ = sqrt(μ²)
 
     n₀ = zero(first(n) + first(m) + first(HSd))
-    n₂, nᵥ₂, η =zero(n₀), zero(n₀), zero(n₀)
+    n₂, nᵥ₂, η =zero(n₀), zero(nᵥ[:,1]), zero(n₀)
     for i in 1:length(n)
-        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[i],HSd[i]
+        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[:,i],HSd[i]
         nᵢmᵢ = nᵢ*mᵢ
         n₀ += nᵢmᵢ/HSdᵢ
         n₂ += π*HSdᵢ*nᵢmᵢ
@@ -147,8 +146,10 @@ function f_nf(system::DFTSystem, model::COFFEEModel, n, n₃, nᵥ)
         η += n₃[i]*mᵢ
     end
 
+    nᵥ₂nᵥ₂ = dot(nᵥ₂,nᵥ₂)
+
     ρ̄ = η*6/π*(σ[1]/HSd[1])^3
-    ξ = 1-nᵥ₂^2/n₂^2
+    ξ = 1-nᵥ₂nᵥ₂/n₂^2
 
     g_hs = 1/(1-η)+HSd[1]*ξ*n₂/(4*(1-η)^2)+HSd[1]^2/4*n₂^2*ξ/(18*(1-η)^3)
     T̄ = T/ϵ
@@ -177,7 +178,7 @@ function cosΘ(system::DFTSystem)
     HSd = system.species.size
     n = evaluate_field(system)
     η = n[:,2]
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     ϵ = model.params.epsilon[1]
     σ = diagvalues(model.params.sigma.values)
     d = model.params.shift[1] / σ[1]

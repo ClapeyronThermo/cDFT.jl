@@ -12,8 +12,8 @@ end
 
 function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTStructure)
     nc = length(model)
-    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
-    ω = fftfreq(structure.ngrid, f)
+    ngrid = structure.ngrid
+    ω = structure_ω(structure)
     d = species.size
 
     λ_r = diagvalues(model.params.lambda_r.values)
@@ -22,13 +22,14 @@ function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTSt
     C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
     x = species.size ./ σ
     ψ = @. cbrt(3*C*x^3*(x^-λ_a/(λ_a-3)-x^-λ_r/(λ_r-3)))
-    return [WeightedDensity(:ρ,zeros(nc),ω),
-            WeightedDensity(:∫ρdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,0.5*d,ω),
-            WeightedDensity(:∫ρzdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,d,ω),
-            WeightedDensity(:∫ρdz,d,ω),
-            WeightedDensity(:∫ρz²dz,ψ.*d,ω)]
+
+    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid),
+            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,d,ω,ngrid),
+            SWeightedDensity(:∫ρdz,d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
 end
 
 function get_species(model::SAFTVRMieModel,structure::DFTStructure)
@@ -46,13 +47,14 @@ function get_propagator(model::SAFTVRMieModel, species::DFTSpecies, structure::D
 end
 
 function f_res(system::DFTSystem, model::SAFTVRMieModel, n)
-    n1,n2,n3,n4,n5,n6,n7 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4,:]),@view(n[5,:]),@view(n[6,:]),@view(n[7,:])
+    nd = dimension(system)
+    n1,n2,n3,n4,n5,n6,n7 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4:4+nd-1,:]),@view(n[4+nd,:]),@view(n[5+nd,:]),@view(n[6+nd,:])
     return f_hs(system,model,n2,n3,n4) + f_chain(system,model,n1,n5,n6) + f_disp(system,model,n7) + f_assoc(system,model,n2,n3,n4)
 end
 
 function f_chain(system::DFTSystem, model::SAFTVRMieModel, ρhc, ρ̄hc, _λ)
     V = nothing
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     _d = system.species.size
     m = model.params.segment
     _ϵ = model.params.epsilon
@@ -151,7 +153,7 @@ function f_disp(system::DFTSystem, model::SAFTVRMieModel, ρ̄)
     V = nothing
     ψ = system.fields[end].width
     _d = system.species.size
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     m = model.params.segment
     _ϵ = model.params.epsilon
     _λr = model.params.lambda_r

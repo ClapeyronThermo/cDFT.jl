@@ -18,7 +18,7 @@ function surface_tension(model::EoSModel, T, x = [1.0])
     ρ1 = x./vl
     ρ2 = y./vv
 
-    structure = TwoPhase1DCart((p, T), ρ1, ρ2, [-10L,10L], 201)
+    structure = TwoPhase1DCart((p, T), ρ1, ρ2, [-10L,10L], (201,))
 
     system = DFTSystem(model, structure)
 
@@ -31,8 +31,11 @@ end
 function surface_tension(system::DFTSystem,ρ)
     model = system.model
     ngrid = system.structure.ngrid
-    bounds = system.structure.bounds
-    dz = (bounds[2]-bounds[1])/(ngrid)
+    nd = dimension(system)
+    # bounds = system.structure.bounds
+    _bounds = system.structure.bounds
+
+    dz = structure_dz(system.structure)
 
     F = free_energy(system,ρ)
 
@@ -50,7 +53,7 @@ function surface_tension(system::DFTSystem,ρ)
             chem_pot_term += μ[i]*∫(ρ[:,k],dz)/system.species.nbeads[i]
         end
     end
-    return F*k_B*T-chem_pot_term+p*∫(ones(ngrid),dz)
+    return F*k_B*T-chem_pot_term+p*∫(ones(only(ngrid...)),dz)
 end
 
 export surface_tension

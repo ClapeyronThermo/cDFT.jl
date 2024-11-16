@@ -5,7 +5,9 @@ function DFTSystem(model::HeterogcPCPSAFT,structure::DFTStructure,options::DFTOp
     species = get_species(model, structure)
     fields = get_fields(model, species, structure)
     propagator = get_propagator(model, species, structure)
-    return DFTSystem(model, species, structure, fields, propagator, options)
+    NF = compute_field_len(fields,dimension(structure))
+    chunksize = ForwardDiff.Chunk{NF}()
+    return DFTSystem(model, species, structure, fields, propagator, options, chunksize)
 end
 
 struct gcPCPSAFTSpecies <: DFTSpecies
@@ -50,15 +52,17 @@ end
 
 function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure)
     nb = sum(species.nbeads)
-    f = structure.ngrid/(structure.bounds[2]-structure.bounds[1])
-    ω = fftfreq(structure.ngrid, f)
+    ngrid = structure.ngrid
+    ω = structure_ω(structure)
     d = species.size
-    return [WeightedDensity(:ρ,zeros(nb),ω),
-            WeightedDensity(:∫ρdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,0.5*d,ω),
-            WeightedDensity(:∫ρzdz,0.5*d,ω),
-            WeightedDensity(:∫ρz²dz,d,ω),
-            WeightedDensity(:∫ρz²dz,1.5357*d,ω)]
+    ψ = 1.5357
+    return [SWeightedDensity(:ρ,zeros(nb),ω,ngrid),
+            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,d,ω,ngrid),
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
+
 end
 
 function get_propagator(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure)
@@ -66,7 +70,8 @@ function get_propagator(model::HeterogcPCPSAFT, species::DFTSpecies, structure::
 end
 
 function f_res(system::DFTSystem, model::HeterogcPCPSAFT,n)
-    n1,n2,n3,n4,n5,n6 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4,:]),@view(n[5,:]),@view(n[6,:])
+    nd = dimension(system)
+    n1,n2,n3,n4,n5,n6 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4:4+nd-1,:]),@view(n[4+nd,:]),@view(n[5+nd,:])
     return f_hs(system,model,n2,n3,n4) + f_hc(system,model,n1,n5) + f_disp(system,model,n6) + f_assoc(system,model,n2,n3,n4) + f_polar(system,model,n6)
 end
 
@@ -75,21 +80,23 @@ function f_hs(system::DFTSystem, model::HeterogcPCPSAFT, n, n₃, nᵥ)
     m = model.params.segment.values
 
     n₀ = zero(first(n))
-    n₁,n₂,nᵥ₁,nᵥ₂,n₃₃ = zero(n₀), zero(n₀), zero(n₀), zero(n₀), zero(n₀)
+    n₁,n₂,nᵥ₁,nᵥ₂,n₃₃ = zero(n₀), zero(n₀), zero(nᵥ[:,1]), zero(nᵥ[:,1]), zero(n₀)
     for i in @comps
         for k in @groups(i)
             HSdᵢ = species.size[k]
-            mᵢ,nᵥᵢ = m[k],nᵥ[k]
+            mᵢ,nᵥᵢ = m[k],nᵥ[:,k]
             nᵢmᵢ = n[k]*mᵢ
             n₀ += nᵢmᵢ/HSdᵢ
             n₁ += 0.5nᵢmᵢ
             n₂ += π*nᵢmᵢ*HSdᵢ
-            nᵥ₁ += nᵥᵢ*mᵢ/HSdᵢ
-            nᵥ₂ += -2π*nᵥᵢ*mᵢ
+            nᵥ₁ .+= nᵥᵢ*mᵢ/HSdᵢ
+            nᵥ₂ .+= -2π*nᵥᵢ*mᵢ
             n₃₃ += n₃[k]*mᵢ
         end
     end
-    return -n₀*log(1-n₃₃)+(n₁*n₂-nᵥ₂*nᵥ₁)/(1-n₃₃)+(n₂^3/3-n₂*nᵥ₂*nᵥ₂)*(log(1-n₃₃)/(12*π*n₃₃^2)+1/(12*π*n₃₃*(1-n₃₃)^2))
+    nᵥ₁nᵥ₂ = dot(nᵥ₁,nᵥ₂)
+    nᵥ₂nᵥ₂ = dot(nᵥ₂,nᵥ₂)
+    return -n₀*log(1-n₃₃)+(n₁*n₂-nᵥ₁nᵥ₂)/(1-n₃₃)+(n₂^3/3-n₂*nᵥ₂nᵥ₂)*(log(1-n₃₃)/(12*π*n₃₃^2)+1/(12*π*n₃₃*(1-n₃₃)^2))
 end
 
 function f_hc(system::DFTSystem, model::HeterogcPCPSAFT, ρhc, ρ̄hc)
@@ -130,7 +137,7 @@ end
 function f_disp(system::DFTSystem, model::HeterogcPCPSAFT, n)
     ρ̄ = deepcopy(n)
     nbeads = length(ρ̄)
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     ψ = 1.5357
     σ = model.params.sigma.values
     ϵ = model.params.epsilon.values
@@ -204,25 +211,27 @@ function Δ(model::HeterogcPCPSAFT, T, n, n₃, nᵥ, i, j, a, b)
     HSd = d(model,1e-3,T,onevec(model))
     dij = (HSd[k]*HSd[l])/(HSd[k]+HSd[l])
 
-    n₂, nᵥ₂, n₃₃ = _0,_0,_0
-    for k in 1:length(n)
-        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[k],m[k],nᵥ[k],HSd[k]
+    n₂, nᵥ₂, n₃₃ = _0,zero(nᵥ[:,i]),_0
+    for kk in 1:length(n)
+        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[kk],m[kk],nᵥ[:,kk],HSd[kk]
         n₂ += π*HSdᵢ*nᵢ*mᵢ
-        nᵥ₂ += -2π*nᵥᵢ*mᵢ
-        n₃₃ += n₃[k]*mᵢ
+        nᵥ₂ .+= -2π*nᵥᵢ*mᵢ
+        n₃₃ += n₃[kk]*mᵢ
     end
+    nᵥ₂nᵥ₂ = dot(nᵥ₂,nᵥ₂)
+
     #n₂ = sum(π.*HSd.*n.*m)
     #nᵥ₂ = sum(-2π.*nᵥ.*m)
     #n₃  = sum(n₃.*m)
 
-    ξ = 1-nᵥ₂^2/n₂^2
+    ξ = 1-nᵥ₂nᵥ₂/n₂^2
     g_hs = 1/(1-n₃₃)+dij*ξ*n₂/(2*(1-n₃₃)^2)+dij^2*n₂^2*ξ/(18*(1-n₃₃)^3)
     return g_hs*σ^3*expm1(ϵ_assoc[i,j][a,b]/T)*κijab
 end
 
 function f_polar(system::DFTSystem, model::HeterogcPCPSAFT, ρ̄)
     species = system.species
-    (_, T) = system.structure.conditions
+    T = system.structure.conditions[2]
     μ̄² = pcp_dipole2(model)
     has_dp = !all(iszero, μ̄²)
     if !has_dp return zero(T+first(ρ̄)) end

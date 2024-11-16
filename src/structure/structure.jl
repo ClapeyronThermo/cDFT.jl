@@ -33,7 +33,7 @@ function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species)
     ngrid = structure.ngrid
     ρbulk = structure.ρbulk
 
-    ρ = zeros(ngrid,sum(species.nbeads))
+    ρ = zeros(ngrid...,sum(species.nbeads))
 
     for i in @comps
         for j in @chain(i)
@@ -48,7 +48,7 @@ function initialize_profiles(model::EoSModel,structure::Uniform1DSphr,species)
     ngrid = structure.ngrid
     (p, T, x) = structure.conditions
 
-    z = LinRange(first(bounds),last(bounds),ngrid) |> collect
+    z = uniform_range(structure) |> collect
     L = length_scale(model)
 
     vol = Clapeyron.volume(model,p,T,x)
@@ -65,4 +65,53 @@ function initialize_profiles(model::EoSModel,structure::Uniform1DSphr,species)
         end
     end
     return ρ
+end
+
+function get_coords(structure::DFTStructure)
+    ngrid = structure.ngrid
+    nd = length(ngrid)
+    bounds = structure.bounds
+    z = [uniform_range(structure,i) |> collect for i in 1:nd]
+    Z = zeros(ngrid...,nd)
+    for jj in CartesianIndices(ngrid)
+        j = Tuple(jj)
+        for i in 1:nd
+            Z[j...,i] = z[i][j[i]]
+        end
+    end
+    return Z
+end
+
+function structure_fftfreq(structure::DFTStructure)
+    ngrid = structure.ngrid
+    nd = dimension(structure)
+    function ff(i)
+        lb,ub = bounds(structure,i)
+        return ngrid[i]/(ub - lb)
+    end
+    f = ntuple(ff,nd)
+    ω = fftfreq.(ngrid, f)
+end
+
+function structure_ω(structure::DFTStructure)
+    ngrid = structure.ngrid
+    ω̂ = structure_fftfreq(structure)
+    ω = zeros(ngrid...,length(ngrid))
+    for kk in CartesianIndices(ngrid)
+        k = Tuple(kk)
+        for i in 1:length(ngrid)
+            ω[k...,i] = ω̂[i][k[i]]
+        end
+    end
+    ω
+end
+
+function structure_dz(structure::DFTStructure)
+    ngrid = structure.ngrid
+    nd = dimension(structure)
+    function ff(i)
+        lb,ub = bounds(structure,i)
+        return (ub - lb)/ngrid[i]
+    end
+    return ntuple(ff,nd)
 end
