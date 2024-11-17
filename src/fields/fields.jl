@@ -3,6 +3,19 @@ abstract type VectorField <: DFTField end
 
 include("weighted_densities.jl")
 
+_field_len(field::ScalarField,nd::Int) = 1
+_field_len(field::VectorField,nd::Int) = nd
+
+function field_indices(fields::F,nd) where F
+    ix = map(Base.Fix2(_field_len,nd),fields)
+    cx = cumsum(ix)
+    istart = cx .-  ix .+ 1
+    iend = cx
+    return range.(istart,iend)
+end
+
+field_indices(system::DFTSystem) = field_indices(system.fields,dimension(system))
+
 """
     evaluate_field(system::DFTSystem, profiles)
 
@@ -13,26 +26,18 @@ This is the macro function that will call `evaluate_field(system,field,profiles)
 function evaluate_field(system::DFTSystem, ρ)
     fields = system.fields
     nf = length_fields(system)
-    # nvf = length(filter(x -> typeof(x) <: VectorField, fields))
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(ρ,nd+1)
-
     n = zeros(Float64,ngrid...,nf,nb)
 
-    i = 1
-    idxf = 1
-    while i <= nf
-        if typeof(fields[idxf]) <: ScalarField
-            selectdim(n,nd+1,i) .= evaluate_field(system,fields[idxf], ρ)
-            i += 1
-        elseif typeof(fields[idxf]) <: VectorField
-            selectdim(n,nd+1,i:i+nd-1) .= evaluate_field(system,fields[idxf], ρ)
-            # selectdim(n,nd+1,i) .= dropdims(sum(selectdim(nV,nd+1,iv).^2,dims=nd+2),dims=nd+2)
-            i += nd
+    foreach(field_indices(system),fields) do k,field        
+        if field isa ScalarField
+            selectdim(n,nd+1,k[1]) .= evaluate_field(system,field,ρ)
+        else
+            selectdim(n,nd+1,k) .= evaluate_field(system,field,ρ)
         end
-        idxf += 1
-    end
+    end  
     
     return n
 end
@@ -46,27 +51,17 @@ This is the macro function that will call `integrate_field(system,field,δf,ρ)`
 """
 function integrate_field(system::DFTSystem, δf)
     fields = system.fields
-
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb  = size(δf,nd+2)
-    nf = length_fields(system)
-
     δFδρ_res = zeros(ngrid...,nb)
-    iv = 1
 
-    j = 1
-    idxf = 1
-    while j <= nf      
-        if typeof(fields[idxf]) <: ScalarField
-            δFδρ_res += integrate_field(system,fields[idxf],selectdim(δf,nd+1,j))
-            j += 1
-        elseif typeof(fields[idxf]) <: VectorField
-            δFδρ_res += integrate_field(system,fields[idxf],selectdim(δf,nd+1,j:j+nd-1))
-            j += nd
+    foreach(field_indices(system),fields) do k,field
+        if field isa ScalarField
+            δFδρ_res .+= integrate_field(system,field,selectdim(δf,nd+1,k[1]))
+        else
+            δFδρ_res .+= integrate_field(system,field,selectdim(δf,nd+1,k))
         end
-        idxf += 1
     end
-
     return δFδρ_res
 end

@@ -69,9 +69,10 @@ function evaluate_field(system::DFTSystem,field::SWeightedDensity, ρ)
     n = zeros(eltype(map),ngrid...,nb)
 
     for i in 1:nb
-        matmul!(selectdim(n,nd+1,i),P,selectdim(ρ,nd+1,i))
-        elmul!(selectdim(n,nd+1,i),selectdim(n,nd+1,i),selectdim(map,nd+1,i))
-        matmul!(selectdim(n,nd+1,i),iP,selectdim(n,nd+1,i))
+        ni = selectdim(n,nd+1,i)
+        matmul!(ni,P,selectdim(ρ,nd+1,i))
+        elmul!(ni,ni,selectdim(map,nd+1,i))
+        matmul!(ni,iP,ni)
     end
     return real.(n).*N_A
 end
@@ -96,9 +97,10 @@ function integrate_field(system::DFTSystem,field::SWeightedDensity,profile)
     ∫field = zeros(eltype(map),ngrid...,nb)
 
     for i in 1:nb
-        matmul!(selectdim(∫field,nd+1,i),P,selectdim(profile,nd+1,i))
-        elmul!(selectdim(∫field,nd+1,i),selectdim(∫field,nd+1,i),selectdim(map,nd+1,i))
-        matmul!(selectdim(∫field,nd+1,i),iP,selectdim(∫field,nd+1,i))
+        ∫fieldi = selectdim(∫field,nd+1,i)
+        matmul!(∫fieldi,P,selectdim(profile,nd+1,i))
+        elmul!(∫fieldi,∫fieldi,selectdim(map,nd+1,i))
+        matmul!(∫fieldi,iP,∫fieldi)
     end
     return real.(∫field)
 end
@@ -183,9 +185,10 @@ function evaluate_field(system::DFTSystem,field::VWeightedDensity, ρ)
 
     for i in 1:nb
         for j in 1:nd
-            matmul!(selectdim(selectdim(nV,nd+1,j),nd+1,i),P,selectdim(ρ,nd+1,i))
-            elmul!(selectdim(selectdim(nV,nd+1,j),nd+1,i),selectdim(selectdim(nV,nd+1,j),nd+1,i),selectdim(selectdim(map,nd+1,j),nd+1,i))
-            matmul!(selectdim(selectdim(nV,nd+1,j),nd+1,i),iP,selectdim(selectdim(nV,nd+1,j),nd+1,i))
+            nVij = selectdim(selectdim(nV,nd+1,j),nd+1,i)
+            matmul!(nVij,P,selectdim(ρ,nd+1,i))
+            elmul!(nVij,nVij,selectdim(selectdim(map,nd+1,j),nd+1,i))
+            matmul!(nVij,iP,nVij)
         end
     end
     return real.(nV).*N_A
@@ -216,9 +219,10 @@ function integrate_field(system::DFTSystem,field::VWeightedDensity,profile)
 
     for i in 1:nb
         for j in 1:nd
-            matmul!(selectdim(selectdim(∫field,nd+1,j),nd+1,i),P,selectdim(selectdim(profile,nd+1,j),nd+1,i))
-            elmul!(selectdim(selectdim(∫field,nd+1,j),nd+1,i),selectdim(selectdim(∫field,nd+1,j),nd+1,i),selectdim(selectdim(map,nd+1,j),nd+1,i))
-            matmul!(selectdim(selectdim(∫field,nd+1,j),nd+1,i),iP,selectdim(selectdim(∫field,nd+1,j),nd+1,i))
+            ∫fieldij = selectdim(selectdim(∫field,nd+1,j),nd+1,i)
+            matmul!(∫fieldij,P,selectdim(selectdim(profile,nd+1,j),nd+1,i))
+            elmul!(∫fieldij,∫fieldij,selectdim(selectdim(map,nd+1,j),nd+1,i))
+            matmul!(∫fieldij,iP,∫fieldij)
         end
         # ∫field[:,i] = prefactor*real.(ifft(fft(profile[:,i]).*map[:,i]))
     end

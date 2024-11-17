@@ -27,8 +27,6 @@ function F_res(system::DFTSystem, ρ)
     return ∫(ϕ,dz)
 end
 
-f_res(system,model,ρ,dcache) = f_res(system,model,ρ)
-
 """
     δFδρ_res(system::DFTSystem, ρ)
 
