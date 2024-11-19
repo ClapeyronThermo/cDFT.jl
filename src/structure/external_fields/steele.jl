@@ -60,7 +60,9 @@ function evaluate_external_field(structure::DFTStructure,external_field::SteeleM
             end
         end
     end
-    return external_field_values./T
+    external_field_values = external_field_values./T 
+    external_field_values[external_field_values .> 100] .= 100
+    return external_field_values
 end
 
 function evaluate_external_field(structure::DFTStructure,external_field::SteeleModel,model::SAFTModel,ρ::Array{Float64},z)

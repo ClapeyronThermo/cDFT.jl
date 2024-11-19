@@ -85,6 +85,41 @@ function ExternalField1DCart(conditions,ρbulk,bounds,ngrid::Int64,external_fiel
 end
 
 """
+    ExternalField3DCart(conditions::Tuple{Float64,Float64}, ρbulk::Vector{Float64}, bounds::Vector{Float64}, ngrid::Int64, external_field::ExternalFieldModel, width::Float64)
+
+The generic structure type used when trying to simulate solid-fluid interfaces in 3D-cartesian coordinates. Contains:
+- `conditions`: The p, T conditions of the total system before it splits between the two liquid phases.
+- `ρbulk`: The bulk density of each species in the system.
+- `bounds`: Specifies the location of the bounds of the system. The interface will be located in the middle.
+- `ngrids`: The number of grid points used to represent the density profile.
+- `external_field`: The external field model used to calculate the external field.
+- `width`: The surface-to-surface separation.
+
+Example:
+```julia
+julia> model = PCSAFT(["carbon dioxide"])
+
+julia> ρbulk = [molar_density(model,1e5,298.15)]
+
+julia> L = length_scale(model)
+
+julia> H = 10L
+
+julia> surface = Steele(["graphite"])
+
+julia> structure = InterfacialTension3DCart((p, T), ρbulk, [0.5L, H-0.5L], 201, surface, H)
+```
+"""
+struct ExternalField3DCart <: DFTStructure3DCart 
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    bounds::Matrix{Float64}
+    ngrid::Tuple{Int64,Int64,Int64}
+    external_field::ExternalFieldModel
+    width::Float64
+end
+
+"""
     Uniform1DCart(conditions::Tuple{Float64,Float64}, ρbulk, bounds::Vector{Float64}, ngrid::Int64)
 
 The generic structure type used when trying to simulate a uniform system in 1D-cartesian coordinates. Contains:
