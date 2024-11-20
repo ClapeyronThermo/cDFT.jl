@@ -113,7 +113,10 @@ function evaluate_external_field(structure::DFTStructure,external_field::LJField
             selectdim(external_field_values,nd+1,i) .+= @. 4*ϵsi[i]*((σsi[i]/r)^12-(σsi[i]/r)^6)
         end
     end
-    return external_field_values./T
+    external_field_values = external_field_values./T 
+    external_field_values[external_field_values .> 100] .= 100
+    external_field_values[isnan.(external_field_values)] .= 100
+    return external_field_values
 end
 
 function evaluate_external_field(structure::DFTStructure,external_field::LJFieldModel,model::SAFTModel,ρ::Array{Float64},z)
