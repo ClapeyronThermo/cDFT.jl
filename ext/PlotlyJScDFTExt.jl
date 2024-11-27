@@ -103,16 +103,16 @@ end
 
 function PlotlyJS.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure2DCart, profiles; x_units = :normalized, y_units = :normalized)
 
-    colors = ["rgb(31, 119, 180, 1)",
-              "rgb(255, 127, 14, 1)",
-              "rgb(44, 160, 44, 1)",
-              "rgb(214, 39, 40, 1)",
-              "rgb(148, 103, 189, 1)",
-              "rgb(140, 86, 75, 1)",
-              "rgb(227, 119, 194, 1)",
-              "rgb(127, 127, 127, 1)",
-              "rgb(188, 189, 34, 1)",
-              "rgb(23, 190, 207, 1)"]
+    colors = ["rgba(31, 119, 180, 1)",
+              "rgba(255, 127, 14, 1)",
+              "rgba(44, 160, 44, 1)",
+              "rgba(214, 39, 40, 1)",
+              "rgba(148, 103, 189, 1)",
+              "rgba(140, 86, 75, 1)",
+              "rgba(227, 119, 194, 1)",
+              "rgba(127, 127, 127, 1)",
+              "rgba(188, 189, 34, 1)",
+              "rgba(23, 190, 207, 1)"]
 
     model = system.model
     species = system.species
@@ -184,8 +184,8 @@ function PlotlyJS.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure2DCar
             # end
             # csalpha = cgrad([Colors.RGBA(colors[k].r, colors[k].g, colors[k].b, 0), Colors.RGBA(colors[k].r, colors[k].g, colors[k].b, 1)])
             
-            colorscale = [[0, "rgb(255,255,255,0)"], [1, colors[mod(i,10)]]]
-            append!(trace, [PlotlyJS.heatmap(x=X, y=Y, z=Z', colorscale=colorscale, name=name, connectgaps=true, zsmooth="best", opacity=0.8, showscale=false)])
+            colorscale = [[0, "rgba(255, 2555, 255,0)"], [1, colors[mod(i,10)]]]
+            append!(trace, [PlotlyJS.heatmap(x=X, y=Y, z=Z', colorscale=colorscale, name=name, connectgaps=true, zsmooth="best", showscale=false)])
         end
     end
 
@@ -224,16 +224,16 @@ end
 
 function PlotlyJS.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure3DCart, profiles; x_units = :normalized, y_units = :normalized)
 
-    colors = ["rgb(31, 119, 180, 1)",
-              "rgb(255, 127, 14, 1)",
-              "rgb(44, 160, 44, 1)",
-              "rgb(214, 39, 40, 1)",
-              "rgb(148, 103, 189, 1)",
-              "rgb(140, 86, 75, 1)",
-              "rgb(227, 119, 194, 1)",
-              "rgb(127, 127, 127, 1)",
-              "rgb(188, 189, 34, 1)",
-              "rgb(23, 190, 207, 1)"]
+    colors = ["rgba(31, 119, 180, 1)",
+              "rgba(255, 127, 14, 1)",
+              "rgba(44, 160, 44, 1)",
+              "rgba(214, 39, 40, 1)",
+              "rgba(148, 103, 189, 1)",
+              "rgba(140, 86, 75, 1)",
+              "rgba(227, 119, 194, 1)",
+              "rgba(127, 127, 127, 1)",
+              "rgba(188, 189, 34, 1)",
+              "rgba(23, 190, 207, 1)"]
 
     model = system.model
     species = system.species
@@ -316,21 +316,21 @@ function PlotlyJS.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure3DCar
             end
 
             W = profiles[:,:,:,k].*norm_const
-            ρb = ρb.*norm_const
-            println(ρb)
+            ρb[i] = ρb[i].*norm_const
             
-            colorscale = [[0, "rgb(255,255,255,0)"], [1, colors[mod(i,10)]]]
-            plt = PlotlyJS.plot(volume(
+            colorscale = [[0, "rgba(255,255,255,0)"], [1, colors[mod(i,10)]]]
+            PlotlyJS.add_trace!(plt, PlotlyJS.volume(
                 x=X[:],
                 y=Y[:],
                 z=Z[:],
                 value=W[:],
-                isomin=ρb[1]*0.85,
+                isomin=ρb[i]*0.85,
                 isomax=maximum(W),
                 colorscale=colorscale,
-                opacityscale="max", # needs to be small to see through all surfaces
+                showscale=false,
                 surface_count=17, # needs to be a large number for good volume rendering
             ))
+            # plt = PlotlyJS.plot()
         end
     end
 
