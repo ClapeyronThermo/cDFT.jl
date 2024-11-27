@@ -52,9 +52,9 @@ function PlotlyJS.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure1DCar
                 color = colors[i]
                 # reduce saturation based on level
                 r, g, b = parse.(Int, split(color[5:end-1], ", "))
-                r = round(Int, r*level)
-                g = round(Int, g*level)
-                b = round(Int, b*level)
+                r = round(Int, 1/(1/r*level))
+                g = round(Int, 1/(1/g*level))
+                b = round(Int, 1/(1/b*level))
                 color = "rgb($r, $g, $b)"
             else
                 species_name = model.components[i]
