@@ -17,6 +17,17 @@ function PlotlyJS.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure1DCar
     z = cDFT.uniform_range(structure)
     L = cDFT.length_scale(model)
 
+    colors = ["rgb(31, 119, 180, 1)",
+              "rgb(255, 127, 14, 1)",
+              "rgb(44, 160, 44, 1)",
+              "rgb(214, 39, 40, 1)",
+              "rgb(148, 103, 189, 1)",
+              "rgb(140, 86, 75, 1)",
+              "rgb(227, 119, 194, 1)",
+              "rgb(127, 127, 127, 1)",
+              "rgb(188, 189, 34, 1)",
+              "rgb(23, 190, 207, 1)"]
+
 
     layout = PlotlyJS.Layout(autosize=false,width=700,height=470,
              xaxis = PlotlyJS.attr(title = "Temperature  / K", font_size=12, showgrid=false,            
@@ -30,15 +41,27 @@ function PlotlyJS.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure1DCar
     ymax = 0.
     for i in cDFT.@comps
         for k in cDFT.@chain(i)
+
             if species.nbeads[i] > 1
                 species_name = model.components[i]
                 group_name = model.groups.flattenedgroups[k]
                 name = "$species_name $group_name"
                 norm_const = model.params.segment[k]*species.size[k]^3*cDFT.N_A
+                level = (1.5-((system.species.levels[k]-1)/maximum(system.species.levels)))/1.5
+                # find the ith color in the color scheme 
+                color = colors[i]
+                # reduce saturation based on level
+                r, g, b = parse.(Int, split(color[5:end-1], ", "))
+                r = round(Int, r*level)
+                g = round(Int, g*level)
+                b = round(Int, b*level)
+                color = "rgb($r, $g, $b)"
             else
                 species_name = model.components[i]
                 name = "$species_name"
                 norm_const = model.params.segment[i]*species.size[i]^3*cDFT.N_A
+
+                color = colors[i]
             end
 
             if x_units == :normalized
@@ -66,7 +89,8 @@ function PlotlyJS.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure1DCar
                 y_norm = " / (mol/m³)"
             end
         
-            append!(trace, [PlotlyJS.scatter(;x=X, y=Y, mode="lines", name=name)])
+
+            append!(trace, [PlotlyJS.scatter(;x=X, y=Y, mode="lines", name=name, line_color=color, line=attr(width=2))])
             ymax = max(ymax,maximum(Y))
         end
     end
