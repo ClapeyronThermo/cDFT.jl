@@ -67,7 +67,6 @@ function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DF
             SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
             VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
             SWeightedDensity(:∫ρz²dz,d,ω,ngrid),
-            SWeightedDensity(:∫ρdz,d,ω,ngrid),
             SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
 end
 
@@ -354,9 +353,9 @@ end
 
 function f_res(system::DFTSystem, model::SAFTgammaMieModel, n)
     nd = dimension(system)
-    n1,n2,n3,n4,n5,n6,n7 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4:4+nd-1,:]),@view(n[4+nd,:]),@view(n[5+nd,:]),@view(n[6+nd,:])
+    n1,n2,n3,n4,n5,n6 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4:4+nd-1,:]),@view(n[4+nd,:]),@view(n[5+nd,:])
 
-    return f_hs(system,model,n2,n3,n4) + f_disp(system,model,n7) + f_chain(system,model,n1,n5,n6) + f_assoc(system,model,n2,n3,n4)
+    return f_hs(system,model,n2,n3,n4) + f_disp(system,model,n6) + f_chain(system,model,n1,n5) + f_assoc(system,model,n2,n3,n4)
 end
 
 function f_hs(system::DFTSystem, model::SAFTgammaMieModel, n, n₃, nᵥ)
@@ -515,7 +514,7 @@ function f_disp(system::DFTSystem, model::SAFTgammaMieModel, ρ̄)
     return ∑ρ̄*adisp
 end
 
-function f_chain(system::DFTSystem, model::SAFTgammaMieModel, ρhc, ρ̄hc, _λ)
+function f_chain(system::DFTSystem, model::SAFTgammaMieModel, ρhc, ρ̄hc)
     V = nothing
     T = system.structure.conditions[2]
     x = system.structure.ρbulk / sum(system.structure.ρbulk)
@@ -530,17 +529,14 @@ function f_chain(system::DFTSystem, model::SAFTgammaMieModel, ρhc, ρ̄hc, _λ)
     _d = d_gc_av(model,V,T,x,system.species.size)
 
     ρ̄hc = ρ̄hc*3 ./(4 .*system.species.size.^3)/π
-    _λ =_λ ./ (2*system.species.size)
 
     _ρhc = zeros(eltype(ρhc),length(model))
     _ρ̄hc = zeros(eltype(ρ̄hc),length(model))
-    λ = zeros(eltype(_λ),length(model))
 
     for i in @comps
         for k in @groups(i)
             _ρhc[i] += ρhc[k]/system.species.nbeads[i]
             _ρ̄hc[i] += ρ̄hc[k]/system.species.nbeads[i]
-            λ[i] += _λ[k]/system.species.nbeads[i]
         end
     end
 
@@ -631,15 +627,17 @@ function f_chain(system::DFTSystem, model::SAFTgammaMieModel, ρhc, ρ̄hc, _λ)
     return -fchain
 end
 
-function Δ(model::SAFTgammaMieModel, T, n, n₃, nᵥ, i, j, a, b)
+function Δ(model::SAFTgammaMieModel, T, n, n₃, nᵥ)
+    Δout = assoc_similar(model,typeof(T+first(n₃)+first(n)+first(nᵥ)))
+    Δout.values .= false
+    
     _d = d(model,1e-3,T,ones(length(model.groups.flattenedgroups)))
     _σ = model.params.sigma.values
     m = model.params.segment.values
     S = model.params.shapefactor.values
+    ϵ = model.vrmodel.params.epsilon
     ϵ_assoc = model.params.epsilon_assoc.values
-    K = model.params.bondvol.values[i,j][a,b]
-    _0 = zero(T+first(n)+first(n₃)+first(nᵥ)+first(K))
-    iszero(K) && return _0
+    K = model.params.bondvol.values
 
     ρ̄ = n₃*3*2 ./(_d.^3)/π
     m = m.*S
@@ -660,15 +658,56 @@ function Δ(model::SAFTgammaMieModel, T, n, n₃, nᵥ, i, j, a, b)
         end
     end
     ρr  = ρS*σ3_x
-    
-    ϵ = model.vrmodel.params.epsilon
-    Tr = T/ϵ[i,j]
-    _I = I(model,Tr,ρr)
-    
-    F = expm1(ϵ_assoc[i,j][a,b]/T)
 
-    return F*K*_I
+    for (idx,(i,j),(a,b)) in indices(Δout)
+        if !iszero(K[i,j][a,b]) 
+            Tr = T/ϵ[i,j]
+            F = expm1(ϵ_assoc[i,j][a,b]/T)
+            _I = I(model,Tr,ρr)
+            Δout[idx] = F*K[i,j][a,b]*_I
+        end
+    end
+    return Δout
 end
+
+# function Δ(model::SAFTgammaMieModel, T, n, n₃, nᵥ, i, j, a, b)
+#     _d = d(model,1e-3,T,ones(length(model.groups.flattenedgroups)))
+#     _σ = model.params.sigma.values
+#     m = model.params.segment.values
+#     S = model.params.shapefactor.values
+#     ϵ_assoc = model.params.epsilon_assoc.values
+    
+#     K = model.params.bondvol.values[i,j][a,b]
+#     _0 = zero(T+first(n)+first(n₃)+first(nᵥ)+first(K))
+#     iszero(K) && return _0
+
+#     ρ̄ = n₃*3*2 ./(_d.^3)/π
+#     m = m.*S
+#     z = ρ̄ /sum(ρ̄)
+#     m̄ = dot(z,m)
+#     m̄inv = 1/m̄
+
+#     ρS = dot(ρ̄,m)
+
+#     σ3_x = zero(T+first(z)+one(eltype(model)))
+
+#     for i ∈ @groups
+#         x_Si = z[i]*m[i]*m̄inv
+#         σ3_x += x_Si*x_Si*(_σ[i,i]^3)
+#         for j ∈ 1:(i-1)
+#             x_Sj = z[j]*m[j]*m̄inv
+#             σ3_x += 2*x_Si*x_Sj*(_σ[i,j]^3)
+#         end
+#     end
+#     ρr  = ρS*σ3_x
+    
+#     Tr = T/ϵ[i,j]
+#     _I = I(model,Tr,ρr)
+    
+#     F = expm1(ϵ_assoc[i,j][a,b]/T)
+
+#     return F*K*_I
+# end
 
 function I(model::SAFTgammaMieModel, Tr,ρr)
     c  = SAFTVRMieconsts.c
