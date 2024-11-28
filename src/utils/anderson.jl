@@ -30,7 +30,9 @@ function Solvers._fixpoint(f::F,
     m = method.memory
     picard_iter = method.delay
     picard_damping = method.picard_damping
-    damping = method.damping
+    γmin = method.damping
+    ϵ = rtol
+    β = 200  
 
     n = length(x0)
     X = zeros(n, m)
@@ -38,6 +40,7 @@ function Solvers._fixpoint(f::F,
 
     X[:, 1] = x0
     Fx[:, 1] = f(x0)
+    
     for i in 1:picard_iter
         x = X[:, 1] + picard_damping .* (f(X[:, 1]) - X[:, 1])
         fval = f(x)
@@ -51,6 +54,9 @@ function Solvers._fixpoint(f::F,
             return x
         end
     end
+
+    δ = rtol_anderson(Fx[:, 1],X[:, 1])
+    γ = (γmin + (1-γmin)*exp(-β*(δ-ϵ)))*(δ>=ϵ) + 1*(δ<ϵ)
 
     # Initialize A matrix
     m_eff = min(picard_iter+1, m)
@@ -94,7 +100,9 @@ function Solvers._fixpoint(f::F,
         end
 
         # Update guess
-        x = X[:, 1] + damping .* (Δx)
+        x = X[:, 1] + γ .* (Δx)
+        δ = rtol_anderson(Fx[:, 1],X[:, 1])
+        γ = (γmin + (1-γmin)*exp(-β*(δ-ϵ)))*(δ>=ϵ) + 1*(δ<ϵ)
         fval = f(x)
         finite_check = NLSolvers.isallfinite(x)
 
