@@ -49,11 +49,11 @@ function δFδρ_res(system::DFTSystem, ρ)
     f(x) = f_res(system,model,x)
     idx_first = ntuple(Returns(1),nd)
     n_first = @view(n[idx_first...,:,:])
-    cfg = ForwardDiff.GradientConfig(f, n_first, system.chunksize)
-    df!(df,x) = ForwardDiff.gradient!(df,f,x,cfg)
+    cache = [ForwardDiff.GradientConfig(f,n_first, system.chunksize) for i in 1:Threads.nthreads()]
+    df!(df,x) = ForwardDiff.gradient!(df,f,x,cache[Threads.threadid()])
 
     δf = zeros(ngrid...,nf,nb)
-    for kk in CartesianIndices(ngrid)
+    Threads.@threads for kk in CartesianIndices(ngrid)
         k = Tuple(kk)
         df!(@view(δf[k...,:,:]),@view(n[k...,:,:]))
     end
