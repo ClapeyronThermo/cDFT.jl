@@ -11,7 +11,7 @@ ln(ρi) = ln(ρi_bulk) + β(μi_res - δFδρ_res)
 ```
 The default solver uses Anderson Mixing with 100 initial Picard iterations, 50 memory points, 1e-2 damping, and an infinite drop tolerance. 
 """
-function converge!(system::DFTSystem,ρ)
+function converge!(system::Union{DFTSystem,DGTSystem},ρ)
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nbeads = size(ρ,nd+1)
@@ -27,7 +27,7 @@ function converge!(system::DFTSystem,ρ)
         ρ .= exp.(ln_x)
 
         δfδρ_res = δFδρ_res(system, ρ)
-        Gcα, Gp = propagate(system, system.propagator, δfδρ_res, ρ)
+        Gcα, Gp = propagate(system, δfδρ_res, ρ)
         Vext = evaluate_external_field(system, ρ, Z)
         # println(δfδρ_res)
         # println(species.chempot_res)

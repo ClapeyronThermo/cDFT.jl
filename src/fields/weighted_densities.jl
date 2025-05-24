@@ -53,7 +53,7 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
     return SWeightedDensity(type,width,Ω,plan,iplan)
 end
 
-function evaluate_field(system::DFTSystem,field::SWeightedDensity, ρ)
+function evaluate_field(system::Union{DFTSystem,DGTSystem},field::SWeightedDensity, ρ)
     structure = system.structure
     ngrid = structure.ngrid
     nd = length(ngrid)
@@ -77,7 +77,7 @@ function evaluate_field(system::DFTSystem,field::SWeightedDensity, ρ)
     return real.(n).*N_A
 end
 
-function integrate_field(system::DFTSystem,field::SWeightedDensity,profile)
+function integrate_field(system::Union{DFTSystem,DGTSystem},field::SWeightedDensity,profile)
     type = field.type
     ngrid = system.structure.ngrid
     nd = dimension(system)
@@ -134,13 +134,13 @@ function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
     Ω = zeros(ComplexF64,ngrid...,length(ngrid),length(width))
     # end
 
-    if type == :∫ρdz
+    if type == :∇ρ
         for kk in CartesianIndices(ngrid)
             k = Tuple(kk)
             ω̄ = norm(@view(ω[k...,:]))
-            Ω[k...,:] = 2*R .* (ω̄ .== 0.0) + 2*sin.(ω̄.*R)./ω̄ .*(ω̄ .!= 0.0)
+            Ω[k...,:] = ω[k...,:].*im
         end
-        Ω ./= 2π
+        Ω .*= (2π)
     elseif type == :∫ρzdz
         for kk in CartesianIndices(ngrid)
             k = Tuple(kk)
@@ -168,7 +168,7 @@ function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
     return VWeightedDensity(type,width,Ω,plan,iplan)
 end
 
-function evaluate_field(system::DFTSystem,field::VWeightedDensity, ρ)
+function evaluate_field(system::Union{DFTSystem,DGTSystem},field::VWeightedDensity, ρ)
     structure = system.structure
     ngrid = structure.ngrid
     nd = length(ngrid)
@@ -194,21 +194,11 @@ function evaluate_field(system::DFTSystem,field::VWeightedDensity, ρ)
     return real.(nV).*N_A
 end
 
-function integrate_field(system::DFTSystem,field::VWeightedDensity,profile)
+function integrate_field(system::Union{DFTSystem,DGTSystem},field::VWeightedDensity,profile)
     type = field.type
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(profile,nd+2)
-
-    if type == :∫ρdz || type == :∫ρz²dz
-        prefactor = 1
-    elseif type == :∫ρzdz
-        prefactor = -1
-    elseif type == :ρ
-        return profile
-    else
-        error("Invalid type of field")
-    end
 
     map = field.map 
     P = field.plan

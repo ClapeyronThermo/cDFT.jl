@@ -5,11 +5,11 @@ using Plots
 import Plots: Colors
 
 
-function Plots.plot(system::cDFT.DFTSystem, profiles; x_units=:normalized, y_units=:normalized)
+function Plots.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, profiles; x_units=:normalized, y_units=:normalized)
     return Plots.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units)
 end
 
-function Plots.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure1DCart, profiles; x_units=:normalized, y_units=:mass)
+function Plots.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure1DCart, profiles; x_units=:normalized, y_units=:mass)
     structure = system.structure
     model = system.model
     species = system.species
@@ -110,7 +110,7 @@ function Plots.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure1DCart, 
     return plt
 end
 
-function Plots.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure2DCart, profiles; x_units=:normalized, y_units=:normalized)
+function Plots.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure2DCart, profiles; x_units=:normalized, y_units=:normalized)
     colors = palette(:tab10)
     structure = system.structure
     model = system.model

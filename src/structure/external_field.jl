@@ -1,6 +1,6 @@
 include("external_fields/steele.jl")
 
-function evaluate_external_field(system::DFTSystem, ρ, z)
+function evaluate_external_field(system::Union{DFTSystem,DGTSystem}, ρ, z)
     structure = system.structure
     
     if !hasfield(typeof(structure),:external_field)

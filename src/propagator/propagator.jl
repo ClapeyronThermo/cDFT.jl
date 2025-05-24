@@ -25,5 +25,19 @@ struct TangentHSPropagator{M,P,iP} <: DFTPropagator
     iplan::iP
 end
 
+function propagate(system::Union{DFTSystem,DGTSystem}, δf_res, ρ)
+    if hasfield(typeof(system), :propagator)
+        return propagate(system,system.propagator, δf_res, ρ)
+    else
+        structure = system.structure
+        ngrid = structure.ngrid
+        nbeads = sum(system.species.nbeads)
+
+        I1 = ones(Float64, ngrid..., nbeads, nbeads)
+        I2 = ones(Float64, ngrid..., nbeads)
+        return I1, I2
+    end
+end
+
 include("ideal.jl")
 include("tangent_hs.jl")

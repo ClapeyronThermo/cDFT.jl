@@ -1,4 +1,4 @@
-function propagate(system::DFTSystem, propagate::IdealPropagator, δf_res, ρ)
+function propagate(system::DFTSystem, δf_res, ρ)
     structure = system.structure
     ngrid = structure.ngrid
     nbeads = sum(system.species.nbeads)
