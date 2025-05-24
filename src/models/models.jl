@@ -1,3 +1,9 @@
+import Clapeyron: a_res
+
+include("BasicIdeal.jl")
+include("DFT/dft.jl")
+include("DGT/dgt.jl")
+
 """
     F_res(system::DFTSystem, ρ)
 
@@ -5,7 +11,7 @@ Obtain the residual free energy of the system for a given profile `ρ`. This is 
 
 The output is a scalar of units J.
 """
-function F_res(system::DFTSystem, ρ)
+function F_res(system::Union{DFTSystem,DGTSystem}, ρ)
     ngrid = system.structure.ngrid
     bounds = system.structure.bounds
     model = system.model
@@ -34,7 +40,7 @@ Obtain the functional derivatives of the residual free energy of the system for 
 
 The output is a 2D array with the dimensions `(ngrid,nb)`, where `ngrid` is the number of grid points, and `nb` is the number of beads in the model. The values are normalised by `kB*T`.
 """
-function δFδρ_res(system::DFTSystem, ρ)
+function δFδρ_res(system::Union{DFTSystem,DGTSystem}, ρ)
     model = system.model
     fields = system.fields
     
@@ -49,16 +55,25 @@ function δFδρ_res(system::DFTSystem, ρ)
     f(x) = f_res(system,model,x)
     idx_first = ntuple(Returns(1),nd)
     n_first = @view(n[idx_first...,:,:])
-    cfg = ForwardDiff.GradientConfig(f, n_first, system.chunksize)
-    df!(df,x) = ForwardDiff.gradient!(df,f,x,cfg)
+    cache = [ForwardDiff.GradientConfig(f,n_first, system.chunksize) for i in 1:Threads.nthreads()]
 
     δf = zeros(ngrid...,nf,nb)
-    for kk in CartesianIndices(ngrid)
+    Threads.@threads for kk in CartesianIndices(ngrid)
         k = Tuple(kk)
-        df!(@view(δf[k...,:,:]),@view(n[k...,:,:]))
+        ForwardDiff.gradient!(@view(δf[k...,:,:]),f,@view(n[k...,:,:]),cache[Threads.threadid()])
     end
     δFδρ_res = integrate_field(system, δf)
     return δFδρ_res
 end
 
-include("assoc.jl")
+function length_scales(model::EoSModel)
+    if hasfield(typeof(model.params), :sigma)
+        return diagvalues(model.params.sigma.values)
+    elseif hasfield(typeof(model.params), :b)
+        return diagvalues(cbrt.(model.params.b.values/N_A))
+    elseif hasfield(typeof(model.params), :lb_volume)
+        return cbrt.(model.params.lb_volume.values/N_A)
+    else
+        error("No length scale defined in model")
+    end
+end

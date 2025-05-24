@@ -7,7 +7,7 @@ Obtain the ideal free energy of the system for a given profile `ρ`.
 
 The output is a scalar of units J.
 """
-function F_ideal(system::DFTSystem,ρ)
+function F_ideal(system::Union{DFTSystem,DGTSystem},ρ)
     model = system.model
     ngrid = system.structure.ngrid
     nd = length(ngrid)
@@ -33,7 +33,7 @@ function F_ideal(system::DFTSystem,ρ)
     return ∫(ϕ,dz)
 end
 
-function f_ideal(system::DFTSystem,model::BasicIdealModel,n)
+function f_ideal(system::Union{DFTSystem,DGTSystem},model::BasicIdealModel,n)
     T = system.structure.conditions[2]
     ∑f = zero(T + first(n))
     lnT = log(T)

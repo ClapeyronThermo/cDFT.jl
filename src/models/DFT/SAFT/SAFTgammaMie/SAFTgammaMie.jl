@@ -133,11 +133,11 @@ function expand_model(model::SAFTgammaMieModel)
 
 
     # Expand the sites 
-    assoc_groups = split.(model.vrmodel.sites.flattenedsites,"/")
+    assoc_groups = deepcopy(split.(model.vrmodel.sites.flattenedsites,"/"))
     assoc_sites = [assoc_groups[i][2] for i in 1:length(assoc_groups)]
     assoc_groups = [assoc_groups[i][1] for i in 1:length(assoc_groups)]
 
-    n_sites_per_group = sum(model.vrmodel.sites.n_flattenedsites)
+    n_sites_per_group = deepcopy(sum(model.vrmodel.sites.n_flattenedsites))
 
     flattenedsites = String[]
 

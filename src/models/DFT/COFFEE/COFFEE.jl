@@ -30,7 +30,9 @@ function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStruc
 end
 
 function f_res(system::DFTSystem, model::COFFEEModel,n)
-    return f_hs(system,model,n[1,:],n[2,:],n[3,:])+f_disp(system,model,n[5,:])+f_ff(system,model,n[4,:])+f_nf(system,model,n[1,:],n[2,:],n[3,:])
+    nd = dimension(system)
+    n1,n2,n3,n4,n5 = @view(n[1,:]),@view(n[2,:]),@view(n[3:3+nd-1,:]),@view(n[3+nd,:]),@view(n[4+nd,:])
+    return f_hs(system,model,n1,n2,n3)+f_disp(system,model,n5)+f_ff(system,model,n4)+f_nf(system,model,n1,n2,n3)
 end
 
 function f_ff(system::DFTSystem, model::COFFEEModel, ρ̄)
