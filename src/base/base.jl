@@ -45,9 +45,6 @@ struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,P<:DFTPropagator,O<
     chunksize::C
 end
 
-dimension(::Type{Union{DFTSystem{<:Any,<:Any,T},DGTSystem{<:Any,<:Any,T}}}) where T = dimension(T) 
-dimension(x::Union{DFTSystem,DGTSystem}) = dimension(x.structure)
-
 function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
     species = get_species(model, structure)
     fields = get_fields(model, species, structure)
@@ -113,6 +110,9 @@ function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStruc
     chunksize = ForwardDiff.Chunk{NF}()
     return DGTSystem(model, gradient, species, structure, typed_fields, options, chunksize)
 end
+
+dimension(::Type{Union{DFTSystem{<:Any,<:Any,T},DGTSystem{<:Any,<:Any,T}}}) where T = dimension(T) 
+dimension(x::Union{DFTSystem,DGTSystem}) = dimension(x.structure)
 
 length_fields(system::Union{DFTSystem,DGTSystem}) = length_fields(system.chunksize)
 length_fields(::ForwardDiff.Chunk{N}) where N = N
