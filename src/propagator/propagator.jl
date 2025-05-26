@@ -25,7 +25,7 @@ struct TangentHSPropagator{M,P,iP} <: DFTPropagator
     iplan::iP
 end
 
-function propagate(system::Union{DFTSystem,DGTSystem}, δf_res, ρ)
+function propagate(system::AbstractcDFTSystem, δf_res, ρ)
     if hasfield(typeof(system), :propagator)
         return propagate(system,system.propagator, δf_res, ρ)
     else

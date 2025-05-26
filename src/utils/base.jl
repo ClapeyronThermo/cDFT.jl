@@ -5,7 +5,7 @@ Obtain the total free energy of the system for a given profile. This is done by 
 
 The output is a scalar of units J.
 """
-function free_energy(system::Union{DFTSystem,DGTSystem}, ρ)
+function free_energy(system::AbstractcDFTSystem, ρ)
     return F_ideal(system,ρ)+F_res(system,ρ)
 end
 

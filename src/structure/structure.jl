@@ -25,7 +25,7 @@ julia> system = DFTSystem(model, structure)
 julia> profiles = initialize_profiles(system)
 ```
 """
-function initialize_profiles(system::Union{DFTSystem,DGTSystem})
+function initialize_profiles(system::AbstractcDFTSystem)
     return initialize_profiles(system.model,system.structure,system.species)
 end
 

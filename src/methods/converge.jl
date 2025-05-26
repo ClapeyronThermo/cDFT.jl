@@ -11,7 +11,7 @@ ln(ρi) = ln(ρi_bulk) + β(μi_res - δFδρ_res)
 ```
 The default solver uses Anderson Mixing with 100 initial Picard iterations, 50 memory points, 1e-2 damping, and an infinite drop tolerance. 
 """
-function converge!(system::Union{DFTSystem,DGTSystem},ρ)
+function converge!(system::AbstractcDFTSystem,ρ)
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nbeads = size(ρ,nd+1)

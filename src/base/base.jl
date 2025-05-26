@@ -35,14 +35,14 @@ DFTSystem
   device: CPU
 ```
 """
-struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,P<:DFTPropagator,O<:DFTOptions,C<:ForwardDiff.Chunk}
+struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,P<:DFTPropagator,O<:DFTOptions,C}
     model::M
     species::S
     structure::T
     fields::F
     propagator::P
     options::O
-    chunksize::C
+    chunksize::Val{C}
 end
 
 function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
@@ -51,7 +51,7 @@ function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions
     typed_fields = tuple(fields...)
     propagator = get_propagator(model, species, structure)
     NF = compute_field_len(fields,dimension(structure))
-    chunksize = ForwardDiff.Chunk{NF}()
+    chunksize = Val{NF}()
     return DFTSystem(model, species, structure, typed_fields, propagator, options,chunksize)
 end
 
@@ -80,14 +80,14 @@ DFTSystem
   device: CPU
 ```
 """
-struct DGTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,G<:GradientModel,O<:DFTOptions,C<:ForwardDiff.Chunk}
+struct DGTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,G<:GradientModel,O<:DFTOptions,C}
     model::M
     gradient::G
     species::S
     structure::T
     fields::F
     options::O
-    chunksize::C
+    chunksize::Val{C}
 end
 
 function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
@@ -107,15 +107,18 @@ function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStruc
               VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid)]
     typed_fields = tuple(fields...)
     NF = compute_field_len(fields,dimension(structure))
-    chunksize = ForwardDiff.Chunk{NF}()
+    chunksize = Val{NF}()
     return DGTSystem(model, gradient, species, structure, typed_fields, options, chunksize)
 end
 
-dimension(::Type{Union{DFTSystem{<:Any,<:Any,T},DGTSystem{<:Any,<:Any,T}}}) where T = dimension(T) 
-dimension(x::Union{DFTSystem,DGTSystem}) = dimension(x.structure)
+const AbstractcDFTSystem = AbstractcDFTSystem
 
-length_fields(system::Union{DFTSystem,DGTSystem}) = length_fields(system.chunksize)
+dimension(::Type{Union{DFTSystem{<:Any,<:Any,T},DGTSystem{<:Any,<:Any,T}}}) where T = dimension(T) 
+dimension(x::AbstractcDFTSystem) = dimension(x.structure)
+
+length_fields(system::AbstractcDFTSystem) = length_fields(system.chunksize)
 length_fields(::ForwardDiff.Chunk{N}) where N = N
+length_fields(::Val{N}) where N = N
 
 function compute_field_len(fields,nd)
     field_len = 0
@@ -129,6 +132,9 @@ function compute_field_len(fields,nd)
     return field_len
 end
 
+ForwardDiff.Chunk(system::T) where T <: AbstractcDFTSystem = FDChunk(system.chunksize)
+FDChunk(system::T) where T <: AbstractcDFTSystem = FDChunk(system.chunksize)
+FDChunk(::Val{N}) where N = ForwardDiff.Chunk{N}(N)
 
 export DFTSystem, DGTSystem
 

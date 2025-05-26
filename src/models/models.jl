@@ -11,7 +11,7 @@ Obtain the residual free energy of the system for a given profile `ρ`. This is 
 
 The output is a scalar of units J.
 """
-function F_res(system::Union{DFTSystem,DGTSystem}, ρ)
+function F_res(system::AbstractcDFTSystem, ρ)
     ngrid = system.structure.ngrid
     bounds = system.structure.bounds
     model = system.model
@@ -40,7 +40,7 @@ Obtain the functional derivatives of the residual free energy of the system for 
 
 The output is a 2D array with the dimensions `(ngrid,nb)`, where `ngrid` is the number of grid points, and `nb` is the number of beads in the model. The values are normalised by `kB*T`.
 """
-function δFδρ_res(system::Union{DFTSystem,DGTSystem}, ρ)
+function δFδρ_res(system::AbstractcDFTSystem, ρ)
     model = system.model
     fields = system.fields
     
@@ -55,7 +55,9 @@ function δFδρ_res(system::Union{DFTSystem,DGTSystem}, ρ)
     f(x) = f_res(system,model,x)
     idx_first = ntuple(Returns(1),nd)
     n_first = @view(n[idx_first...,:,:])
-    cache = [ForwardDiff.GradientConfig(f,n_first, system.chunksize) for i in 1:Threads.nthreads()]
+
+    chunksize = ForwardDiff.Chunk(system)
+    cache = [ForwardDiff.GradientConfig(f,n_first, chunksize) for i in 1:Threads.nthreads()]
 
     δf = zeros(ngrid...,nf,nb)
     Threads.@threads for kk in CartesianIndices(ngrid)

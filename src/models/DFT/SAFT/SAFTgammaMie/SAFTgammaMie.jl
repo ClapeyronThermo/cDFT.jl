@@ -7,7 +7,7 @@ function DFTSystem(model::SAFTgammaMieModel,structure::DFTStructure,options::DFT
     fields = get_fields(model, species, structure)
     propagator = get_propagator(model, species, structure)
     NF = compute_field_len(fields,dimension(structure))
-    chunksize = ForwardDiff.Chunk{NF}()
+    chunksize = Val{NF}()
     return DFTSystem(model, species, structure, fields, propagator, options, chunksize)
 end
 

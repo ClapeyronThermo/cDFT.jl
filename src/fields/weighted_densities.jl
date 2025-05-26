@@ -53,7 +53,7 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
     return SWeightedDensity(type,width,Ω,plan,iplan)
 end
 
-function evaluate_field(system::Union{DFTSystem,DGTSystem},field::SWeightedDensity, ρ)
+function evaluate_field(system::AbstractcDFTSystem,field::SWeightedDensity, ρ)
     structure = system.structure
     ngrid = structure.ngrid
     nd = length(ngrid)
@@ -77,7 +77,7 @@ function evaluate_field(system::Union{DFTSystem,DGTSystem},field::SWeightedDensi
     return real.(n).*N_A
 end
 
-function integrate_field(system::Union{DFTSystem,DGTSystem},field::SWeightedDensity,profile)
+function integrate_field(system::AbstractcDFTSystem,field::SWeightedDensity,profile)
     type = field.type
     ngrid = system.structure.ngrid
     nd = dimension(system)
@@ -168,7 +168,7 @@ function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
     return VWeightedDensity(type,width,Ω,plan,iplan)
 end
 
-function evaluate_field(system::Union{DFTSystem,DGTSystem},field::VWeightedDensity, ρ)
+function evaluate_field(system::AbstractcDFTSystem,field::VWeightedDensity, ρ)
     structure = system.structure
     ngrid = structure.ngrid
     nd = length(ngrid)
@@ -194,7 +194,7 @@ function evaluate_field(system::Union{DFTSystem,DGTSystem},field::VWeightedDensi
     return real.(nV).*N_A
 end
 
-function integrate_field(system::Union{DFTSystem,DGTSystem},field::VWeightedDensity,profile)
+function integrate_field(system::AbstractcDFTSystem,field::VWeightedDensity,profile)
     type = field.type
     ngrid = system.structure.ngrid
     nd = length(ngrid)

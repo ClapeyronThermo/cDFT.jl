@@ -14,7 +14,7 @@ function field_indices(fields::F,nd) where F
     return range.(istart,iend)
 end
 
-field_indices(system::Union{DFTSystem,DGTSystem}) = field_indices(system.fields,dimension(system))
+field_indices(system::AbstractcDFTSystem) = field_indices(system.fields,dimension(system))
 
 """
     evaluate_field(system::DFTSystem, profiles)
@@ -23,7 +23,7 @@ This function will obtain every field used in the system (listed in `system.fiel
 
 This is the macro function that will call `evaluate_field(system,field,profiles)` for each field in the system.
 """
-function evaluate_field(system::Union{DFTSystem,DGTSystem}, ρ)
+function evaluate_field(system::AbstractcDFTSystem, ρ)
     fields = system.fields
     nf = length_fields(system)
     ngrid = system.structure.ngrid
@@ -49,7 +49,7 @@ This function will obtain, for all fields, the functional derivative for each sp
 
 This is the macro function that will call `integrate_field(system,field,δf,ρ)` for each field in the system.
 """
-function integrate_field(system::Union{DFTSystem,DGTSystem}, δf)
+function integrate_field(system::AbstractcDFTSystem, δf)
     fields = system.fields
     ngrid = system.structure.ngrid
     nd = length(ngrid)

@@ -18,9 +18,9 @@ function ConstGradient(components::Array{String,1};
     params = getparams(components, ["$DB_PATH/gradients/"]; userlocations = userlocations, verbose = verbose)
     references = String[]
     κ = params["kappa"]
-    epsilon_LorentzBerthelot!(κ)
-
-    packagedparams = ConstGradientParam(κ)
+    β = get(params,"beta",nothing)
+    κij = epsilon_LorentzBerthelot(κ,β)
+    packagedparams = ConstGradientParam(κij)
     return ConstGradient(components, packagedparams, references)
 end
 

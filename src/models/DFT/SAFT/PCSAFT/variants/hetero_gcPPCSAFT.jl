@@ -6,7 +6,7 @@ function DFTSystem(model::HeterogcPCPSAFT,structure::DFTStructure,options::DFTOp
     fields = get_fields(model, species, structure)
     propagator = get_propagator(model, species, structure)
     NF = compute_field_len(fields,dimension(structure))
-    chunksize = ForwardDiff.Chunk{NF}()
+    chunksize = Val{NF}()
     return DFTSystem(model, species, structure, fields, propagator, options, chunksize)
 end
 

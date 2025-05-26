@@ -28,7 +28,7 @@ function surface_tension(model::EoSModel, T, x = [1.0])
     return surface_tension(system,ρ)/2
 end
 
-function surface_tension(system::Union{DFTSystem,DGTSystem},ρ)
+function surface_tension(system::AbstractcDFTSystem,ρ)
     model = system.model
     ngrid = system.structure.ngrid
     nd = dimension(system)
