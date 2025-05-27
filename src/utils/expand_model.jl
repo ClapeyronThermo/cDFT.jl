@@ -1,15 +1,38 @@
-function expand_model(model::EoSModel)
+function expand_model(model::MODEL) where MODEL <: EoSModel
+    if !Clapeyron.hasgroups(model)
+        return model
+    end
+
+    # Expand the groups
+    grouparam,ngroups_k = expand_groups(model)
+
+    # Expand the sites
+    siteparams = expand_sites(model.sites, grouparam, ngroups_k)
+
+    #expand the parameters
+    eosparams = expand_params(model.params, grouparam, siteparams, ngroups_k)
+
+    return new_model = MODEL(model.components,
+                                groupsparams,
+                                siteparams,
+                                eosparams,
+                                model.idealmodel,
+                                model.assoc_options,
+                                model.references)
+end
+
+function expand_groups(model)
     nspecies = length(model)
 
     # Expand the groups
     ngroup_types = length(model.groups.flattenedgroups)
-    ngroups = sum(sum.(model.groups.n_flattenedgroups))
-    
+    ngroups = sum(sum,model.groups.n_flattenedgroups)
+
     ngroups_k = zeros(Int64,ngroup_types)
     n_groups = Vector{Int64}[]
     for i in 1:nspecies
-        ngroups_k .+= model.groups.n_flattenedgroups[i]    
-        append!(n_groups, [ones(Int64,sum(model.groups.n_groups[i]))])
+        ngroups_k .+= model.groups.n_flattenedgroups[i]
+        push!(n_groups, ones(Int64,sum(model.groups.n_groups[i])))
     end
 
     flattenedgroups = String[]
@@ -24,14 +47,12 @@ function expand_model(model::EoSModel)
         end
     end
 
-    groups = []
-    i_groups = []
+    groups = Vector{String}[]
+    i_groups = Vector{Int}[]
     for i in 1:nspecies
         append!(groups, [flattenedgroups[n_flattenedgroups[i].==1]])
         append!(i_groups,[deleteat!(n_flattenedgroups[i].*(1:ngroups),findall(n_flattenedgroups[i].==0))])
     end
-
-    n_groups_cache = Clapeyron.pack_vectors([Float64.(n_flattenedgroups[i]) for i in 1:nspecies])
 
     n_intergroups = Matrix{Int64}[]
     for i in 1:nspecies
@@ -49,37 +70,39 @@ function expand_model(model::EoSModel)
                     _n_intergroups[i_groups[i][idx_group_i_1],i_groups[i][idx_group_j_1]] = bondmat[idx_group_1_2,idx_group_j_2]
                 end
             end
-            append!(n_intergroups, [_n_intergroups])
+            push!(n_intergroups, _n_intergroups)
         else
-            append!(n_intergroups, [_n_intergroups])
+            push!(n_intergroups, _n_intergroups)
         end
     end
-    groupsparams = Clapeyron.StructGroupParam(model.components,
-                                    groups,
-                                    model.groups.grouptype,
-                                    n_groups,
-                                    n_intergroups,
-                                    i_groups,
-                                    flattenedgroups,
-                                    n_flattenedgroups,
-                                    n_groups_cache,
-                                    model.groups.sourcecsvs)
 
 
-    # Expand the sites 
+    grouparam = GroupParam(model.components,
+                    groups,
+                    model.groups.grouptype,
+                    n_groups,
+                    n_intergroups,
+                    i_groups,
+                    flattenedgroups,
+                    n_flattenedgroups,
+                    model.groups.sourcecsvs)
+
+    return grouparam,ngroups_k
+
+end
+
+function expand_sites(model::SiteParam, groups, ngroups_k)
     assoc_groups = split.(model.sites.flattenedsites,"/")
-    assoc_sites = [assoc_groups[i][2] for i in 1:length(assoc_groups)]
-    assoc_groups = [assoc_groups[i][1] for i in 1:length(assoc_groups)]
+    assoc_sites = last.(assoc_groups)
+    assoc_groups = first.(assoc_groups)
     n_sites_per_group = sum(model.sites.n_flattenedsites)
-
     flattenedsites = String[]
-
     n_sites_per_group_expanded = Int64[]
-    
+
     for i in 1:length(assoc_groups)
-        group_idx = findfirst(model.groups.flattenedgroups.==assoc_groups[i])
-        n_sites_per_group[i] /= ngroups_k[group_idx]
-        append!(flattenedsites, model.groups.flattenedgroups[group_idx]*"_".*string.(1:ngroups_k[group_idx]).*"/".*assoc_sites[i])
+        group_idx = findfirst(groups.flattenedgroups.==assoc_groups[i])
+        n_sites_per_group[i] = ngroups_k[group_idx]
+        append!(flattenedsites, groups.flattenedgroups[group_idx]*"_".*string.(1:ngroups_k[group_idx]).*"/".*assoc_sites[i])
         append!(n_sites_per_group_expanded, n_sites_per_group[i]*ones(Int64,ngroups_k[group_idx]))
     end
 
@@ -89,8 +112,8 @@ function expand_model(model::EoSModel)
     sites = []
     i_sites = Vector{Int64}[]
     i_flattenedsites = Vector{Int64}[]
-    n_sites = Vector{Int64}[]  
-    n_flattenedsites = Vector{Int64}[]  
+    n_sites = Vector{Int64}[]
+    n_flattenedsites = Vector{Int64}[]
     site_translator = Vector{Tuple{Int64,Int64}}[]
     k = 1
     for i in 1:nspecies
@@ -105,24 +128,24 @@ function expand_model(model::EoSModel)
             group_name = split(flattenedsites[j],"/")[1]
             site_name = split(flattenedsites[j],"/")[2]
             if group_name in groups[i]
-                append!(sites_per_species, [flattenedsites[j]])
-                append!(_i_sites, [j])
-                append!(_n_sites, [n_sites_per_group_expanded[j]])
+                push!(sites_per_species, flattenedsites[j])
+                push!(_i_sites, j)
+                push!(_n_sites, n_sites_per_group_expanded[j])
                 group_idx = findfirst(flattenedgroups.==group_name)
                 site_idx = findfirst(assoc_sites.==site_name)
-                append!(_site_translator,[(group_idx,site_idx)])
+                push!(_site_translator,(group_idx,site_idx))
                 _i_flattenedsites[j] = l
                 _n_flattenedsites[j] = n_sites_per_group_expanded[j]
                 l+=1
             end
         end
         # _i_flattenedsites[k:k+length(sites_per_species)-1] = 1:length(sites_per_species)
-        append!(sites, [sites_per_species])
-        append!(i_sites,[_i_sites])
-        append!(i_flattenedsites,[_i_flattenedsites])
-        append!(n_sites,[_n_sites])
-        append!(n_flattenedsites,[_n_flattenedsites])
-        append!(site_translator,[_site_translator])
+        push!(sites, sites_per_species)
+        push!(i_sites,_i_sites)
+        push!(i_flattenedsites,_i_flattenedsites)
+        push!(n_sites,_n_sites)
+        push!(n_flattenedsites,_n_flattenedsites)
+        push!(site_translator,_site_translator)
         k += length(sites_per_species)
     end
 
@@ -135,63 +158,61 @@ function expand_model(model::EoSModel)
                            i_flattenedsites,
                            model.sites.sourcecsvs,
                            site_translator)
+end
 
+function expand_params(params::PARAM, groups, sites, ngroups_k) where PARAM
     # Expand the parameters
-    params_names = fieldnames(typeof(model.params))
-    nparams = length(params_names)
-
-    params = []
-
+    params_names = fieldnames(PARAM)
+    nparams = fieldcount(PARAM)
+    ngroup_types = length(ngroups_k)
+    ngroups = length(groups.n_flattenedgroups[1])
+    nspecies = length(groups.components)
+    newparams = []
     for i in 1:nparams
-        param = getfield(model.params,params_names[i])
+        param = getfield(params,i)
         name = param.name
-        if typeof(param) <: SingleParam
-            if param.components == model.components
-                append!(params,[param])
-            else
-                values = zeros(Float64,ngroups)
-                ismissingvalues = zeros(Bool,ngroups)
-                k = 1
-                for j in 1:ngroup_types
-                    values[k:k-1+ngroups_k[j]] .= param.values[j]
-                    ismissingvalues[k:k-1+ngroups_k[j]] .= param.ismissingvalues[j]
-                    k+=ngroups_k[j]
-                end
-                append!(params, [SingleParam(name,
-                                            flattenedgroups,
-                                            values,
-                                            ismissingvalues,
-                                            param.sourcecsvs,
-                                            param.sources)])
+        if param.components == groups.components && !(param isa AssocParam)
+            push!(newparams,param)
+        elseif param isa Clapeyron.SingleParameter
+            values = zeros(Float64,ngroups)
+            ismissingvalues = zeros(Bool,ngroups)
+            k = 1
+            for j in 1:ngroup_types
+                values[k:k-1+ngroups_k[j]] .= param.values[j]
+                ismissingvalues[k:k-1+ngroups_k[j]] .= param.ismissingvalues[j]
+                k+=ngroups_k[j]
             end
-        elseif typeof(param) <: PairParam
-            if param.components == model.components
-                append!(params,[param])
-            else
-                values = zeros(Float64,ngroups,ngroups)
-                ismissingvalues = zeros(Bool,ngroups,ngroups)
-                k = 1
-                for a in 1:ngroup_types
-                    l = sum(ngroups_k[1:a-1])+1
-                    for b in a:ngroup_types
-                        values[k:k-1+ngroups_k[a],l:l-1+ngroups_k[b]] .= param.values[a,b]
-                        ismissingvalues[k:k-1+ngroups_k[a],l:l-1+ngroups_k[b]] .= param.ismissingvalues[a,b]
-                        values[l:l-1+ngroups_k[b],k:k-1+ngroups_k[a]] .= param.values[a,b]
-                        ismissingvalues[l:l-1+ngroups_k[b],k:k-1+ngroups_k[a]] .= param.ismissingvalues[a,b]
-                        l+=ngroups_k[b]
-                    end
-                    k+=ngroups_k[a]
+            push!(newparams, SingleParam(name,
+                                        groups.flattenedgroups,
+                                        values,
+                                        ismissingvalues,
+                                        param.sourcecsvs,
+                                        param.sources))
+                                    
+        elseif param isa Clapeyron.PairParameter
+            values = zeros(Float64,ngroups,ngroups)
+            ismissingvalues = zeros(Bool,ngroups,ngroups)
+            k = 1
+            for a in 1:ngroup_types
+                l = sum(ngroups_k[1:a-1])+1
+                for b in a:ngroup_types
+                    values[k:k-1+ngroups_k[a],l:l-1+ngroups_k[b]] .= param.values[a,b]
+                    ismissingvalues[k:k-1+ngroups_k[a],l:l-1+ngroups_k[b]] .= param.ismissingvalues[a,b]
+                    values[l:l-1+ngroups_k[b],k:k-1+ngroups_k[a]] .= param.values[a,b]
+                    ismissingvalues[l:l-1+ngroups_k[b],k:k-1+ngroups_k[a]] .= param.ismissingvalues[a,b]
+                    l+=ngroups_k[b]
                 end
-                append!(params, [PairParam(name,
-                                            flattenedgroups,
-                                            values,
-                                            ismissingvalues,
-                                            param.sourcecsvs,
-                                            param.sources)])
+                k+=ngroups_k[a]
             end
-        elseif typeof(param) <: AssocParam
-            if length(param.values.values) < 1
-                append!(params, [param])
+            push!(newparams, PairParam(name,
+                                        groups.flattenedgroups,
+                                        values,
+                                        ismissingvalues,
+                                        param.sourcecsvs,
+                                        param.sources))
+        elseif param isa AssocParam
+            if iszero(length((param.values.values))) || iszero(length(sites.n_sites.v))
+                push!(newparams, param)
             else
                 values = Float64[]
                 inner_indices = Tuple{Int64,Int64}[]
@@ -200,12 +221,11 @@ function expand_model(model::EoSModel)
                 assoc_groups = Vector{String}[]
                 assoc_sites  = Vector{String}[]
                 for i in 1:nspecies
-                    append!(assoc_groups,[getindex.(split.(getindex.(split.(sites[i],"/"),1),"_"),1)])
-                    append!(assoc_sites, [getindex.(split.(sites[i],"/"),2)])
+                    append!(assoc_groups,[getindex.(split.(getindex.(split.(sites.sites[i],"/"),1),"_"),1)])
+                    append!(assoc_sites, [getindex.(split.(sites.sites[i],"/"),2)])
                 end
-
                 for i in 1:n_interaction
-                    value = param.values.values[i]
+                    value = param.values.values[i]                    
                     id_species_1, id_species_2 = param.values.outer_indices[i]
                     id_site_1, id_site_2 = param.values.inner_indices[i]
                     group_type_1,site_type_1 = split(param.sites[id_species_1][id_site_1],"/")
@@ -223,29 +243,20 @@ function expand_model(model::EoSModel)
                     end
                 end
 
-                types = eltype(values)
+                TT = eltype(values)
                 values = Clapeyron.Compressed4DMatrix(values,outer_indices,inner_indices)
                 # println(components)
-                append!(params, [AssocParam{types}(name,
-                                            model.components,
+                push!(newparams, AssocParam{TT}(name,
+                                            groups.components,
                                             values,
                                             sites,
                                             param.sourcecsvs,
-                                            param.sources)])
+                                            param.sources))
             end
-
+        elseif param isa Clapeyron.MixedGCSegmentParam
+            TT = Clapeyron.valtype(param)
+            push!(newparams,Clapeyron.MixedGCSegmentParam{TT}(groups))
         end
     end
-    eosparam_type = typeof(model.params)
-    eosparams = eosparam_type(params...)
-
-    eos_type = typeof(model)
-
-    return new_model = eos_type(model.components,
-                                groupsparams,
-                                siteparams,
-                                eosparams,
-                                model.idealmodel,
-                                model.assoc_options,
-                                model.references)
+    return PARAM(newparams...)
 end

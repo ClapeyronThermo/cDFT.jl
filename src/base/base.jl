@@ -111,7 +111,7 @@ function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStruc
     return DGTSystem(model, gradient, species, structure, typed_fields, options, chunksize)
 end
 
-const AbstractcDFTSystem = AbstractcDFTSystem
+const AbstractcDFTSystem = Union{DFTSystem, DGTSystem}
 
 dimension(::Type{Union{DFTSystem{<:Any,<:Any,T},DGTSystem{<:Any,<:Any,T}}}) where T = dimension(T) 
 dimension(x::AbstractcDFTSystem) = dimension(x.structure)
