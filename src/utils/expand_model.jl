@@ -1,5 +1,5 @@
 function expand_model(model::MODEL) where MODEL <: EoSModel
-    if !Clapeyron.hasgroups(model)
+    if !Clapeyron.has_groups(model)
         return model
     end
 
