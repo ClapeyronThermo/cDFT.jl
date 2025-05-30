@@ -134,7 +134,7 @@ end
 
 ForwardDiff.Chunk(system::T) where T <: AbstractcDFTSystem = FDChunk(system.chunksize)
 FDChunk(system::T) where T <: AbstractcDFTSystem = FDChunk(system.chunksize)
-FDChunk(::Val{N}) where N = ForwardDiff.Chunk{N}(N)
+FDChunk(::Val{N}) where N = ForwardDiff.Chunk{N}()
 
 export DFTSystem, DGTSystem
 
