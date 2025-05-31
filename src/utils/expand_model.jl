@@ -7,13 +7,13 @@ function expand_model(model::MODEL) where MODEL <: EoSModel
     grouparam,ngroups_k = expand_groups(model)
 
     # Expand the sites
-    siteparams = expand_sites(model.sites, grouparam, ngroups_k)
+    siteparams = expand_sites(model,grouparam,ngroups_k)
 
     #expand the parameters
     eosparams = expand_params(model.params, grouparam, siteparams, ngroups_k)
 
     return new_model = MODEL(model.components,
-                                groupsparams,
+                                grouparam,
                                 siteparams,
                                 eosparams,
                                 model.idealmodel,
@@ -91,29 +91,38 @@ function expand_groups(model)
 
 end
 
-function expand_sites(model::SiteParam, groups, ngroups_k)
-    assoc_groups = split.(model.sites.flattenedsites,"/")
-    assoc_sites = last.(assoc_groups)
-    assoc_groups = first.(assoc_groups)
-    n_sites_per_group = sum(model.sites.n_flattenedsites)
-    flattenedsites = String[]
-    n_sites_per_group_expanded = Int64[]
+expand_sites(model::EoSModel, groups, ngroups_k) = expand_sites(Clapeyron.getsites(model),model.groups,groups,ngroups_k)
 
+function expand_sites(siteparam,oldgroups,groups,ngroups_k)
+    nspecies = length(groups.components)
+
+    # Expand the groups
+    ngroup_types = length(oldgroups.flattenedgroups)
+    # Expand the sites 
+    assoc_groups = deepcopy(split.(siteparam.flattenedsites,"/"))
+    assoc_sites = [assoc_groups[i][2] for i in 1:length(assoc_groups)]
+    assoc_groups = [assoc_groups[i][1] for i in 1:length(assoc_groups)]
+
+    n_sites_per_group = deepcopy(sum(siteparam.n_flattenedsites))
+
+    flattenedsites = String[]
+
+    n_sites_per_group_expanded = Int64[]
+    
     for i in 1:length(assoc_groups)
-        group_idx = findfirst(groups.flattenedgroups.==assoc_groups[i])
-        n_sites_per_group[i] = ngroups_k[group_idx]
-        append!(flattenedsites, groups.flattenedgroups[group_idx]*"_".*string.(1:ngroups_k[group_idx]).*"/".*assoc_sites[i])
+        group_idx = findfirst(oldgroups.flattenedgroups.==assoc_groups[i])
+        n_sites_per_group[i] /= ngroups_k[group_idx]
+        append!(flattenedsites, oldgroups.flattenedgroups[group_idx]*"_".*string.(1:ngroups_k[group_idx]).*"/".*assoc_sites[i])
         append!(n_sites_per_group_expanded, n_sites_per_group[i]*ones(Int64,ngroups_k[group_idx]))
     end
 
     nsites = length(flattenedsites)
     assoc_sites = unique(assoc_sites)
-
     sites = []
     i_sites = Vector{Int64}[]
     i_flattenedsites = Vector{Int64}[]
-    n_sites = Vector{Int64}[]
-    n_flattenedsites = Vector{Int64}[]
+    n_sites = Vector{Int64}[]  
+    n_flattenedsites = Vector{Int64}[]  
     site_translator = Vector{Tuple{Int64,Int64}}[]
     k = 1
     for i in 1:nspecies
@@ -127,37 +136,39 @@ function expand_sites(model::SiteParam, groups, ngroups_k)
         for j in 1:nsites
             group_name = split(flattenedsites[j],"/")[1]
             site_name = split(flattenedsites[j],"/")[2]
-            if group_name in groups[i]
-                push!(sites_per_species, flattenedsites[j])
-                push!(_i_sites, j)
-                push!(_n_sites, n_sites_per_group_expanded[j])
-                group_idx = findfirst(flattenedgroups.==group_name)
+            if group_name in groups.groups[i]
+                append!(sites_per_species, [flattenedsites[j]])
+                append!(_i_sites, [j])
+                append!(_n_sites, [n_sites_per_group_expanded[j]])
+                group_idx = findfirst(groups.flattenedgroups.==group_name)
                 site_idx = findfirst(assoc_sites.==site_name)
-                push!(_site_translator,(group_idx,site_idx))
+                append!(_site_translator,[(group_idx,site_idx)])
                 _i_flattenedsites[j] = l
                 _n_flattenedsites[j] = n_sites_per_group_expanded[j]
                 l+=1
             end
         end
         # _i_flattenedsites[k:k+length(sites_per_species)-1] = 1:length(sites_per_species)
-        push!(sites, sites_per_species)
-        push!(i_sites,_i_sites)
-        push!(i_flattenedsites,_i_flattenedsites)
-        push!(n_sites,_n_sites)
-        push!(n_flattenedsites,_n_flattenedsites)
-        push!(site_translator,_site_translator)
+        append!(sites, [sites_per_species])
+        append!(i_sites,[_i_sites])
+        append!(i_flattenedsites,[_i_flattenedsites])
+        append!(n_sites,[_n_sites])
+        append!(n_flattenedsites,[_n_flattenedsites])
+        append!(site_translator,[_site_translator])
         k += length(sites_per_species)
     end
 
-    siteparams = SiteParam(model.components,
+    siteparams = SiteParam(groups.components,
                            sites,
                            Clapeyron.pack_vectors(n_sites),
                            i_sites,
                            flattenedsites,
                            n_flattenedsites,
                            i_flattenedsites,
-                           model.sites.sourcecsvs,
+                           siteparam.sourcecsvs,
                            site_translator)
+
+    # Expand the parameters
 end
 
 function expand_params(params::PARAM, groups, sites, ngroups_k) where PARAM
@@ -249,7 +260,7 @@ function expand_params(params::PARAM, groups, sites, ngroups_k) where PARAM
                 push!(newparams, AssocParam{TT}(name,
                                             groups.components,
                                             values,
-                                            sites,
+                                            sites.sites,
                                             param.sourcecsvs,
                                             param.sources))
             end

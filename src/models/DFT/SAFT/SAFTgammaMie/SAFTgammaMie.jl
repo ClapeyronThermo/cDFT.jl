@@ -75,88 +75,26 @@ function get_propagator(model::SAFTgammaMieModel, species::DFTSpecies, structure
     return TangentHSPropagator(model, species, structure)
 end
 
+
+
 function expand_model(model::MODEL) where MODEL <: SAFTgammaMieModel
     
     nspecies = length(model)
 
+    #Expand groups
     grouparam,ngroups_k = expand_groups(model)
-
-    # Expand the sites 
-    assoc_groups = deepcopy(split.(model.vrmodel.sites.flattenedsites,"/"))
-    assoc_sites = [assoc_groups[i][2] for i in 1:length(assoc_groups)]
-    assoc_groups = [assoc_groups[i][1] for i in 1:length(assoc_groups)]
-
-    n_sites_per_group = deepcopy(sum(model.vrmodel.sites.n_flattenedsites))
-    @show ngroups_k
-    flattenedsites = String[]
-
-    n_sites_per_group_expanded = Int64[]
     
-    for i in 1:length(assoc_groups)
-        group_idx = findfirst(model.groups.flattenedgroups.==assoc_groups[i])
-        n_sites_per_group[i] = ngroups_k[group_idx]
-        append!(flattenedsites, model.groups.flattenedgroups[group_idx]*"_".*string.(1:ngroups_k[group_idx]).*"/".*assoc_sites[i])
-        append!(n_sites_per_group_expanded, n_sites_per_group[i]*ones(Int64,ngroups_k[group_idx]))
-    end
-
-    nsites = length(flattenedsites)
-    assoc_sites = unique(assoc_sites)
-
-    sites = []
-    i_sites = Vector{Int64}[]
-    i_flattenedsites = Vector{Int64}[]
-    n_sites = Vector{Int64}[]  
-    n_flattenedsites = Vector{Int64}[]  
-    site_translator = Vector{Tuple{Int64,Int64}}[]
-    k = 1
-    for i in 1:nspecies
-        sites_per_species = String[]
-        _i_flattenedsites = zeros(Int64,nsites)
-        _i_sites = Int64[]
-        _n_flattenedsites = zeros(Int64,nsites)
-        _n_sites = Int64[]
-        _site_translator = Tuple{Int64,Int64}[]
-        l = 1
-        for j in 1:nsites
-            group_name = split(flattenedsites[j],"/")[1]
-            site_name = split(flattenedsites[j],"/")[2]
-            if group_name in grouparam.groups[i]
-                append!(sites_per_species, [flattenedsites[j]])
-                append!(_i_sites, [j])
-                append!(_n_sites, [n_sites_per_group_expanded[j]])
-                group_idx = findfirst(grouparam.flattenedgroups.==group_name)
-                site_idx = findfirst(assoc_sites.==site_name)
-                append!(_site_translator,[(group_idx,site_idx)])
-                _i_flattenedsites[j] = l
-                _n_flattenedsites[j] = n_sites_per_group_expanded[j]
-                l+=1
-            end
-        end
-        # _i_flattenedsites[k:k+length(sites_per_species)-1] = 1:length(sites_per_species)
-        append!(sites, [sites_per_species])
-        append!(i_sites,[_i_sites])
-        append!(i_flattenedsites,[_i_flattenedsites])
-        append!(n_sites,[_n_sites])
-        append!(n_flattenedsites,[_n_flattenedsites])
-        append!(site_translator,[_site_translator])
-        k += length(sites_per_species)
-    end
-
-    siteparams = SiteParam(model.components,
-                           sites,
-                           Clapeyron.pack_vectors(n_sites),
-                           i_sites,
-                           flattenedsites,
-                           n_flattenedsites,
-                           i_flattenedsites,
-                           model.sites.sourcecsvs,
-                           site_translator)
-
-    #expand the parameters
-    eosparams = expand_params(model.params, grouparam, siteparams, ngroups_k)
+    #Expand the sites 
+    siteparams = expand_sites(model, grouparam, ngroups_k)
+    params_old,vrparams_old = model.params,model.vrmodel.params
+    PARAM = typeof(params_old)
+    
+    oldparams = PARAM(params_old.segment,params_old.shapefactor,params_old.lambda_a,params_old.lambda_r,params_old.sigma,params_old.epsilon,vrparams_old.epsilon_assoc,vrparams_old.bondvol,params_old.mixed_segment)
+    #Expand the parameters
+    eosparams = expand_params(oldparams, grouparam, siteparams, ngroups_k)
 
     #compute mixed segment
-    Clapeyron.mixed_segment!(eosparams.mixed_segment,groupsparams,eosparams.shapefactor.values,eosparams.gc_segment.values)
+    Clapeyron.mix_segment!(eosparams.mixed_segment,grouparam,eosparams.shapefactor.values,eosparams.segment.values)
     
     vreosparam_type = typeof(model.vrmodel.params)
     vreosparams = vreosparam_type(model.vrmodel.params.Mw,
@@ -177,7 +115,7 @@ function expand_model(model::MODEL) where MODEL <: SAFTgammaMieModel
                         )
 
     return new_model = MODEL(model.components,
-                                groupsparams,
+                                grouparam,
                                 siteparams,
                                 eosparams,
                                 model.idealmodel,
