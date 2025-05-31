@@ -137,24 +137,24 @@ function expand_sites(siteparam,oldgroups,groups,ngroups_k)
             group_name = split(flattenedsites[j],"/")[1]
             site_name = split(flattenedsites[j],"/")[2]
             if group_name in groups.groups[i]
-                append!(sites_per_species, [flattenedsites[j]])
-                append!(_i_sites, [j])
-                append!(_n_sites, [n_sites_per_group_expanded[j]])
+                push!(sites_per_species, flattenedsites[j])
+                push!(_i_sites, j)
+                push!(_n_sites, n_sites_per_group_expanded[j])
                 group_idx = findfirst(groups.flattenedgroups.==group_name)
                 site_idx = findfirst(assoc_sites.==site_name)
-                append!(_site_translator,[(group_idx,site_idx)])
+                push!(_site_translator,(group_idx,site_idx))
                 _i_flattenedsites[j] = l
                 _n_flattenedsites[j] = n_sites_per_group_expanded[j]
                 l+=1
             end
         end
         # _i_flattenedsites[k:k+length(sites_per_species)-1] = 1:length(sites_per_species)
-        append!(sites, [sites_per_species])
-        append!(i_sites,[_i_sites])
-        append!(i_flattenedsites,[_i_flattenedsites])
-        append!(n_sites,[_n_sites])
-        append!(n_flattenedsites,[_n_flattenedsites])
-        append!(site_translator,[_site_translator])
+        push!(sites, sites_per_species)
+        push!(i_sites,_i_sites)
+        push!(i_flattenedsites,_i_flattenedsites)
+        push!(n_sites,_n_sites)
+        push!(n_flattenedsites,_n_flattenedsites)
+        push!(site_translator,_site_translator)
         k += length(sites_per_species)
     end
 
@@ -232,8 +232,8 @@ function expand_params(params::PARAM, groups, sites, ngroups_k) where PARAM
                 assoc_groups = Vector{String}[]
                 assoc_sites  = Vector{String}[]
                 for i in 1:nspecies
-                    append!(assoc_groups,[getindex.(split.(getindex.(split.(sites.sites[i],"/"),1),"_"),1)])
-                    append!(assoc_sites, [getindex.(split.(sites.sites[i],"/"),2)])
+                    push!(assoc_groups,first.(split.(first.(split.(sites.sites[i],"/")),"_")))
+                    push!(assoc_sites, getindex.(split.(sites.sites[i],"/"),2))
                 end
                 for i in 1:n_interaction
                     value = param.values.values[i]                    
@@ -247,9 +247,9 @@ function expand_params(params::PARAM, groups, sites, ngroups_k) where PARAM
 
                     for i in 1:length(inner_idx_1)
                         for j in 1:length(inner_idx_2)
-                            append!(values,[value])
-                            append!(inner_indices,[(inner_idx_1[i],inner_idx_2[j])])
-                            append!(outer_indices,[(id_species_1,id_species_2)])
+                            push!(values,value)
+                            push!(inner_indices,(inner_idx_1[i],inner_idx_2[j]))
+                            push!(outer_indices,(id_species_1,id_species_2))
                         end
                     end
                 end
