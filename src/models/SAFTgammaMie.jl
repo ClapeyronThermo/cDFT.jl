@@ -55,6 +55,7 @@ function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DF
     ngrid = structure.ngrid
     nd = dimension(structure)
     ω = structure_ω(structure)
+    S = model.params.shapefactor.values
     d = species.size
     λ_r = diagvalues(model.params.lambda_r.values)
     λ_a = diagvalues(model.params.lambda_a.values)
@@ -670,44 +671,45 @@ function Δ(model::SAFTgammaMieModel, T, n, n₃, nᵥ)
     return Δout
 end
 
-# function Δ(model::SAFTgammaMieModel, T, n, n₃, nᵥ, i, j, a, b)
-#     _d = d(model,1e-3,T,ones(length(model.groups.flattenedgroups)))
-#     _σ = model.params.sigma.values
-#     m = model.params.segment.values
-#     S = model.params.shapefactor.values
-#     ϵ_assoc = model.params.epsilon_assoc.values
+function Δ(model::SAFTgammaMieModel, T, n, n₃, nᵥ, i, j, a, b)
+    _d = d(model,1e-3,T,ones(length(model.groups.flattenedgroups)))
+    _σ = model.params.sigma.values
+    m = model.params.segment.values
+    S = model.params.shapefactor.values
+    ϵ = model.params.epsilon.values
+    ϵ_assoc = model.params.epsilon_assoc.values
     
-#     K = model.params.bondvol.values[i,j][a,b]
-#     _0 = zero(T+first(n)+first(n₃)+first(nᵥ)+first(K))
-#     iszero(K) && return _0
+    K = model.params.bondvol.values[i,j][a,b]
+    _0 = zero(T+first(n)+first(n₃)+first(nᵥ)+first(K))
+    iszero(K) && return _0
 
-#     ρ̄ = n₃*3*2 ./(_d.^3)/π
-#     m = m.*S
-#     z = ρ̄ /sum(ρ̄)
-#     m̄ = dot(z,m)
-#     m̄inv = 1/m̄
+    ρ̄ = n₃*3*2 ./(_d.^3)/π
+    m = m.*S
+    z = ρ̄ /sum(ρ̄)
+    m̄ = dot(z,m)
+    m̄inv = 1/m̄
 
-#     ρS = dot(ρ̄,m)
+    ρS = dot(ρ̄,m)
 
-#     σ3_x = zero(T+first(z)+one(eltype(model)))
+    σ3_x = zero(T+first(z)+one(eltype(model)))
 
-#     for i ∈ @groups
-#         x_Si = z[i]*m[i]*m̄inv
-#         σ3_x += x_Si*x_Si*(_σ[i,i]^3)
-#         for j ∈ 1:(i-1)
-#             x_Sj = z[j]*m[j]*m̄inv
-#             σ3_x += 2*x_Si*x_Sj*(_σ[i,j]^3)
-#         end
-#     end
-#     ρr  = ρS*σ3_x
+    for i ∈ @groups
+        x_Si = z[i]*m[i]*m̄inv
+        σ3_x += x_Si*x_Si*(_σ[i,i]^3)
+        for j ∈ 1:(i-1)
+            x_Sj = z[j]*m[j]*m̄inv
+            σ3_x += 2*x_Si*x_Sj*(_σ[i,j]^3)
+        end
+    end
+    ρr  = ρS*σ3_x
     
-#     Tr = T/ϵ[i,j]
-#     _I = I(model,Tr,ρr)
+    Tr = T/ϵ[i,j]
+    _I = I(model,Tr,ρr)
     
-#     F = expm1(ϵ_assoc[i,j][a,b]/T)
+    F = expm1(ϵ_assoc[i,j][a,b]/T)
 
-#     return F*K*_I
-# end
+    return F*K*_I
+end
 
 function I(model::SAFTgammaMieModel, Tr,ρr)
     c  = SAFTVRMieconsts.c

@@ -165,7 +165,7 @@ function ∫∫∫Oodξ₁dξ₂dγ12(ρ̄,T̄,μ²,d,_Iμμ,Q)
     I(x) = begin
         _cosΘ = x[1]*x[2]-√(1-x[1]^2)*√(1-x[2]^2)*cos(x[3])
         _I = ∫odr(d,x[1],x[2],x[3])
-        return exp(-24/19*μ²/T̄*_Iμμ*_I)*_cosΘ
+        return exp(-24/19*μ²/T̄*_Iμμ*_I)*x[1]^2
     end
 
     _I = ∫∫∫dξ₁dξ₂dγ12(I)
@@ -173,10 +173,10 @@ function ∫∫∫Oodξ₁dξ₂dγ12(ρ̄,T̄,μ²,d,_Iμμ,Q)
     return _I/Q
 end
 
-function cosΘ(system::DFTSystem)
+function cosΘ(system::DFTSystem,ρ)
     model = system.model
     HSd = system.species.size
-    n = evaluate_field(system)
+    n = evaluate_field(system,ρ)
     η = n[:,2]
     T = system.structure.conditions[2]
     ϵ = model.params.epsilon[1]
@@ -193,3 +193,24 @@ function cosΘ(system::DFTSystem)
     Q = ∫∫∫Odξ₁dξ₂dγ12.(ρ̄,T̄,μ²,d,_Iμμ)
     return ∫∫∫Oodξ₁dξ₂dγ12.(ρ̄,T̄,μ²,d,_Iμμ,Q)
 end
+
+# function ⟨ξ1⟩(system::DFTSystem)
+#     model = system.model
+#     HSd = system.species.size
+#     n = evaluate_field(system)
+#     η = n[:,2]
+#     T = system.structure.conditions[2]
+#     ϵ = model.params.epsilon[1]
+#     σ = diagvalues(model.params.sigma.values)
+#     d = model.params.shift[1] / σ[1]
+#     μ² = model.params.dipole2[1]./ϵ/σ[1]^3
+#     μ = sqrt(μ²)
+#     T̄ = T/ϵ
+
+#     ρ̄ = η*6/π*(σ[1]/HSd[1])^3
+
+#     _Iμμ = Iμμ.(ρ̄,T̄,μ)
+
+#     Q = ∫∫∫Odξ₁dξ₂dγ12.(ρ̄,T̄,μ²,d,_Iμμ)
+#     return ∫∫∫Oodξ₁dξ₂dγ12.(ρ̄,T̄,μ²,d,_Iμμ,Q)
+# end

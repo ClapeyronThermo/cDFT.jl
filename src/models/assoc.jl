@@ -51,7 +51,7 @@ function Δ(model::EoSModel, T, n, n₃, nᵥ)
     return Δout
 end
 
-function X(system::DFTSystem, model::EoSModel, n, n₃, nᵥ)
+function X(system::DFTSystem, model::EoSModel, T, n, n₃, nᵥ)
     species = system.species
     HSd = species.size
     n₀ = n./HSd
