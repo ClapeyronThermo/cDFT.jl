@@ -1,5 +1,7 @@
 tanh_prof(x,start,stop,shift,coef) = 1/2*(start-stop)*tanh((x-shift)*coef)+1/2*(start+stop)
 
+cos_prof(x,start,stop,shift,coef) = 1/2*(start-stop)*cos((x-shift)*2π)*sqrt((1+coef^2)/(1+coef^2*cos((x-shift)*2π)^2))+1/2*(start+stop)
+
 # include("surface_tension.jl")
 # include("interfacial_tension.jl")
 include("two_phase.jl")
@@ -87,7 +89,7 @@ function structure_fftfreq(structure::DFTStructure)
     nd = dimension(structure)
     function ff(i)
         lb,ub = bounds(structure,i)
-        return ngrid[i]/(ub - lb)
+        return (ngrid[i])/(ub - lb)
     end
     f = ntuple(ff,nd)
     ω = fftfreq.(ngrid, f)
@@ -111,7 +113,7 @@ function structure_dz(structure::DFTStructure)
     nd = dimension(structure)
     function ff(i)
         lb,ub = bounds(structure,i)
-        return (ub - lb)/ngrid[i]
+        return (ub - lb)/(ngrid[i])
     end
     return ntuple(ff,nd)
 end

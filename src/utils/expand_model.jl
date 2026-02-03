@@ -54,7 +54,7 @@ function expand_model(model::EoSModel)
             append!(n_intergroups, [_n_intergroups])
         end
     end
-    groupsparams = Clapeyron.StructGroupParam(model.components,
+    groupsparams = Clapeyron.GroupParam(model.components,
                                     groups,
                                     model.groups.grouptype,
                                     n_groups,
@@ -62,7 +62,6 @@ function expand_model(model::EoSModel)
                                     i_groups,
                                     flattenedgroups,
                                     n_flattenedgroups,
-                                    n_groups_cache,
                                     model.groups.sourcecsvs)
 
 

@@ -55,7 +55,6 @@ function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DF
     ngrid = structure.ngrid
     nd = dimension(structure)
     ω = structure_ω(structure)
-    S = model.params.shapefactor.values
     d = species.size
     λ_r = diagvalues(model.params.lambda_r.values)
     λ_a = diagvalues(model.params.lambda_a.values)
@@ -304,12 +303,11 @@ function expand_model(model::SAFTgammaMieModel)
 
         end
     end
-    eosparam_type = typeof(model.params)
-    eosparams = eosparam_type(params...)
+   
 
-    n_groups_cache = Clapeyron.pack_vectors([Float64.(n_flattenedgroups[i].*eosparams.shapefactor.values.*eosparams.segment.values) for i in 1:nspecies])
+    n_groups_cache = Clapeyron.pack_vectors([Float64.(n_flattenedgroups[i].*params[2].values.*params[1].values) for i in 1:nspecies])
 
-    groupsparams = Clapeyron.StructGroupParam(model.components,
+    groupsparams = Clapeyron.GroupParam(model.components,
                                     groups,
                                     model.groups.grouptype,
                                     n_groups,
@@ -317,8 +315,12 @@ function expand_model(model::SAFTgammaMieModel)
                                     i_groups,
                                     flattenedgroups,
                                     n_flattenedgroups,
-                                    n_groups_cache,
                                     model.groups.sourcecsvs)
+    
+    mixed_segment = MixedGCSegmentParam(groupsparams,params[2].values,params[1].values)
+    append!(params,[mixed_segment])
+    eosparam_type = typeof(model.params)
+    eosparams = eosparam_type(params...)
 
 
     eos_type = typeof(model)

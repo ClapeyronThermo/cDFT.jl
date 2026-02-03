@@ -34,7 +34,7 @@ function uniform_range(structure::DFTStructure,dim::Int)
     bounds = DFTBounds{dimension((structure))}(structure.bounds)
     lb,ub = bounds.lb,bounds.ub
     grid = structure.ngrid
-    return LinRange(lb[dim],ub[dim],grid[dim])
+    return LinRange(lb[dim],ub[dim],grid[dim].+1)[1:end-1]
 end
 
 function bounds(structure::DFTStructure,dim::Int)
@@ -81,7 +81,7 @@ struct ExternalField1DCart <: DFTStructure1DCart
 end
 
 function ExternalField1DCart(conditions,ρbulk,bounds,ngrid::Int64,external_field,width)
-    ExternalField1DCart(conditions,bounds,(ngrid,),external_field,width)
+    ExternalField1DCart(conditions,ρbulk,bounds,(ngrid,),external_field,width)
 end
 
 """

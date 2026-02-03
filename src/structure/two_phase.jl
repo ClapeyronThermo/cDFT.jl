@@ -1,5 +1,6 @@
 function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species)
     lb,ub = bounds(structure,1)
+    H = ub-lb
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
     (p, T) = structure.conditions
@@ -8,16 +9,16 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species)
 
     pure = Clapeyron.split_model(model)
 
-    z = uniform_range(structure) |> collect
+    z = uniform_range(structure) |> collect 
     L = length_scale(model)
 
     ρ = zeros(ngrid...,sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
+        coef = (2.4728-2.3625*T/Tc)*H/L
+        coef = sqrt(coef^2-1)
         for j in @chain(i)
-            coef = (2.4728-2.3625*T/Tc)/L
-            ρ_points = @. tanh_prof(z,ρ1[i],ρ2[i],(ub/4+3*lb/4),coef)*(z<=mb) +
-                          tanh_prof(z,ρ2[i],ρ1[i],(3*ub/4+lb/4),coef)*(z>mb)
+            ρ_points = @.  cos_prof(z/(ub-lb), ρ1[i], ρ2[i], (ub / 4 + 3 * lb / 4), coef)
 
             ρ[:,j] = ρ_points
         end
@@ -47,10 +48,10 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase2DLamCart, speci
     ρ = zeros(ngrid...,sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
-        coef = (2.4728-2.3625*T/Tc)/L
+        coef = (2.4728-2.3625*T/Tc)*H/L
+        coef = sqrt(coef^2-1)
         for j in @chain(i)
-            ρ_points = @. tanh_prof(X,ρ1[i],ρ2[i],(ub/4+3*lb/4),coef)*(X<=mb) +
-                          tanh_prof(X,ρ2[i],ρ1[i],(3*ub/4+lb/4),coef)*(X>mb)
+            ρ_points = @. cos_prof(X/(ub-lb),ρ1[i],ρ2[i],(ub/4+3*lb/4),coef)
             ρ[:,:,j] = ρ_points
         end
     end
@@ -81,11 +82,11 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DLamCart, speci
     ρ = zeros(ngrid...,sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
-        coef = (2.4728-2.3625*T/Tc)/L
-        
+        coef = (2.4728-2.3625*T/Tc)*H/L
+        coef = sqrt(coef^2-1)
+
         for j in @chain(i)
-            ρ_points = @. tanh_prof(X,ρ1[i],ρ2[i],(ub/4+3*lb/4),coef)*(X<=mb) +
-                          tanh_prof(X,ρ2[i],ρ1[i],(3*ub/4+lb/4),coef)*(X>mb)
+            ρ_points = @. cos_prof(X/(ub-lb),ρ1[i],ρ2[i],(ub/4+3*lb/4),coef)
             selectdim(ρ,nd+1,j) .= ρ_points
         end
     end
@@ -125,9 +126,10 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase2DHexCart, speci
     ρ = zeros(ngrid...,sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
-        coef = (2.4728-2.3625*T/Tc)/L
+        coef = (2.4728-2.3625*T/Tc)*H/L
+        coef = sqrt(coef^2-1)
         for j in @chain(i)
-            ρ_points = @. tanh_prof(r,ρ1[i],ρ2[i],R,coef)
+            ρ_points = @. cos_prof(r/(ub-lb),ρ1[i],ρ2[i],R,coef)
             ρ[:,:,j] = ρ_points
         end
     end
@@ -167,9 +169,10 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DHexCart, speci
     ρ = zeros(ngrid...,sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
-        coef = (2.4728-2.3625*T/Tc)/L
+        coef = (2.4728-2.3625*T/Tc)*H/L
+        coef = sqrt(coef^2-1)
         for j in @chain(i)
-            ρ_points = @. tanh_prof(r,ρ1[i],ρ2[i],R,coef)
+            ρ_points = @. cos_prof(r/(ub-lb),ρ1[i],ρ2[i],R,coef)
             ρ[:,:,:,j] = ρ_points
         end
     end
@@ -216,9 +219,10 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DSphrCart, spec
     ρ = zeros(ngrid...,sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
-        coef = (2.4728-2.3625*T/Tc)/L
+        coef = (2.4728-2.3625*T/Tc)*H/L
+        coef = sqrt(coef^2-1)
         for j in @chain(i)
-            ρ_points = @. tanh_prof(r,ρ1[i],ρ2[i],R,coef)
+            ρ_points = @. cos_prof(r/(ub-lb),ρ1[i],ρ2[i],R,coef)
             ρ[:,:,:,j] = ρ_points
         end
     end
