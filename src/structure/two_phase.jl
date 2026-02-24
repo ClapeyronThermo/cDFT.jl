@@ -1,5 +1,6 @@
 function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species)
     lb,ub = bounds(structure,1)
+    H = ub-lb
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
     (p, T) = structure.conditions
@@ -14,10 +15,10 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species)
     ρ = zeros(ngrid...,sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
+        coef = (2.4728-2.3625*T/Tc)*H/L
+        coef = sqrt(coef^2-1)
         for j in @chain(i)
-            coef = (2.4728-2.3625*T/Tc)/L
-            ρ_points = @. tanh_prof(z,ρ1[i],ρ2[i],(ub/4+3*lb/4),coef)*(z<=mb) +
-                          tanh_prof(z,ρ2[i],ρ1[i],(3*ub/4+lb/4),coef)*(z>mb)
+            ρ_points = @.  cos_prof(z/(ub-lb), ρ1[i], ρ2[i], (ub / 4 + 3 * lb / 4), coef)
 
             ρ[:,j] = ρ_points
         end

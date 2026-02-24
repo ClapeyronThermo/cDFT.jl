@@ -1,4 +1,5 @@
 tanh_prof(x,start,stop,shift,coef) = 1/2*(start-stop)*tanh((x-shift)*coef)+1/2*(start+stop)
+cos_prof(x,start,stop,shift,coef) = 1/2*(start-stop)*cos((x-shift)*2π)*sqrt((1+coef^2)/(1+coef^2*cos((x-shift)*2π)^2))+1/2*(start+stop)
 
 # include("surface_tension.jl")
 # include("interfacial_tension.jl")
