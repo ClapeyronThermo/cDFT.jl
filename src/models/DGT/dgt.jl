@@ -19,9 +19,9 @@ function ∇a_res(system::DGTSystem,gradient::GradientModel, ρ̄, ∇ρ̄)
     _res = zero(eltype(ρ̄))
     for i in 1:length(ρ̄)
         ∇ρ̄i = @view ∇ρ̄[:,i]
-        ∇ρ̄j = @view ∇ρ̄[:,j]
-        _res += κ[i,i]*dot(∇ρ̄i,∇ρ̄j)/2
+        _res += κ[i,i]*dot(∇ρ̄i,∇ρ̄i)/2
         for j in i+1:length(ρ̄)
+            ∇ρ̄j = @view ∇ρ̄[:,j]
             _res += κ[i,j]*dot(∇ρ̄i,∇ρ̄j)
         end
     end
