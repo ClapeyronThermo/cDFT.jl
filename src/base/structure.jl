@@ -213,9 +213,9 @@ end
 
 
 """
-    TwoPhase1DCart(conditions::Tuple{Float64,Float64}, ρbulk, ρbulk2, bounds::Vector{Float64}, ngrid::Int64)
+    TwoPhase2DCart(conditions::Tuple{Float64,Float64}, ρbulk, ρbulk2, bounds::Vector{Float64}, ngrid::Int64)
 
-The generic structure type used when trying to simulate two-phase interfaces in 1D-cartesian coordinates. Contains:
+The generic structure type used when trying to simulate two-phase interfaces in 2D-cartesian coordinates. Contains:
 - `conditions`: The p, T conditions at which the calculations are performed.
 - `ρbulk`: The bulk density of each species in the first phase.
 - `ρbulk2`: The bulk density of each species in the second phase.

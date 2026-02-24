@@ -2,8 +2,7 @@ push!(LOAD_PATH,"../src/")
 using Documenter,cDFT
 
 makedocs(sitename = "cDFT.jl",
-format = Documenter.HTML(
-    canonical = "https://ClapeyronThermo.github.io/cDFT.jl/"),
+format = Documenter.LaTeX(),
 warnonly = Documenter.except(),
     authors = "Pierre J. Walker and Andrés Riedemann.",
     pages = [

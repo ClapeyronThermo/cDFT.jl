@@ -163,7 +163,7 @@ end
 
 function ∫∫∫Oodξ₁dξ₂dγ12(ρ̄,T̄,μ²,d,_Iμμ,Q)
     I(x) = begin
-        _cosΘ = x[1]*x[2]-√(1-x[1]^2)*√(1-x[2]^2)*cos(x[3])
+        _cosΘ = x[1]
         _I = ∫odr(d,x[1],x[2],x[3])
         return exp(-24/19*μ²/T̄*_Iμμ*_I)*x[1]^2
     end

@@ -11,7 +11,8 @@ Depth = 1
 
 ## Types
 ```@docs
-cDFT.WeightedDensity
+cDFT.SWeightedDensity
+cDFT.VWeightedDensity
 ```
 
 ## Functions

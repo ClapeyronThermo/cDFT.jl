@@ -8,11 +8,3 @@ CurrentModule = cDFT
 Pages = ["utils.md"]
 Depth = 1
 ```
-
-## Functions
-```@docs
-cDFT.∫
-cDFT.∫ρz²dz
-cDFT.∫ρzdz
-cDFT.∫ρdz
-```
