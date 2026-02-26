@@ -16,7 +16,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species)
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
         coef = (2.4728-2.3625*T/Tc)*H/L
-        coef = sqrt(coef^2-1)
+        coef = sqrt(coef^2-1)/4
         for j in @chain(i)
             ρ_points = @.  cos_prof(z/(ub-lb), ρ1[i], ρ2[i], (ub / 4 + 3 * lb / 4), coef)
 

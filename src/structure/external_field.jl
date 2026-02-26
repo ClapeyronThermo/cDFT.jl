@@ -7,11 +7,9 @@ function evaluate_external_field(system::AbstractcDFTSystem, ρ, z)
         ngrid = structure.ngrid
         nbeads = length(ρ)
         return zeros(ngrid...,nbeads)
+    else
+        return evaluate_external_field(structure, structure.external_field, system.model, ρ, z)
     end
-
-    model = system.model
-    external_field = structure.external_field
-    return evaluate_external_field(structure,external_field,model,ρ,z)
 end
 
 function initialize_profiles(model::EoSModel,structure::ExternalField1DCart, species)
