@@ -26,24 +26,23 @@ function expand_groups(model)
 
     # Expand the groups
     ngroup_types = length(model.groups.flattenedgroups)
-    ngroups = sum(sum,model.groups.n_flattenedgroups)
+    ngroups = Int(sum(sum,model.groups.n_flattenedgroups))
 
     ngroups_k = zeros(Int64,ngroup_types)
     n_groups = Vector{Int64}[]
     for i in 1:nspecies
         ngroups_k .+= model.groups.n_flattenedgroups[i]
-        push!(n_groups, ones(Int64,sum(model.groups.n_groups[i])))
+        push!(n_groups, ones(Int64,Int(sum(model.groups.n_groups[i]))))
     end
-
     flattenedgroups = String[]
     n_flattenedgroups = [zeros(Int64,ngroups) for i in 1:nspecies]
 
     for i in 1:ngroup_types
         append!(flattenedgroups, model.groups.flattenedgroups[i]*"_".*string.(Int.(1:ngroups_k[i])))
-        k=sum(ngroups_k[1:i-1])
+        k=Int(sum(ngroups_k[1:i-1]))
         for j in 1:nspecies
-            n_flattenedgroups[j][k+1:k+model.groups.n_flattenedgroups[j][i]] .= 1
-            k+=model.groups.n_flattenedgroups[j][i]
+            n_flattenedgroups[j][k+1:k+Int(model.groups.n_flattenedgroups[j][i])] .= 1
+            k+=Int(model.groups.n_flattenedgroups[j][i])
         end
     end
 
@@ -63,11 +62,11 @@ function expand_groups(model)
             ngroup_types_i = length(model.groups.groups[i])
             for k in 1:ngroup_types_i
                 idx_group_i_1 = findall(_groups.==model.groups.groups[i][k])
-                idx_group_1_2 = findall(group_names.==model.groups.groups[i][k])
+                idx_group_i_2 = findall(group_names.==model.groups.groups[i][k])
                 for l in 1:ngroup_types_i
                     idx_group_j_1 = findall(_groups.==model.groups.groups[i][l])
                     idx_group_j_2 = findall(group_names.==model.groups.groups[i][l])
-                    _n_intergroups[i_groups[i][idx_group_i_1],i_groups[i][idx_group_j_1]] = bondmat[idx_group_1_2,idx_group_j_2]
+                    _n_intergroups[i_groups[i][idx_group_i_1],i_groups[i][idx_group_j_1]] = bondmat[idx_group_i_2,idx_group_j_2]
                 end
             end
             push!(n_intergroups, _n_intergroups)
@@ -182,7 +181,7 @@ function expand_params(params::PARAM, groups, sites, ngroups_k) where PARAM
     for i in 1:nparams
         param = getfield(params,i)
         name = param.name
-        if param.components == groups.components && !(param isa AssocParam)
+        if param.components == groups.components && !(param isa AssocParam) && !(param isa Clapeyron.MixedGCSegmentParam)
             push!(newparams,param)
         elseif param isa Clapeyron.SingleParameter
             values = zeros(Float64,ngroups)
@@ -265,7 +264,7 @@ function expand_params(params::PARAM, groups, sites, ngroups_k) where PARAM
                                             param.sources))
             end
         elseif param isa Clapeyron.MixedGCSegmentParam
-            TT = Clapeyron.valtype(param)
+            TT = typeof(param.values[1][1])
             push!(newparams,Clapeyron.MixedGCSegmentParam{TT}(groups))
         end
     end
