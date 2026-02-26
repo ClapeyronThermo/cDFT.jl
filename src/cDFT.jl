@@ -13,6 +13,7 @@ import Clapeyron.Solvers
 using Clapeyron: SingleComp, PeTSModel, epsilon_LorentzBerthelot!
 using GCIdentifier, ChemicalIdentifiers
 using StaticArrays
+using SIAMFANLEquations
 
 #if !isdefined(Clapeyron,Symbol("@sum"))
     include("utils/sum.jl")

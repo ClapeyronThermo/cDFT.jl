@@ -51,12 +51,15 @@ function converge!(system::AbstractcDFTSystem,ρ)
 
     ln_GX0 = copy(ρ)
     f(ln_x) = obj(system, ln_GX0, ln_x)
+    f!(ln_G, ln_x) = obj(system, ln_G, ln_x)
 
     ln_X0 = vec(log.(ρ))
 
-    ρ_new = Solvers.fixpoint(f,ln_X0, method; rtol = 1e-4, max_iters = 100000)
+    ρ_new = SIAMFANLEquations.aasol(f!,ln_X0, 0, zeros(length(ln_X0),4); beta=1e-3, rtol=1e-1, atol=1e-1, maxit=1000)
+    ρ_new = SIAMFANLEquations.aasol(f!,ρ_new.solution, 5, zeros(length(ln_X0),14); beta=1e-3, rtol=1e-4, atol=1e-4, maxit=1000)
+    # println(ρ_new.history)
 
-    ρ .= reshape(exp.(ρ_new),(ngrid...,nbeads))
+    ρ .= reshape(exp.(ρ_new.solution),(ngrid...,nbeads))
 end
 
 export converge!
