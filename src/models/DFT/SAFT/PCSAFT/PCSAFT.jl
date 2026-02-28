@@ -62,20 +62,20 @@ function get_propagator(model::PCSAFTModel, species::DFTSpecies, structure::DFTS
 end
 
 
-function f_res(system::DFTSystem, model::PCSAFTModel,n)
+function f_res(system::Union{DFTSystem,ElectrolyteDFTSystem}, model::PCSAFTModel,n)
     nd = dimension(system)
     n1,n2,n3,n4,n5,n6,n7 = @view(n[1,:]),@view(n[2,:]),@view(n[3,:]),@view(n[4:4+nd-1,:]),@view(n[4+nd,:]),@view(n[5+nd,:]),@view(n[6+nd,:])
     return f_hs(system,model,n2,n3,n4) + f_hc(system,model,n1,n5,n6) + f_disp(system,model,n7) + f_assoc(system,model,n2,n3,n4)
 end
 
-function f_hc(system::DFTSystem, model::PCSAFTModel,n)
+function f_hc(system::Union{DFTSystem,ElectrolyteDFTSystem}, model::PCSAFTModel,n)
     n1 = @view(n[1,:])
     n5 = @view(n[5,:])
     n6 = @view(n[6,:])
     return f_hc(system,model,n1,n5,n6)
 end
 
-function f_hc(system::DFTSystem, model::PCSAFTModel, ρhc, ρ̄hc, _λ)
+function f_hc(system::Union{DFTSystem,ElectrolyteDFTSystem}, model::PCSAFTModel, ρhc, ρ̄hc, _λ)
     species = system.species
     HSd = species.size
     m = model.params.segment.values
@@ -100,7 +100,7 @@ function f_hc(system::DFTSystem, model::PCSAFTModel, ρhc, ρ̄hc, _λ)
     return ∑f
 end
 
-function f_disp(system::DFTSystem, model::PCSAFTModel, ρ̄)
+function f_disp(system::Union{DFTSystem,ElectrolyteDFTSystem}, model::PCSAFTModel, ρ̄)
     species = system.species
     T = system.structure.conditions[2]
     ψ = 1.3862

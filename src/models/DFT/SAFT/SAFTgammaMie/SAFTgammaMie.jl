@@ -77,7 +77,7 @@ end
 
 
 
-function expand_model(model::MODEL) where MODEL <: SAFTgammaMieModel
+function expand_model(model::SAFTgammaMieModel) 
     
     nspecies = length(model)
 
@@ -94,8 +94,7 @@ function expand_model(model::MODEL) where MODEL <: SAFTgammaMieModel
     eosparams = expand_params(oldparams, grouparam, siteparams, ngroups_k)
 
     #compute mixed segment
-    Clapeyron.mix_segment!(eosparams.mixed_segment,grouparam,eosparams.shapefactor.values,eosparams.segment.values)
-    
+    Clapeyron.mix_segment!(eosparams.mixed_segment,grouparam,eosparams.shapefactor.values,eosparams.segment.values).values
     vreosparam_type = typeof(model.vrmodel.params)
     vreosparams = vreosparam_type(model.vrmodel.params.Mw,
                                   model.vrmodel.params.segment,
@@ -114,7 +113,7 @@ function expand_model(model::MODEL) where MODEL <: SAFTgammaMieModel
                         model.vrmodel.references
                         )
 
-    return new_model = MODEL(model.components,
+    return new_model = SAFTgammaMie(model.components,
                                 grouparam,
                                 siteparams,
                                 eosparams,

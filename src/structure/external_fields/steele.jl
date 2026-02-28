@@ -66,3 +66,11 @@ end
 function evaluate_external_field(structure::DFTStructure,external_field::SteeleModel,model::SAFTModel,ρ::Array{Float64},z)
     return evaluate_external_field(structure,external_field,model,z)
 end
+
+function evaluate_external_field(structure::DFTStructure,external_field::SteeleModel,model::ElectrolyteModel,ρ::Array{Float64},z)
+    return evaluate_external_field(structure,external_field,model.neutralmodel,ρ,z)
+end
+
+function evaluate_external_field(structure::DFTStructure,external_field::SteeleModel,model::ElectrolyteModel,z)
+    return evaluate_external_field(structure,external_field,model.neutralmodel,z)
+end

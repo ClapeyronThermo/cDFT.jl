@@ -31,7 +31,7 @@ function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTS
 end
 
 
-function propagate(system::DFTSystem, propagate::TangentHSPropagator, δf_res, ρ)
+function propagate(system::AbstractcDFTSystem, propagate::TangentHSPropagator, δf_res, ρ)
     nd = dimension(system)
     model = system.model
     structure = system.structure

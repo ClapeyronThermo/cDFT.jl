@@ -2,14 +2,17 @@ include("external_fields/steele.jl")
 
 function evaluate_external_field(system::AbstractcDFTSystem, ρ, z)
     structure = system.structure
+
+    Vext = zeros(Float64, structure.ngrid..., length(system.model))
     
-    if !hasfield(typeof(structure),:external_field)
-        ngrid = structure.ngrid
-        nbeads = length(ρ)
-        return zeros(ngrid...,nbeads)
-    else
-        return evaluate_external_field(structure, structure.external_field, system.model, ρ, z)
+    if hasfield(typeof(system),:external_field)
+        external_field = system.external_field
+        Vext += evaluate_external_field(structure, external_field, system.model, ρ, z)
+    end 
+    if hasfield(typeof(structure),:external_field)
+            Vext += evaluate_external_field(structure, structure.external_field, system.model, ρ, z)
     end
+    return Vext
 end
 
 function initialize_profiles(model::EoSModel,structure::ExternalField1DCart, species)

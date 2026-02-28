@@ -111,7 +111,44 @@ function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStruc
     return DGTSystem(model, gradient, species, structure, typed_fields, options, chunksize)
 end
 
-const AbstractcDFTSystem = Union{DFTSystem, DGTSystem}
+"""
+    DFTSystem(model::ElectrolyteModel, species::DFTSpecies, structure::DFTStructure, fields::Vector{DFTField}, options::DFTOptions)
+
+Generic struct which includes all the information needed to perform DFT / SCFT calculations:
+- `model`: A model object that should be obtained from Clapeyron.jl, and contains all information regarding species parameters.
+- `species`: A `DFTSpecies` object which is model-dependent. Typically contains the number of beads in each species and the bead sizes.
+- `structure`: A `DFTStructure` object which provides information regarding the geometry (including bounds) and conditions (n, p, T) of the DFT calculations.
+- `fields`: A vector of `DFTField`s for each field used in the DFT-calculation. This is typically model-dependent. 
+- `options`: A `DFTOptions` object which contains information regarding the convergence settings and the devices used as part of the DFT calculation.
+Example usage:
+```julia
+julia> model = PCSAFT(["water"])
+
+julia> L = length_scale(model)
+
+julia> structure = Uniform1DCart((1e5, 298.15, [1.]), [0, 20L], 201)
+
+julia> system = DFTSystem(model, structure)
+DFTSystem
+  model: PCSAFT{BasicIdeal, Float64}
+         with 1 component: "water"
+  structure: Uniform1DCart
+  device: CPU
+```
+"""
+struct ElectrolyteDFTSystem{M<:ElectrolyteModel,S<:DFTSpecies,iS<:DFTSpecies,T<:DFTStructure,F,P<:DFTPropagator,E,O<:DFTOptions,C}
+    model::M
+    species::S
+    ion_species::iS
+    structure::T
+    fields::F
+    propagator::P
+    external_field::E
+    options::O
+    chunksize::Val{C}
+end
+
+const AbstractcDFTSystem = Union{DFTSystem, DGTSystem, ElectrolyteDFTSystem}
 
 dimension(::Type{Union{DFTSystem{<:Any,<:Any,T},DGTSystem{<:Any,<:Any,T}}}) where T = dimension(T) 
 dimension(x::AbstractcDFTSystem) = dimension(x.structure)

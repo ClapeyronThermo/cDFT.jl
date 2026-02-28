@@ -5,13 +5,16 @@ using Plots
 import Plots: Colors
 
 
-function Plots.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, profiles; x_units=:normalized, y_units=:normalized)
+function Plots.plot(system::cDFT.AbstractcDFTSystem, profiles; x_units=:normalized, y_units=:normalized)
     return Plots.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units)
 end
 
-function Plots.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure1DCart, profiles; x_units=:normalized, y_units=:mass)
+function Plots.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure1DCart, profiles; x_units=:normalized, y_units=:mass)
     structure = system.structure
     model = system.model
+    if model isa cDFT.ElectrolyteModel
+        model = model.neutralmodel
+    end
     species = system.species
     nb = length(profiles)
 

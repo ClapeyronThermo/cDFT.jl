@@ -44,6 +44,15 @@ function converge!(system::AbstractcDFTSystem,ρ)
                 end
             end
         end
+
+        psi_c = find_ψ_const(system.structure, system.external_field, system.model, exp.(ln_Gx), Z)/k_B/system.structure.conditions[2]
+
+        for i in @comps
+            for k in @chain(i)
+                selectdim(ln_Gx,nd+1,k) .-= psi_c*model.charge[k]
+            end
+        end
+        
         ln_G = vec(ln_Gx)
         
         return ln_G
@@ -56,7 +65,7 @@ function converge!(system::AbstractcDFTSystem,ρ)
     ln_X0 = vec(log.(ρ))
 
     ρ_new = SIAMFANLEquations.aasol(f!,ln_X0, 0, zeros(length(ln_X0),4); beta=1e-3, rtol=1e-1, atol=1e-1, maxit=1000)
-    ρ_new = SIAMFANLEquations.aasol(f!,ρ_new.solution, 5, zeros(length(ln_X0),14); beta=1e-3, rtol=1e-4, atol=1e-4, maxit=1000)
+    ρ_new = SIAMFANLEquations.aasol(f!,ρ_new.solution, 5, zeros(length(ln_X0),14); beta=1e-3, rtol=1e-8, atol=1e-8, maxit=10000)
     # println(ρ_new.history)
 
     ρ .= reshape(exp.(ρ_new.solution),(ngrid...,nbeads))
