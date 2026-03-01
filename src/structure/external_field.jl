@@ -2,8 +2,11 @@ include("external_fields/steele.jl")
 
 function evaluate_external_field(system::AbstractcDFTSystem, ρ, z)
     structure = system.structure
+    ngrid = structure.ngrid
+    nd = length(ngrid)
+    nb = size(ρ,nd+1)
 
-    Vext = zeros(Float64, structure.ngrid..., length(system.model))
+    Vext = zeros(Float64, ngrid..., nb)
     
     if hasfield(typeof(system),:external_field)
         external_field = system.external_field

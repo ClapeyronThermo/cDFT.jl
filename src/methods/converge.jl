@@ -27,8 +27,9 @@ function converge!(system::AbstractcDFTSystem,ρ)
         ρ .= exp.(ln_x)
 
         δfδρ_res = δFδρ_res(system, ρ)
-        Gcα, Gp = propagate(system, δfδρ_res, ρ)
         Vext = evaluate_external_field(system, ρ, Z)
+        δfδρ_res .+= Vext
+        Gcα, Gp = propagate(system, δfδρ_res, ρ)
         # println(δfδρ_res)
         # println(species.chempot_res)
         for i in @comps
@@ -40,20 +41,25 @@ function converge!(system::AbstractcDFTSystem,ρ)
                 end
 
                 for j in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
-                    ln_Gx[j...,k] = log(species.bulk_density[i]) + (species.chempot_res[i] - δfδρ_res[j...,k]) + log(Gp[j...,k]) + sum(log.(Gcα[j...,k,α])) - Vext[j...,k]
+                    ln_Gx[j...,k] = log(species.bulk_density[i]) + (species.chempot_res[i] - δfδρ_res[j...,k]) + log(Gp[j...,k]) + sum(log.(Gcα[j...,k,α]))
                 end
             end
         end
 
-        psi_c = find_ψ_const(system.structure, system.external_field, system.model, exp.(ln_Gx), Z)/k_B/system.structure.conditions[2]
-
-        for i in @comps
-            for k in @chain(i)
-                selectdim(ln_Gx,nd+1,k) .-= psi_c*model.charge[k]
+        if hasfield(typeof(system), :external_field)
+            psi_c = find_ψ_const(system.structure, system.external_field, system.model, exp.(ln_Gx), Z)/k_B/system.structure.conditions[2]
+            for i in @comps
+                for k in @chain(i)
+                    selectdim(ln_Gx,nd+1,k) .-= psi_c*model.charge[k]
+                end
             end
         end
+
+        
         
         ln_G = vec(ln_Gx)
+        # If any < -100, set to -100 to avoid overflow
+        ln_G[ln_G .< -100] .= -100
         
         return ln_G
     end
@@ -65,7 +71,7 @@ function converge!(system::AbstractcDFTSystem,ρ)
     ln_X0 = vec(log.(ρ))
 
     ρ_new = SIAMFANLEquations.aasol(f!,ln_X0, 0, zeros(length(ln_X0),4); beta=1e-3, rtol=1e-1, atol=1e-1, maxit=1000)
-    ρ_new = SIAMFANLEquations.aasol(f!,ρ_new.solution, 5, zeros(length(ln_X0),14); beta=1e-3, rtol=1e-8, atol=1e-8, maxit=10000)
+    ρ_new = SIAMFANLEquations.aasol(f!,ρ_new.solution, 5, zeros(length(ln_X0),14); beta=1e-3, rtol=1e-4, atol=1e-4, maxit=10000)
     # println(ρ_new.history)
 
     ρ .= reshape(exp.(ρ_new.solution),(ngrid...,nbeads))
