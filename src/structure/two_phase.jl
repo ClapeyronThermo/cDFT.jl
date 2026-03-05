@@ -1,4 +1,4 @@
-function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species)
+function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species, device)
     lb,ub = bounds(structure,1)
     H = ub-lb
     mb = 0.5*(lb + ub)
@@ -12,7 +12,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species)
     z = uniform_range(structure) |> collect
     L = length_scale(model)
 
-    ρ = zeros(ngrid...,sum(species.nbeads))
+    ρ = allocate(device, Float64, ngrid..., sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
         coef = (2.4728-2.3625*T/Tc)*H/L
@@ -26,7 +26,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species)
     return ρ
 end
 
-function initialize_profiles(model::EoSModel,structure::TwoPhase2DLamCart, species)
+function initialize_profiles(model::EoSModel,structure::TwoPhase2DLamCart, species, device)
     lb,ub = bounds(structure,1)
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
@@ -45,21 +45,21 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase2DLamCart, speci
   
     L = length_scale(model)
 
-    ρ = zeros(ngrid...,sum(species.nbeads))
+    ρ = allocate(device, Float64, ngrid..., sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
         coef = (2.4728-2.3625*T/Tc)/L
         for j in @chain(i)
             ρ_points = @. tanh_prof(X,ρ1[i],ρ2[i],(ub/4+3*lb/4),coef)*(X<=mb) +
                           tanh_prof(X,ρ2[i],ρ1[i],(3*ub/4+lb/4),coef)*(X>mb)
-            ρ[:,:,j] = ρ_points
+            selectdim(ρ,nd+1,j) .= ρ_points
         end
     end
     return ρ
 end
 
 
-function initialize_profiles(model::EoSModel,structure::TwoPhase3DLamCart, species)
+function initialize_profiles(model::EoSModel,structure::TwoPhase3DLamCart, species, device)
     lb,ub = bounds(structure,1)
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
@@ -79,7 +79,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DLamCart, speci
     
     L = length_scale(model)
 
-    ρ = zeros(ngrid...,sum(species.nbeads))
+    ρ = allocate(device, Float64, ngrid..., sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
         coef = (2.4728-2.3625*T/Tc)/L
@@ -93,7 +93,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DLamCart, speci
     return ρ
 end
 
-function initialize_profiles(model::EoSModel,structure::TwoPhase2DHexCart, species)
+function initialize_profiles(model::EoSModel,structure::TwoPhase2DHexCart, species, device)
     lb,ub = bounds(structure,1)
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
@@ -123,19 +123,19 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase2DHexCart, speci
     H = ub-lb
     R = H/sqrt(2π)
 
-    ρ = zeros(ngrid...,sum(species.nbeads))
+    ρ = allocate(device, Float64, ngrid...,sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
         coef = (2.4728-2.3625*T/Tc)/L
         for j in @chain(i)
             ρ_points = @. tanh_prof(r,ρ1[i],ρ2[i],R,coef)
-            ρ[:,:,j] = ρ_points
+            selectdim(ρ,nd+1,j) .= ρ_points
         end
     end
     return ρ
 end
 
-function initialize_profiles(model::EoSModel,structure::TwoPhase3DHexCart, species)
+function initialize_profiles(model::EoSModel,structure::TwoPhase3DHexCart, species, device)
     lb,ub = bounds(structure,1)
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
@@ -165,19 +165,19 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DHexCart, speci
     H = ub-lb
     R = H/sqrt(2π)
 
-    ρ = zeros(ngrid...,sum(species.nbeads))
+    ρ = allocate(device, Float64, ngrid...,sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
         coef = (2.4728-2.3625*T/Tc)/L
         for j in @chain(i)
             ρ_points = @. tanh_prof(r,ρ1[i],ρ2[i],R,coef)
-            ρ[:,:,:,j] = ρ_points
+            selectdim(ρ,nd+1,j) .= ρ_points
         end
     end
     return ρ
 end
 
-function initialize_profiles(model::EoSModel,structure::TwoPhase3DSphrCart, species)
+function initialize_profiles(model::EoSModel,structure::TwoPhase3DSphrCart, species, device)
     lb,ub = bounds(structure,1)
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
@@ -214,13 +214,13 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DSphrCart, spec
     H = ub-lb
     R = H/cbrt(8π/3)
 
-    ρ = zeros(ngrid...,sum(species.nbeads))
+    ρ = allocate(device, Float64, ngrid...,sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
         coef = (2.4728-2.3625*T/Tc)/L
         for j in @chain(i)
             ρ_points = @. tanh_prof(r,ρ1[i],ρ2[i],R,coef)
-            ρ[:,:,:,j] = ρ_points
+            selectdim(ρ,nd+1,j) .= ρ_points
         end
     end
     return ρ

@@ -40,32 +40,27 @@ Obtain the functional derivatives of the residual free energy of the system for 
 
 The output is a 2D array with the dimensions `(ngrid,nb)`, where `ngrid` is the number of grid points, and `nb` is the number of beads in the model. The values are normalised by `kB*T`.
 """
-function δFδρ_res(system::AbstractcDFTSystem, ρ)
+
+function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_buf, in_buf, out_buf, P, iP, f, diff_cache)
     model = system.model
-    fields = system.fields
-    
-    nf = length(fields)
+    backend = system.options.device
     ngrid = system.structure.ngrid
-    nd = dimension(system)
-    nb = size(ρ,nd+1)
+    NF      = size(n, ndims(n)-1)
+    NB      = size(n, ndims(n))
+    ND      = length(ngrid)
 
-    n = evaluate_field(system,ρ)
-    nf = length_fields(system)
-    # @assert nf == length(system.fields) "define length_fields(model::EoSModel) = nf"
-    f(x) = f_res(system,model,x)
-    idx_first = ntuple(Returns(1),nd)
-    n_first = @view(n[idx_first...,:,:])
+    evaluate_field!(system, ρ, fft_buf, in_buf, out_buf, P, iP)
 
-    chunksize = ForwardDiff.Chunk(system)
-    cache = [ForwardDiff.GradientConfig(f,n_first, chunksize) for i in 1:Threads.nthreads()]
+    copyto!(n, Adapt.adapt(typeof(n), fft_buf))
 
-    δf = zeros(ngrid...,nf,nb)
     Threads.@threads for kk in CartesianIndices(ngrid)
         k = Tuple(kk)
-        ForwardDiff.gradient!(@view(δf[k...,:,:]),f,@view(n[k...,:,:]),cache[Threads.threadid()])
+        ForwardDiff.gradient!(@view(δf[k...,:,:]),f,@view(n[k...,:,:]),diff_cache[Threads.threadid()-1])
     end
-    δFδρ_res = integrate_field(system, δf)
-    return δFδρ_res
+
+    copyto!(fft_buf, Adapt.adapt(typeof(fft_buf), δf))
+
+    integrate_field!(system, fft_buf, δfδρ_res, in_buf, P, iP)
 end
 
 function length_scales(model::EoSModel)

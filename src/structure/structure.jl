@@ -27,42 +27,28 @@ julia> profiles = initialize_profiles(system)
 ```
 """
 function initialize_profiles(system::AbstractcDFTSystem)
-    return initialize_profiles(system.model,system.structure,system.species)
+    ρ = initialize_profiles(system.model,system.structure,system.species,system.options.device)
+    if system.external_field == nothing
+        return ρ
+    else
+        for i in system.external_field
+            if !(i isa ElectrostaticPotentialModel)
+                 initialize_profiles!(system, i, ρ)
+            end
+        end
+        return ρ
+    end
 end
 
-function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species)
+function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species, device)
     ngrid = structure.ngrid
     ρbulk = structure.ρbulk
 
-    ρ = zeros(ngrid...,sum(species.nbeads))
+    ρ = allocate(device, Float64, ngrid..., sum(species.nbeads))
 
     for i in @comps
         for j in @chain(i)
             ρ[:,j] = ρbulk[i]*ones(ngrid)
-        end
-    end
-    return ρ
-end
-
-function initialize_profiles(model::EoSModel,structure::Uniform1DSphr,species)
-    bounds = structure.bounds
-    ngrid = structure.ngrid
-    (p, T, x) = structure.conditions
-
-    z = uniform_range(structure) |> collect
-    L = length_scale(model)
-
-    vol = Clapeyron.volume(model,p,T,x)
-
-    ρl = x./vol
-
-    ρ = DensityProfile[]
-    for i in @comps
-        nbeads = species.nbeads[i]
-        for j in 1:nbeads
-            boundary_conditions = (FreeBoundary(ρl[i],-1), FixedBoundary(ρl[i],1))
-            ρ_points = ρl[i]*ones(ngrid)
-            push!(ρ,DensityProfile(ρ_points,z,bounds,boundary_conditions))
         end
     end
     return ρ

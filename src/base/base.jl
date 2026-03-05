@@ -35,24 +35,46 @@ DFTSystem
   device: CPU
 ```
 """
-struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,P<:DFTPropagator,O<:DFTOptions,C}
+struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,EF,P<:DFTPropagator,O<:DFTOptions,C}
     model::M
     species::S
     structure::T
     fields::F
+    external_field::EF
     propagator::P
     options::O
     chunksize::Val{C}
 end
 
-function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
+function DFTSystem(model::EoSModel, structure::DFTStructure, external_field::Vector{ExternalFieldModel}, options::DFTOptions = DFTOptions())
     species = get_species(model, structure)
-    fields = get_fields(model, species, structure)
+    fields = get_fields(model, species, structure, options.device)
+    typed_fields = tuple(fields...)
+    propagator = get_propagator(model, species, structure, options.device)
+    NF = compute_field_len(fields,dimension(structure))
+    chunksize = Val{NF}()
+    return DFTSystem(model, species, structure, typed_fields, external_field, propagator, options,chunksize)
+end
+
+function DFTSystem(model::EoSModel, structure::DFTStructure, external_field::ExternalFieldModel, options::DFTOptions = DFTOptions())
+    species = get_species(model, structure)
+    fields = get_fields(model, species, structure, options.device)
     typed_fields = tuple(fields...)
     propagator = get_propagator(model, species, structure)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, typed_fields, propagator, options,chunksize)
+    return DFTSystem(model, species, structure, typed_fields, [external_field], propagator, options,chunksize)
+end
+
+
+function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
+    species = get_species(model, structure)
+    fields = get_fields(model, species, structure, options.device)
+    typed_fields = tuple(fields...)
+    propagator = get_propagator(model, species, structure)
+    NF = compute_field_len(fields,dimension(structure))
+    chunksize = Val{NF}()
+    return DFTSystem(model, species, structure, typed_fields, nothing, propagator, options,chunksize)
 end
 
 """
@@ -136,14 +158,14 @@ DFTSystem
   device: CPU
 ```
 """
-struct ElectrolyteDFTSystem{M<:ElectrolyteModel,S<:DFTSpecies,iS<:DFTSpecies,T<:DFTStructure,F,P<:DFTPropagator,E,O<:DFTOptions,C}
+struct ElectrolyteDFTSystem{M<:ElectrolyteModel,S<:DFTSpecies,iS<:DFTSpecies,T<:DFTStructure,F,EF,P<:DFTPropagator,O<:DFTOptions,C}
     model::M
     species::S
     ion_species::iS
     structure::T
     fields::F
+    external_field::EF
     propagator::P
-    external_field::E
     options::O
     chunksize::Val{C}
 end

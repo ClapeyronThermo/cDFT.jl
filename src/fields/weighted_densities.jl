@@ -16,15 +16,15 @@ struct SWeightedDensity{M,P,iP} <: ScalarField
     iplan::iP
 end
 
-function SWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}, ngrid)
+function SWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}, ngrid, backend::Backend)
     
     R = 2π.*width'
     nd = length(ngrid)
 
     if type != :∫ρzdz
-        Ω = zeros(ComplexF64,ngrid...,length(width))
+        Ω = allocate(backend,ComplexF64,ngrid...,length(width))
     else
-        Ω = zeros(ComplexF64,ngrid...,length(ngrid),length(width))
+        Ω = allocate(backend,ComplexF64,ngrid...,length(ngrid),length(width))
     end
 
     if type == :∫ρdz
@@ -48,36 +48,35 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
         error("Invalid type of field")
     end
 
-    plan = plan_fft(selectdim(Ω,nd+1,1), 1:length(ngrid))
+    tmp = complex(Array(selectdim(Ω,nd+1,1)))
+    plan = plan_fft!(tmp, 1:length(ngrid); num_threads=Threads.nthreads())
     iplan = inv(plan)
     return SWeightedDensity(type,width,Ω,plan,iplan)
 end
 
-function evaluate_field(system::AbstractcDFTSystem,field::SWeightedDensity, ρ)
-    structure = system.structure
-    ngrid = structure.ngrid
+function evaluate_field!(system::AbstractcDFTSystem,field::SWeightedDensity, ρ, n, in_buf, out_buf, P, iP)
+    backend = system.options.device
+    ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(ρ,nd+1)
 
     if field.type == :ρ
-        return ρ.*N_A
+        @. n = ρ*N_A
+        return n
     end
 
     map = field.map
-    P = field.plan
-    iP = field.iplan
-    n = zeros(eltype(map),ngrid...,nb)
-
     for i in 1:nb
         ni = selectdim(n,nd+1,i)
-        matmul!(ni,P,selectdim(ρ,nd+1,i))
-        elmul!(ni,ni,selectdim(map,nd+1,i))
-        matmul!(ni,iP,ni)
+
+        convolve!(ni, selectdim(ρ, nd+1, i), selectdim(map,nd+1,i), P, iP, in_buf)
     end
-    return real.(n).*N_A
+    synchronize(backend)
+    @. n = real(n)*N_A
 end
 
-function integrate_field(system::AbstractcDFTSystem,field::SWeightedDensity,profile)
+function integrate_field!(system::AbstractcDFTSystem, field::SWeightedDensity, profile, δfδρ_res, in_buf, P, iP)
+    backend = system.options.device
     type = field.type
     ngrid = system.structure.ngrid
     nd = dimension(system)
@@ -85,24 +84,21 @@ function integrate_field(system::AbstractcDFTSystem,field::SWeightedDensity,prof
 
 
     if type == :ρ
+        δfδρ_res .= profile
         return profile
     # else
     #     error("Invalid type of field")
     end
 
     map = field.map 
-    P = field.plan
-    iP = field.iplan
-
-    ∫field = zeros(eltype(map),ngrid...,nb)
 
     for i in 1:nb
-        ∫fieldi = selectdim(∫field,nd+1,i)
-        matmul!(∫fieldi,P,selectdim(profile,nd+1,i))
-        elmul!(∫fieldi,∫fieldi,selectdim(map,nd+1,i))
-        matmul!(∫fieldi,iP,∫fieldi)
+        convolve!(in_buf, selectdim(profile, nd+1, i), selectdim(map,nd+1,i), P, iP, in_buf)
+
+        selectdim(δfδρ_res, nd+1, i) .+= in_buf
     end
-    return real.(∫field)
+    synchronize(backend)
+
 end
 
 """
@@ -123,16 +119,16 @@ struct VWeightedDensity{M,P,iP} <: VectorField
     iplan::iP
 end
 
-function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}, ngrid)
+function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}, ngrid, backend::Backend)
     
     R = 2π.*width'
     nd = length(ngrid)
 
-    # if type != :∫ρzdz
-    #     Ω = zeros(ComplexF64,ngrid...,length(width))
-    # else
-    Ω = zeros(ComplexF64,ngrid...,length(ngrid),length(width))
-    # end
+    if type != :∫ρzdz
+        Ω = allocate(backend,ComplexF64,ngrid...,length(width))
+    else
+        Ω = allocate(backend,ComplexF64,ngrid...,length(ngrid),length(width))
+    end
 
     if type == :∇ρ
         for kk in CartesianIndices(ngrid)
@@ -163,58 +159,49 @@ function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
         error("Invalid type of field")
     end
 
-    plan = plan_fft(selectdim(selectdim(Ω,nd+1,1),nd+1,1), 1:length(ngrid))
+    tmp = complex(Array(selectdim(selectdim(Ω,nd+1,1),nd+1,1)))
+    plan = plan_fft!(tmp, 1:length(ngrid); num_threads=Threads.nthreads())
     iplan = inv(plan)
     return VWeightedDensity(type,width,Ω,plan,iplan)
 end
 
-function evaluate_field(system::AbstractcDFTSystem,field::VWeightedDensity, ρ)
-    structure = system.structure
-    ngrid = structure.ngrid
+function evaluate_field!(system::AbstractcDFTSystem,field::VWeightedDensity, ρ, nV, in_buf, out_buf, P, iP)
+    backend = system.options.device
+
+    ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(ρ,nd+1)
 
-    if field.type == :ρ
-        return ρ.*N_A
-    end
-
     map = field.map
-    P = field.plan
-    iP = field.iplan
-    nV = zeros(eltype(map),ngrid...,nd,nb)
+    # @show eltype(nV)
 
     for i in 1:nb
         for j in 1:nd
             nVij = selectdim(selectdim(nV,nd+1,j),nd+1,i)
-            matmul!(nVij,P,selectdim(ρ,nd+1,i))
-            elmul!(nVij,nVij,selectdim(selectdim(map,nd+1,j),nd+1,i))
-            matmul!(nVij,iP,nVij)
+            mapij = selectdim(selectdim(map,nd+1,j),nd+1,i)
+
+            convolve!(nVij, selectdim(ρ, nd+1, i), mapij, P, iP, in_buf)
         end
     end
-    return real.(nV).*N_A
+    synchronize(backend)
+    @. nV = real(nV)*N_A
 end
 
-function integrate_field(system::AbstractcDFTSystem,field::VWeightedDensity,profile)
+function integrate_field!(system::AbstractcDFTSystem,field::VWeightedDensity, profile, δfδρ_res, in_buf, P, iP)
+    backend = system.options.device
     type = field.type
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(profile,nd+2)
 
     map = field.map 
-    P = field.plan
-    iP = field.iplan
-
-    ∫field = zeros(eltype(map),ngrid...,nd,nb)
-    # println(size(nV))
 
     for i in 1:nb
         for j in 1:nd
-            ∫fieldij = selectdim(selectdim(∫field,nd+1,j),nd+1,i)
-            matmul!(∫fieldij,P,selectdim(selectdim(profile,nd+1,j),nd+1,i))
-            elmul!(∫fieldij,∫fieldij,selectdim(selectdim(map,nd+1,j),nd+1,i))
-            matmul!(∫fieldij,iP,∫fieldij)
+            convolve!(in_buf, selectdim(selectdim(profile,nd+1,j),nd+1,i), selectdim(selectdim(map,nd+1,j),nd+1,i), P, iP, in_buf)
+
+            selectdim(δfδρ_res, nd+1, i) .-= in_buf
         end
-        # ∫field[:,i] = prefactor*real.(ifft(fft(profile[:,i]).*map[:,i]))
     end
-    return dropdims(sum(real.(∫field),dims=nd+1);dims=nd+1).*-1
+    synchronize(backend)
 end

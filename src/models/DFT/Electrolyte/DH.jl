@@ -28,7 +28,7 @@ end
 
 For a given `model`, obtain all of the fields that will be needed to perform the DFT calculation. This function should return a vector of `DFTField`s.
 """
-function get_fields(ionmodel::DHModel, species::DFTSpecies, structure::DFTStructure)
+function get_fields(ionmodel::DHModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
     (p,T) = structure.conditions
     ρbulk = structure.ρbulk
     ngrid = structure.ngrid
@@ -36,7 +36,7 @@ function get_fields(ionmodel::DHModel, species::DFTSpecies, structure::DFTStruct
     ω = structure_ω(structure)
     κ = screening_length(ionmodel, 1., T, ρbulk, Z, dielectric_constant(ionmodel.RSPmodel, 1., T, ρbulk))
     d = species.size
-    return [SWeightedDensity(:∫ρdz,d/2 .+ 1/κ,ω,ngrid)]
+    return [SWeightedDensity(:∫ρdz,d/2 .+ 1/κ,ω,ngrid,device)]
 end
 
 

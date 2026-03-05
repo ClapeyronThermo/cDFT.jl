@@ -17,22 +17,29 @@ function converge!(system::AbstractcDFTSystem,ρ)
     nbeads = size(ρ,nd+1)
     species = system.species
     model = system.model
-    method = system.options.solver
-    Z = get_coords(system.structure)
+    device = system.options.device
+    
+    δfδρ_res, model_cache, external_field_cache, propagator_cache = cDFT.preallocate(system, ρ)
 
     function obj(system,ln_G,ln_x)
         ln_x = reshape(ln_x, (ngrid..., nbeads))
         ln_Gx = reshape(ln_G, (ngrid..., nbeads))
+
+        ln_x = Adapt.adapt(device, ln_x)
+        ln_Gx = Adapt.adapt(device, ln_Gx)
         
         ρ .= exp.(ln_x)
+         
 
-        δfδρ_res = δFδρ_res(system, ρ)
-        Vext = evaluate_external_field(system, ρ, Z)
-        δfδρ_res .+= Vext
-        Gcα, Gp = propagate(system, δfδρ_res, ρ)
-        # println(δfδρ_res)
-        # println(species.chempot_res)
+        δFδρ_res!(system, ρ, δfδρ_res, model_cache...)
+        
+        evaluate_external_field!(system, ρ, δfδρ_res, external_field_cache)
+        
+        propagate!(system, ρ, δfδρ_res, propagator_cache)
+
         for i in @comps
+            chem_pot_res_dens_i = log(species.bulk_density[i]) .+ 
+                                            species.chempot_res[i]
             for k in @chain(i)
                 if system.species.nbeads[i] != 1
                     α = findall(model.groups.n_intergroups[i][k,:] .== 1 .&& species.levels .> species.levels[k])
@@ -40,26 +47,28 @@ function converge!(system::AbstractcDFTSystem,ρ)
                     α = k
                 end
 
-                for j in Iterators.product([1:ngrid[i] for i in 1:length(ngrid)]...)
-                    ln_Gx[j...,k] = log(species.bulk_density[i]) + (species.chempot_res[i] - δfδρ_res[j...,k]) + log(Gp[j...,k]) + sum(log.(Gcα[j...,k,α]))
-                end
+                # All operations stay vectorized on GPU
+                selectdim(ln_Gx, nd+1, k) .=  chem_pot_res_dens_i .- 
+                                            selectdim(δfδρ_res, nd+1, k)
             end
         end
 
-        if hasfield(typeof(system), :external_field)
-            psi_c = find_ψ_const(system.structure, system.external_field, system.model, exp.(ln_Gx), Z)/k_B/system.structure.conditions[2]
-            for i in @comps
-                for k in @chain(i)
-                    selectdim(ln_Gx,nd+1,k) .-= psi_c*model.charge[k]
-                end
-            end
-        end
+        # if hasfield(typeof(system), :external_field)
+        #     psi_c = find_ψ_const(system.structure, system.external_field, system.model, exp.(ln_Gx), Z)/k_B/system.structure.conditions[2]
+        #     for i in @comps
+        #         for k in @chain(i)
+        #             selectdim(ln_Gx,nd+1,k) .-= psi_c*model.charge[k]
+        #         end
+        #     end
+        # end
 
-        
+        clamp!(ln_Gx, -100, Inf)
         
         ln_G = vec(ln_Gx)
+        # println(ln_G)
         # If any < -100, set to -100 to avoid overflow
-        ln_G[ln_G .< -100] .= -100
+
+        ln_G = Adapt.adapt(CPU(), ln_G)
         
         return ln_G
     end
@@ -68,13 +77,13 @@ function converge!(system::AbstractcDFTSystem,ρ)
     f(ln_x) = obj(system, ln_GX0, ln_x)
     f!(ln_G, ln_x) = obj(system, ln_G, ln_x)
 
-    ln_X0 = vec(log.(ρ))
+    ln_X0 = Adapt.adapt(CPU(), vec(log.(ρ)))
 
-    ρ_new = SIAMFANLEquations.aasol(f!,ln_X0, 0, zeros(length(ln_X0),4); beta=1e-3, rtol=1e-1, atol=1e-1, maxit=1000)
-    ρ_new = SIAMFANLEquations.aasol(f!,ρ_new.solution, 5, zeros(length(ln_X0),14); beta=1e-3, rtol=1e-4, atol=1e-4, maxit=10000)
+    ρ_new = SIAMFANLEquations.aasol(f!, ln_X0, 0, zeros(length(ln_X0),4); beta=1e-3, rtol=1e-1, atol=1e-1, maxit=1000)
+    ρ_new = SIAMFANLEquations.aasol(f!, ρ_new.solution, 5, zeros(length(ln_X0),14); beta=1e-3, rtol=1e-4, atol=1e-4, maxit=10000)
     # println(ρ_new.history)
 
-    ρ .= reshape(exp.(ρ_new.solution),(ngrid...,nbeads))
+    ρ .= Adapt.adapt(device, reshape(exp.(ρ_new.solution),(ngrid...,nbeads)))
 end
 
 export converge!

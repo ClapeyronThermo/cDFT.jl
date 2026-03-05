@@ -10,7 +10,7 @@ struct SAFTVRMieSpecies <: DFTSpecies
     chempot_res::Vector{Float64}
 end
 
-function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTStructure)
+function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
     nc = length(model)
     ngrid = structure.ngrid
     ω = structure_ω(structure)
@@ -23,13 +23,13 @@ function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTSt
     x = species.size ./ σ
     ψ = @. cbrt(3*C*x^3*(x^-λ_a/(λ_a-3)-x^-λ_r/(λ_r-3)))
 
-    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid),
-            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
-            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,d,ω,ngrid),
-            SWeightedDensity(:∫ρdz,d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
+    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid,device),
+            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,device),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,device),
+            SWeightedDensity(:∫ρz²dz,d,ω,ngrid,device),
+            SWeightedDensity(:∫ρdz,d,ω,ngrid,device),
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device)]
 end
 
 function get_species(model::SAFTVRMieModel,structure::DFTStructure)

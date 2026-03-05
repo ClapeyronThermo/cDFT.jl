@@ -50,7 +50,7 @@ function get_species(model::SAFTgammaMie,structure::DFTStructure)
     return SAFTgammaMieSpecies(nbeads,HSd,levels,ρbulk,μres)
 end
 
-function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure)
+function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
     nb = sum(species.nbeads)
     ngrid = structure.ngrid
     nd = dimension(structure)
@@ -62,13 +62,13 @@ function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DF
     C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
     x = d ./ σ
     ψ = @. cbrt(3*C*(1/(λ_a-3)-1/(λ_r-3)))
-    return [SWeightedDensity(:ρ,zeros(nb),ω,ngrid),
-            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
-            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,d,ω,ngrid),
-            SWeightedDensity(:∫ρdz,d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
+    return [SWeightedDensity(:ρ,zeros(nb),ω,ngrid,device),
+            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,device),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,device),
+            SWeightedDensity(:∫ρz²dz,d,ω,ngrid,device),
+            SWeightedDensity(:∫ρdz,d,ω,ngrid,device),
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device)]
 end
 
 function get_propagator(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure)

@@ -23,19 +23,17 @@ This function will obtain every field used in the system (listed in `system.fiel
 
 This is the macro function that will call `evaluate_field(system,field,profiles)` for each field in the system.
 """
-function evaluate_field(system::AbstractcDFTSystem, ρ)
+function evaluate_field!(system::AbstractcDFTSystem, ρ, n, in_buf, out_buf, P, iP)
     fields = system.fields
-    nf = length_fields(system)
     ngrid = system.structure.ngrid
     nd = length(ngrid)
-    nb = size(ρ,nd+1)
-    n = zeros(Float64,ngrid...,nf,nb)
 
-    foreach(field_indices(system),fields) do k,field        
+    foreach(field_indices(system),fields) do k,field
+        # println("Evaluating field: ",field.type)
         if field isa ScalarField
-            selectdim(n,nd+1,k[1]) .= evaluate_field(system,field,ρ)
+            evaluate_field!(system,field,ρ,selectdim(n,nd+1,k[1]), in_buf, out_buf, P, iP)
         else
-            selectdim(n,nd+1,k) .= evaluate_field(system,field,ρ)
+            evaluate_field!(system,field,ρ,selectdim(n,nd+1,k), in_buf, out_buf, P, iP)
         end
     end  
     
@@ -49,19 +47,16 @@ This function will obtain, for all fields, the functional derivative for each sp
 
 This is the macro function that will call `integrate_field(system,field,δf,ρ)` for each field in the system.
 """
-function integrate_field(system::AbstractcDFTSystem, δf)
+function integrate_field!(system::AbstractcDFTSystem, δf, δfδρ_res, in_buf, P, iP)
     fields = system.fields
     ngrid = system.structure.ngrid
     nd = length(ngrid)
-    nb  = size(δf,nd+2)
-    δFδρ_res = zeros(ngrid...,nb)
 
     foreach(field_indices(system),fields) do k,field
         if field isa ScalarField
-            δFδρ_res .+= integrate_field(system,field,selectdim(δf,nd+1,k[1]))
+            integrate_field!(system,field,selectdim(δf,nd+1,k[1]), δfδρ_res, in_buf, P, iP)
         else
-            δFδρ_res .+= integrate_field(system,field,selectdim(δf,nd+1,k))
+            integrate_field!(system,field,selectdim(δf,nd+1,k), δfδρ_res, in_buf, P, iP)
         end
     end
-    return δFδρ_res
 end

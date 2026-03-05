@@ -1,4 +1,4 @@
-abstract type Device end
+import KernelAbstractions: Backend, get_backend, synchronize
 
 """
     DFTOptions(device::Device, solver::Solvers.AbstractFixPoint)
@@ -20,47 +20,111 @@ struct DFTOptions{D,S}
     solver::S
 end
 
-function DFTOptions(device::Device)
+function DFTOptions(device::Backend)
     return DFTOptions(device,AndersonFixPoint())
 end
 
 function DFTOptions()
-    return DFTOptions(CPU(),AndersonFixPoint())
+    return DFTOptions(CPU(; static=true),AndersonFixPoint())
 end
 
-"""
-    CPU(ncpu::Int, pinning::Bool, device_ids::Vector{Union{Nothing,Int}})
+function preallocate(system, ρ)
+    backend = system.options.device
+    
+    nf = length(system.fields)
+    ngrid = system.structure.ngrid
+    nd = length(ngrid)
+    nb = size(ρ,nd+1)
 
-A struct containing information regarding the CPU settings.
-- `ncpu`: Number of CPU threads used
-- `pinning`: Specifies whether pinning is used or not.
-- `device_ids`: When CPUs are pinned, specify the ID of those threads.
-"""
-struct CPU <: Device 
-    ncpu::Int
-    pinning::Bool
-    device_ids::Vector{Union{Nothing,Int}}
+    δfδρ_res = allocate(backend, Float64, ngrid...,nb)
+
+    cache_model = preallocate_model(system, ρ)
+
+    cache_external = preallocate_external_potential(system, ρ)
+
+    cache_propagator = preallocate_propagator(system, ρ)
+
+    return δfδρ_res, cache_model, cache_external, cache_propagator
 end
 
-struct GPU <: Device
-    ngpu::Int
-    device_ids::Vector{Union{Nothing,Int}}
-end
+function preallocate_model(system, ρ)
+    backend = system.options.device
+    
+    nf = length(system.fields)
+    ngrid = system.structure.ngrid
+    nd = length(ngrid)
+    nb = size(ρ,nd+1)
+    n = allocate(CPU(), Float64, ngrid...,nf,nb)
+    δf = allocate(CPU(), Float64, ngrid...,nf,nb)
 
-function CPU() 
-    ncpu = Threads.nthreads()
-    return CPU(ncpu,false,[])
-end
+    fft_buf = allocate(backend, Float64, ngrid...,nf,nb)
 
-function CPU(ncpu::Int) 
-    if ncpu != Threads.nthreads()
-        throw(error("Number of CPUs requested is not equal to the number of available threads."))
+    in_buf = allocate(backend, ComplexF64, ngrid...)
+    out_buf = similar(in_buf)              #
+
+    tmp = similar(in_buf)
+    if backend isa CPU
+        plan = plan_fft!(tmp, 1:length(ngrid); num_threads=Threads.nthreads())
+    else
+        plan = plan_fft!(tmp, 1:length(ngrid))
     end
-    return CPU(ncpu,false,[])
+
+    iplan = inv(plan)
+
+    f(x) = f_res(system,system.model,x)
+    idx_first = ntuple(Returns(1),nd)
+    n_first = @view(n[idx_first...,:,:])
+
+    chunksize = ForwardDiff.Chunk(system)
+    diff_cache = [ForwardDiff.GradientConfig(f,n_first, chunksize) for i in 1:Threads.nthreads()]
+
+    return n, δf, fft_buf, in_buf, out_buf, plan, iplan, f, diff_cache
 end
 
-function GPU(ngpu::Int,device_ids::Vector{Int}) 
-    throw(error("Please load CUDA.jl to use GPU."))
+function preallocate_external_potential(system, ρ)
+    backend = system.options.device
+    ngrid = system.structure.ngrid
+    nd = length(ngrid)
+
+    cache_external = Any[]
+
+    external_fields = system.external_field
+    if isnothing(external_fields)
+        return nothing
+    end
+    for external_field in external_fields
+    
+        if external_field isa ElectrostaticPotentialModel
+            Vext = similar(selectdim(ρ, nd+1, 1), ComplexF64)
+
+            if backend isa CPU
+                plan = plan_fft!(Vext, 1:length(ngrid); num_threads=Threads.nthreads())
+            else
+                plan = plan_fft!(Vext, 1:length(ngrid))
+            end
+
+            
+            push!(cache_external, (plan, inv(plan), Vext))
+        else
+            # Vext = allocate(backend, Float64, system.structure.ngrid...)
+
+            z = get_coords(system.structure)
+
+            Vext = Adapt.adapt(typeof(ρ),evaluate_external_field!(system.structure, external_field, system.model, ρ, ρ, z))
+
+            push!(cache_external, (z,Vext))
+        end
+    end
+    
+    return cache_external
 end
 
-export CPU, GPU, DFTOptions
+function preallocate_propagator(system, ρ)
+    backend = system.options.device
+    propagtor = system.propagator
+
+    return preallocate_propagator(system, propagtor, ρ, backend)
+end
+
+
+export CPU, DFTOptions

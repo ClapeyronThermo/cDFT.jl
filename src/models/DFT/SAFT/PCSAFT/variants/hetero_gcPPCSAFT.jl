@@ -3,11 +3,21 @@ using Clapeyron: HeterogcPCPSAFT
 function DFTSystem(model::HeterogcPCPSAFT,structure::DFTStructure,options::DFTOptions)
     model = expand_model(model)
     species = get_species(model, structure)
-    fields = get_fields(model, species, structure)
-    propagator = get_propagator(model, species, structure)
+    fields = get_fields(model, species, structure, options.device)
+    propagator = get_propagator(model, species, structure, options.device)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, fields, propagator, options, chunksize)
+    return DFTSystem(model, species, structure, fields, nothing, propagator, options, chunksize)
+end
+
+function DFTSystem(model::HeterogcPCPSAFT,structure::DFTStructure, external_fields,options::DFTOptions)
+    model = expand_model(model)
+    species = get_species(model, structure)
+    fields = get_fields(model, species, structure, options.device)
+    propagator = get_propagator(model, species, structure, options.device)
+    NF = compute_field_len(fields,dimension(structure))
+    chunksize = Val{NF}()
+    return DFTSystem(model, species, structure, fields, external_fields, propagator, options, chunksize)
 end
 
 struct gcPCPSAFTSpecies <: DFTSpecies
@@ -31,7 +41,7 @@ function get_species(model::HeterogcPCPSAFT,structure::DFTStructure)
 
     for i in @comps
         i_groups = model.groups.i_groups[i]
-        bond_mat = Bool.(model.groups.n_intergroups[i])
+        bond_mat = Int.(model.groups.n_intergroups[i]) .> 0
         nbonds = sum(bond_mat,dims=2)[:]
         is_leaf = nbonds .== 1
         i_root = i_groups[findfirst(nbonds[i_groups] .== maximum(nbonds[i_groups]))]
@@ -50,23 +60,23 @@ function get_species(model::HeterogcPCPSAFT,structure::DFTStructure)
     return gcPCPSAFTSpecies(nbeads,HSd,levels,structure.ρbulk,μres)
 end
 
-function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure)
+function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure, backend::Backend)
     nb = sum(species.nbeads)
     ngrid = structure.ngrid
     ω = structure_ω(structure)
     d = species.size
     ψ = 1.5357
-    return [SWeightedDensity(:ρ,zeros(nb),ω,ngrid),
-            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
-            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
+    return [SWeightedDensity(:ρ,zeros(nb),ω,ngrid,backend),
+            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,backend),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,backend),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,backend),
+            SWeightedDensity(:∫ρz²dz,d,ω,ngrid,backend),
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,backend)]
 
 end
 
-function get_propagator(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure)
-    return TangentHSPropagator(model, species, structure)
+function get_propagator(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure, backend::Backend)
+    return TangentHSPropagator(model, species, structure, backend)
 end
 
 function f_res(system::DFTSystem, model::HeterogcPCPSAFT,n)

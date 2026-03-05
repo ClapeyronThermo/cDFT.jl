@@ -30,7 +30,7 @@ function length_scale(model::PeTSModel)
     return maximum(model.params.sigma.values)
 end
 
-function get_fields(model::PeTSModel, species::DFTSpecies, structure::DFTStructure)
+function get_fields(model::PeTSModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
     nc = length(model)
     ψ = 1.21
 
@@ -38,10 +38,10 @@ function get_fields(model::PeTSModel, species::DFTSpecies, structure::DFTStructu
     d = species.size
     ngrid = structure.ngrid
     
-    return [SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
-            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,ψ*d,ω,ngrid)]
+    return [SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,device),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,device),
+            SWeightedDensity(:∫ρz²dz,ψ*d,ω,ngrid,device)]
 end
 
 function get_propagator(model::PeTSModel, species::DFTSpecies, structure::DFTStructure)

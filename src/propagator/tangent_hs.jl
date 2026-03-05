@@ -1,37 +1,48 @@
-function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTStructure)
+function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTStructure,device::Backend)
     ngrid = structure.ngrid
     nbeads = sum(species.nbeads)
     nd = dimension(structure)
-    Ω = zeros(Float64, ngrid..., nbeads, nbeads)
+    Ω = allocate(device,ComplexF64,ngrid...,nbeads,nbeads)
     ω = structure_ω(structure)
-
+    ω = Adapt.adapt(device, ω)
     for i in @comps
         l = 1
         for j in @chain(i)
             for k in @chain(i)[l:end]
-                
                 R = (species.size[j] + species.size[k])*π
-                for kk in CartesianIndices(ngrid)
-                    n = Tuple(kk)
-                    ω̄ = norm(@view(ω[n...,:]))
-                    Ω[n...,j,k] = (2*R .* (ω̄ .== 0.0) + 2*sin.(ω̄.*R)./ω̄ .*(ω̄ .!= 0.0))/R/2
-                    Ω[n...,k,j] = (2*R .* (ω̄ .== 0.0) + 2*sin.(ω̄.*R)./ω̄ .*(ω̄ .!= 0.0))/R/2
-                end
-                # selectdim(selectdim(map,nd+1,j),nd+1,k) .= Ω./(R)
-                # selectdim(selectdim(map,nd+1,k),nd+1,j) .= Ω./(R)
+                
+                ω̄ = dropdims(sqrt.(sum(abs2, ω, dims=nd+1)), dims=nd+1)  # lives on same backend as ω
+
+
+                val = @. (2*R * (ω̄ == 0.0) + 2*sin(ω̄*R)/max(ω̄, eps()) * (ω̄ != 0.0)) / R / 2
+                
+                selectdim(selectdim(Ω, nd+1, j), nd+1, k) .= val
+                selectdim(selectdim(Ω, nd+1, k), nd+1, j) .= val
             end
-            l+=1
+            l += 1
         end
     end
 
-    plan = plan_fft(selectdim(selectdim(Ω,nd+1,1),nd+1,1), 1:nd)
-    iplan = inv(plan)
+    return TangentHSPropagator(Ω)
+end
 
-    return TangentHSPropagator(Ω,plan,iplan)
+function preallocate_propagator(system::AbstractcDFTSystem,propagator::TangentHSPropagator,ρ,backend::Backend)
+    nd = dimension(system)
+    ngrid = system.structure.ngrid
+    Gcα = allocate(backend, Float64, size(ρ)..., sum(system.species.nbeads))
+    Gp = allocate(backend, Float64, size(ρ)...)
+    buf = similar(selectdim(ρ,nd+1,1), ComplexF64)
+
+    if backend isa CPU
+        plan = plan_fft!(buf, 1:length(ngrid); num_threads=Threads.nthreads())
+    else
+        plan = plan_fft!(buf, 1:length(ngrid))
+    end
+    return Gcα, Gp, buf, plan, inv(plan)
 end
 
 
-function propagate(system::AbstractcDFTSystem, propagate::TangentHSPropagator, δf_res, ρ)
+function propagate!(system::AbstractcDFTSystem, propagate::TangentHSPropagator, ρ, δfδρ_res, Gcα, Gp, buf, P, iP)
     nd = dimension(system)
     model = system.model
     structure = system.structure
@@ -39,12 +50,7 @@ function propagate(system::AbstractcDFTSystem, propagate::TangentHSPropagator, �
     species = system.species
     nbeads = sum(system.species.nbeads)
 
-    Gcα = ones(Float64, ngrid..., nbeads, nbeads)
-    Gp  = ones(Float64, ngrid..., nbeads)
-
     map = propagate.map
-    P = propagate.plan
-    iP = propagate.iplan
 
     levels = species.levels
     for i in @comps
@@ -65,16 +71,13 @@ function propagate(system::AbstractcDFTSystem, propagate::TangentHSPropagator, �
                         for α in k_children
                             β = findall(n_intergroups[α,:] .&& levels.==L+2)
                             if isempty(β)
-                                _Gcα = exp.(-selectdim(δf_res,nd+1,α)) .+ 0im
+                                buf .= exp.(-selectdim(δfδρ_res,nd+1,α)) .+ 0im
                             else
-                                _Gcα = dropdims(exp.(-selectdim(δf_res,nd+1,α)).*prod(selectdim(selectdim(Gcα,nd+1,α),nd+1,β),dims=(nd+1,nd+2)); dims=nd+1) .+ 0im
+                                buf .= exp.(-selectdim(δfδρ_res, nd+1, α)) .*
+                                        prod(view(Gcα, ntuple(Returns(:), nd)..., α, β), dims=nd+2) .+ 0im
                             end
 
-                            matmul!(_Gcα,P,_Gcα)
-                            elmul!(_Gcα,_Gcα,selectdim(selectdim(map,nd+1,k),nd+1,α))
-                            matmul!(_Gcα,iP,_Gcα)
-                            selectdim(selectdim(Gcα,nd+1,k),nd+1,α) .= real.(_Gcα)
-                            # selectdim(selectdim(Gcα,nd+1,k),nd+1,α) .= real.(ifft(fft(_Gcα).*map[:,k,α]))
+                            convolve!(selectdim(selectdim(Gcα,nd+1,k),nd+1,α), buf, selectdim(selectdim(map,nd+1,k),nd+1,α), P, iP, buf)
                         end
                     end
                 end
@@ -91,23 +94,25 @@ function propagate(system::AbstractcDFTSystem, propagate::TangentHSPropagator, �
 
                         α = findall(n_intergroups[l,:] .&& levels.==L)
                         α = α[α.!=k]
-                    
-                        _Gp = dropdims(exp.(-selectdim(δf_res,nd+1,l)).*selectdim(Gp,nd+1,l).*prod(selectdim(selectdim(Gcα,nd+1,l),nd+1,α),dims=(nd+1,nd+2)); dims=nd+1) .+ 0im
-                        # println(_Gp)
-                        matmul!(_Gp,P,_Gp)
-                        elmul!(_Gp,_Gp,selectdim(selectdim(map,nd+1,k),nd+1,l))
-                        matmul!(_Gp,iP,_Gp)
-                        selectdim(Gp,nd+1,k) .= real.(_Gp)
 
-                        # ifft(fft(_Gp).*map[:,k,α])
-                        # selectdim(Gp,nd+1,k) .= real.(ifft(fft(_Gp).*selectdim(selectdim(map,nd+1,k),nd+1,l)))
+                        buf .= exp.(-selectdim(δfδρ_res, nd+1, l)) .*selectdim(Gp,nd+1,l).*prod(view(Gcα, ntuple(Returns(:), nd)..., l, α), dims=(nd+1,nd+2)) .+ 0im
+
+                        convolve!(selectdim(Gp,nd+1,k), buf, selectdim(selectdim(map,nd+1,l),nd+1,k), P, iP, buf)
+                        
                     end
                 end
             end
         end
     end
 
-    return Gcα, Gp
+    for i in @comps
+        for j in @chain(i)
+            if system.species.nbeads[i] != 1
+                α = findall(model.groups.n_intergroups[i][j,:] .== 1 .&& species.levels .> species.levels[j])
+            else
+                α = j
+            end
+            selectdim(δfδρ_res, nd+1, j) .-= log.(selectdim(Gp, nd+1, j)) + dropdims(sum(log.(view(Gcα, ntuple(Returns(:), nd)..., j, α)), dims=nd+1), dims=nd+1)
+        end
+    end
 end
-
-export converge!

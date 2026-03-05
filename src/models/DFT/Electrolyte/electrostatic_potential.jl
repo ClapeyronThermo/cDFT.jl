@@ -1,15 +1,13 @@
 abstract type ElectrostaticPotentialModel <: ExternalFieldModel end
 
-struct ElectrostaticPotential{M,P,iP} <: ElectrostaticPotentialModel
+struct ElectrostaticPotential{M} <: ElectrostaticPotentialModel
     ϵ_r::Float64
     map::M
-    plan::P
-    iplan::iP
 end
 
 export ElectrostaticPotential
 
-function ElectrostaticPotential(model::ElectrolyteModel, structure::DFTStructure)
+function ElectrostaticPotential(model::ElectrolyteModel, structure::DFTStructure, backend::Backend)
     (_, T) = structure.conditions
     ρbulk = structure.ρbulk
     ϵ_r = dielectric_constant(model.ionmodel.RSPmodel, 1., T, ρbulk)
@@ -18,15 +16,21 @@ function ElectrostaticPotential(model::ElectrolyteModel, structure::DFTStructure
    
     ω = structure_ω(structure)
 
-    map = 1 ./(4*pi^2*sum(ω.^2,dims=3))*N_A*e_c^2/ϵ_0/ϵ_r .+ 0.0im
-    map[1] = 0.0
-    plan = plan_fft(selectdim(map,nd+1,1), 1:length(ngrid))
-    iplan = inv(plan)
-    return ElectrostaticPotential(ϵ_r, map, plan, iplan)
+    ω_norm = allocate(CPU(), Float64, ngrid...)
+
+    for kk in CartesianIndices(ngrid)
+        ω_norm[kk] = norm(@view(ω[Tuple(kk)...,:]))
+    end
+
+    ω̄ = allocate(backend, Float64, ngrid...)
+    copyto!(ω̄,Adapt.adapt(typeof(ω̄), ω_norm))
+
+    Ω = @. (ω̄ != 0.0) / (4*pi^2*ω̄^2 + (ω̄==0.0)) * N_A*e_c^2/ϵ_0/ϵ_r
+    return ElectrostaticPotential(ϵ_r, Ω)
 end
 
 
-function evaluate_external_field(structure::DFTStructure,external_field::ElectrostaticPotentialModel,model::ElectrolyteModel,ρ::Array{Float64},z)
+function evaluate_external_field!(structure::DFTStructure,external_field::ElectrostaticPotentialModel,model::ElectrolyteModel,ρ,δfδρ_res,P,iP,Vext)
     T = structure.conditions[2]
     Z = model.charge
     ngrid = structure.ngrid
@@ -36,30 +40,23 @@ function evaluate_external_field(structure::DFTStructure,external_field::Electro
     nbeads = length(Z)
     nd = length(ngrid)
     # obtain charge profiles
-    q = zeros(ngrid...)
     for i in 1:nbeads
-        q .+= selectdim(ρ,nd+1,i)*Z[i]
+        # println(i)
+        if i == 1
+            Vext .= selectdim(ρ,nd+1,i)*Z[i]
+        else
+            Vext .+= selectdim(ρ,nd+1,i)*Z[i]
+        end
     end
 
     ϵ_r = external_field.ϵ_r
-    P = external_field.plan
-    iP = external_field.iplan
     map = external_field.map
-    ψ = zeros(eltype(map),ngrid...)
     
-    matmul!(ψ,P,q)
-    elmul!(ψ,ψ,map)
-    ψ[1] = 0.
-    matmul!(ψ,iP,ψ)
-    ψ = real.(ψ)
-    # ψ .+= find_ψ_const(structure,external_field,model,ρ,z)
+    convolve!(Vext, Vext, map, P, iP, Vext)
 
-    Vext = zeros(Float64, ngrid..., nbeads)
     for i in 1:nbeads
-        selectdim(Vext,nd+1,i) .= Z[i]*ψ 
+        selectdim(δfδρ_res,nd+1,i) .+= Z[i]*Vext / k_B / T
     end
-
-    return Vext ./ k_B / T
 end
 
 function find_ψ_const(structure::DFTStructure,external_field::ElectrostaticPotentialModel,model::ElectrolyteModel,ρ::Array{Float64},z)

@@ -22,3 +22,11 @@ function _∫(f::Array{Float64},dz)
     ∑f *= prod(dz./3)
     return ∑f
 end
+
+function convolve!(result, profile, kernel, P, iP, buf)
+    copyto!(buf, complex.(profile))
+    P * buf                            # in-place: buf is overwritten with FFT result
+    elmul!(buf,buf,kernel)
+    iP * buf              # inverse transform on contiguous buffer
+    copyto!(result, real.(buf))      # copy result back
+end

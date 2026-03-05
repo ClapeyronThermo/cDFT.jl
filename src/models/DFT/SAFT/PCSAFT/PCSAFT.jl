@@ -21,20 +21,20 @@ end
 
 For a given `model`, obtain all of the fields that will be needed to perform the DFT calculation. This function should return a vector of `DFTField`s.
 """
-function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure)
+function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
     nc = length(model)
     ngrid = structure.ngrid
     #f = [ngrid[i]/(structure.bounds[i,2]-structure.bounds[i,1]) for i in 1:length(ngrid)]
     ω = structure_ω(structure)
     ψ = 1.3862
     d = species.size
-    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid),
-            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid),
-            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,d,ω,ngrid),
-            SWeightedDensity(:∫ρdz,d,ω,ngrid),
-            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid)]
+    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid,device),
+            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,device),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,device),
+            SWeightedDensity(:∫ρz²dz,d,ω,ngrid,device),
+            SWeightedDensity(:∫ρdz,d,ω,ngrid,device),
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device)]
 end
 
 
@@ -108,31 +108,22 @@ function f_disp(system::Union{DFTSystem,ElectrolyteDFTSystem}, model::PCSAFTMode
     m = model.params.segment.values
     HSd = species.size
 
-    if length(model) == 1
-        m2ϵσ3₁,m2ϵσ3₂ =  Clapeyron.m2ϵσ3(model,zero(T), T, SA[1.0])
-        HSd1 = HSd[1]
-        ρ̄z1 = ρ̄[1]*3/(4*ψ*ψ*ψ*HSd1*HSd1*HSd1)/π
-        η = m[1]*ρ̄[1]/(8*ψ*ψ*ψ)
-        ∑ρ̄ = ρ̄z1
-        m̄ = m[1]*oneunit(∑ρ̄)
-    else
-        ρ̄z = similar(ρ̄,Base.promote_eltype(ρ̄,HSd,ψ))
-        ρ̄z .= ρ̄
-        ρ̄z ./= (HSd .* HSd .* HSd)
-        ρ̄z .*= 3/(4*ψ*ψ*ψ*π)
-        ∑ρ̄ = sum(ρ̄z)
-        m̄ = dot(ρ̄z,m)/∑ρ̄    
-        η = zero(Base.promote_eltype(m,∑ρ̄,HSd))
-        for i in 1:length(m)
-            η += m[i]*ρ̄z[i]*HSd[i]^3
-        end
-        η = π/6*η
-        m2ϵσ3₁,m2ϵσ3₂ =  Clapeyron.m2ϵσ3(model,zero(T), T, ρ̄z)
+    ρ̄z = similar(ρ̄, Base.promote_eltype(ρ̄, HSd, ψ))
+
+    @. ρ̄z = ρ̄ * 3 / (4*ψ*ψ*ψ*π * HSd * HSd * HSd)
+
+    ∑ρ̄ = sum(ρ̄z)
+    m̄ = dot(ρ̄z,m)/∑ρ̄    
+    η = zero(Base.promote_eltype(m,∑ρ̄,HSd))
+    for i in 1:length(m)
+        η += m[i]*ρ̄z[i]*HSd[i]^3
     end
+    η = π/6*η
+    m2ϵσ3₁,m2ϵσ3₂ =  Clapeyron.m2ϵσ3(model,zero(T), T, ρ̄z)
+
     ηm1 = (1-η)
     ηm2 = ηm1*ηm1
     ηm4 = ηm2*ηm2
-    evalpoly(η,(0,20,-27,12,-2))
     C₁ = 1 + m̄*(8*η-2*η*η)/ηm4+(1-m̄)*evalpoly(η,(0,20,-27,12,-2))/(ηm2*(2-η)*(2-η))
     I₁ = I(model,m̄,η,1)
     I₂ = I(model,m̄,η,2)
