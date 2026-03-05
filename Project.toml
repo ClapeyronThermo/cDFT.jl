@@ -2,7 +2,6 @@ name = "cDFT"
 uuid = "9d464fa6-e93d-4d45-9e5b-7c20149a9a88"
 version = "0.1.0"
 authors = ["Pierre Walker <pjwalker@caltech.edu>"]
-version = "0.1.0"
 
 [deps]
 AbstractFFTs = "621f4979-c628-5d54-868e-fcf4e3e8185c"
@@ -15,6 +14,7 @@ GCIdentifier = "b7ea765e-cbac-4e4a-9b0d-5427cc302506"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NLSolvers = "337daf1e-9722-11e9-073e-8b9effe078ba"
+ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
 SIAMFANLEquations = "084e46ad-d928-497d-ad5e-07fa361a48c4"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
@@ -38,6 +38,7 @@ KernelAbstractions = "0.9.40"
 LinearAlgebra = "1"
 NLSolvers = "0.5"
 Plots = "1"
+ReverseDiff = "1.16.2"
 SIAMFANLEquations = "1.0.2"
 StaticArrays = "^1.5.9"
 ThreadPinning = "0.7, 1"

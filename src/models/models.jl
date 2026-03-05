@@ -41,7 +41,7 @@ Obtain the functional derivatives of the residual free energy of the system for 
 The output is a 2D array with the dimensions `(ngrid,nb)`, where `ngrid` is the number of grid points, and `nb` is the number of beads in the model. The values are normalised by `kB*T`.
 """
 
-function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_buf, in_buf, out_buf, P, iP, f, diff_cache)
+function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_buf, in_buf, out_buf, P, iP, f, cache_pool)
     model = system.model
     backend = system.options.device
     ngrid = system.structure.ngrid
@@ -55,7 +55,9 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_b
 
     Threads.@threads for kk in CartesianIndices(ngrid)
         k = Tuple(kk)
-        ForwardDiff.gradient!(@view(δf[k...,:,:]),f,@view(n[k...,:,:]),diff_cache[Threads.threadid()-1])
+        cache = take!(cache_pool)
+        ForwardDiff.gradient!(@view(δf[k...,:,:]), f, @view(n[k...,:,:]), cache)
+        put!(cache_pool, cache)
     end
 
     copyto!(fft_buf, Adapt.adapt(typeof(fft_buf), δf))

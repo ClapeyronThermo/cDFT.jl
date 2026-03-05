@@ -1,5 +1,5 @@
 import KernelAbstractions: Backend, get_backend, synchronize
-
+using Base: ScopedValue
 """
     DFTOptions(device::Device, solver::Solvers.AbstractFixPoint)
 
@@ -76,9 +76,14 @@ function preallocate_model(system, ρ)
     n_first = @view(n[idx_first...,:,:])
 
     chunksize = ForwardDiff.Chunk(system)
-    diff_cache = [ForwardDiff.GradientConfig(f,n_first, chunksize) for i in 1:Threads.nthreads()]
 
-    return n, δf, fft_buf, in_buf, out_buf, plan, iplan, f, diff_cache
+    first_config = ForwardDiff.GradientConfig(f, n_first, chunksize)
+
+    cache_pool = Channel{typeof(first_config)}(Threads.nthreads())
+    for _ in 1:Threads.nthreads()
+        put!(cache_pool, ForwardDiff.GradientConfig(f, n_first, chunksize))
+    end
+    return n, δf, fft_buf, in_buf, out_buf, plan, iplan, f, cache_pool
 end
 
 function preallocate_external_potential(system, ρ)
