@@ -18,10 +18,13 @@ function F_res(system::AbstractcDFTSystem, ρ)
 
     _bounds = system.structure.bounds
 
+    δfδρ_res, cache_model, cache_external, cache_propagator = preallocate(system, ρ)
+    (n, δf, fft_buf, in_buf, out_buf, P, iP, f, cache_pool) = cache_model
     dz = structure_dz(system.structure)
-    n = evaluate_field(system,ρ)
+    
+    evaluate_field!(system, ρ, fft_buf, in_buf, out_buf, P, iP)
 
-    f(x) = f_res(system,model,x)
+    copyto!(n, Adapt.adapt(typeof(n), fft_buf))
 
     ϕ = similar(ρ,ngrid...)
     ϕ .= 0
@@ -66,10 +69,10 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_b
 end
 
 function δFδρ_res(system::AbstractcDFTSystem, ρ)
-    δfδρ_res, cache_model, cache_external, cache_propagator = preallocate_derivative(system, ρ)
+    δfδρ_res, cache_model, cache_external, cache_propagator = preallocate(system, ρ)
     δFδρ_res!(system, ρ, δfδρ_res, cache_model...)
-    evalute_external_potential!(system, ρ, δfδρ_res, cache_external)
-    evalute_propagator!(system, ρ, δfδρ_res, cache_propagator)
+    evaluate_external_field!(system, ρ, δfδρ_res, cache_external)
+    propagate!(system, ρ, δfδρ_res, cache_propagator)
     return δfδρ_res
 end
 

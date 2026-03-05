@@ -55,7 +55,7 @@ using cDFT.Clapeyron
         ρ = cDFT.initialize_profiles(system)
         μ2 = cDFT.δFδρ_res(system, ρ)
 
-        @test μ1[1] ≈ A[1,1] rtol = 1e-6
+        @test μ1[1] ≈ μ2[1] rtol = 1e-6
     end
 
     @testset "SAFTVRMie" begin
@@ -87,7 +87,7 @@ using cDFT.Clapeyron
         ρ = cDFT.initialize_profiles(system)
         μ2 = cDFT.δFδρ_res(system, ρ)
 
-        @test μ1[1] ≈ A[1,1] rtol = 1e-6
+        @test μ1[1] ≈ μ2[1] rtol = 1e-6
     end
 
     @testset "COFFEE" begin

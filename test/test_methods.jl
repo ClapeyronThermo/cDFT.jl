@@ -26,7 +26,7 @@
 
     @testset "Adsorption" begin
         model = PCSAFT(["carbon dioxide","methane"])
-        surface = Steele(["graphite"])
+        surface = Steele(["graphite"],40e-10)
 
         p = 1e6
         T = 298.15
@@ -34,6 +34,6 @@
 
         ad = adsorption(model, surface, p, T, n)
 
-        @test ad[1] ≈ 639.2713478000009 rtol = 1e-4
+        @test ad[1] ≈ 598.4454929600739 rtol = 1e-4
     end
 end

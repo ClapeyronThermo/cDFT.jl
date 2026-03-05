@@ -4,12 +4,23 @@ using Clapeyron: d_gc_av
 function DFTSystem(model::SAFTgammaMieModel,structure::DFTStructure,options::DFTOptions)
     model = expand_model(model)
     species = get_species(model, structure)
-    fields = get_fields(model, species, structure)
-    propagator = get_propagator(model, species, structure)
+    fields = get_fields(model, species, structure, options.device)
+    propagator = get_propagator(model, species, structure, options.device)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, fields, propagator, options, chunksize)
+    return DFTSystem(model, species, structure, fields, nothing, propagator, options, chunksize)
 end
+
+function DFTSystem(model::SAFTgammaMieModel,structure::DFTStructure, external_field,options::DFTOptions)
+    model = expand_model(model)
+    species = get_species(model, structure)
+    fields = get_fields(model, species, structure, options.device)
+    propagator = get_propagator(model, species, structure, options.device)
+    NF = compute_field_len(fields,dimension(structure))
+    chunksize = Val{NF}()
+    return DFTSystem(model, species, structure, fields, external_field, propagator, options, chunksize)
+end
+
 
 struct SAFTgammaMieSpecies <: DFTSpecies
     nbeads::Vector{Int64}
@@ -71,8 +82,8 @@ function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DF
             SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device)]
 end
 
-function get_propagator(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure)
-    return TangentHSPropagator(model, species, structure)
+function get_propagator(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure, device)
+    return TangentHSPropagator(model, species, structure, device)
 end
 
 
