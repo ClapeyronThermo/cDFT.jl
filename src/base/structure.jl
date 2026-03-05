@@ -110,6 +110,31 @@ function Uniform1DCart(conditions,ρbulk,bounds,ngrid::Int64)
 end
 
 """
+    Uniform1DCart(conditions::Tuple{Float64,Float64}, ρbulk, bounds::Vector{Float64}, ngrid::Int64)
+
+The generic structure type used when trying to simulate a uniform system in 1D-cartesian coordinates. Contains:
+- `conditions`: The p, T conditions of the system.
+- `ρbulk`: The bulk density of each species in the system.
+- `bounds`: Specifies the location of the bounds of the system.
+- `ngrids`: The number of grid points used to represent the density profile.
+This structure should generally be used to benchmark the DFT code against the bulk calculations.
+Example:
+```julia
+julia> structure = Uniform1DCart((p, T) , ρbulk, [-10L, 10L], 201)
+```
+"""
+struct Uniform3DCart <: DFTStructure3DCart
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    bounds::Matrix{Float64}
+    ngrid::Tuple{Int64,Int64,Int64}
+end
+
+function Uniform3DCart(conditions,ρbulk,bounds,ngrid::Int64)
+    Uniform3DCart(conditions,ρbulk,bounds,(ngrid,ngrid,ngrid))
+end
+
+"""
     Uniform1DSphr(conditions::Tuple{Float64,Float64}, ρbulk::Vector{Float64}, bounds::Vector{Float64}, ngrid::Int64)
 
 The generic structure type used when trying to simulate a uniform system in 1D-spherical coordinates. Contains:

@@ -31,7 +31,6 @@ end
 function preallocate(system, ρ)
     backend = system.options.device
     
-    nf = length(system.fields)
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(ρ,nd+1)
@@ -50,7 +49,7 @@ end
 function preallocate_model(system, ρ)
     backend = system.options.device
     
-    nf = length(system.fields)
+    nf = length_fields(system)
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(ρ,nd+1)

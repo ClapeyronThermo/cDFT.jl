@@ -65,6 +65,14 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_b
     integrate_field!(system, fft_buf, δfδρ_res, in_buf, P, iP)
 end
 
+function δFδρ_res(system::AbstractcDFTSystem, ρ)
+    δfδρ_res, cache_model, cache_external, cache_propagator = preallocate_derivative(system, ρ)
+    δFδρ_res!(system, ρ, δfδρ_res, cache_model...)
+    evalute_external_potential!(system, ρ, δfδρ_res, cache_external)
+    evalute_propagator!(system, ρ, δfδρ_res, cache_propagator)
+    return δfδρ_res
+end
+
 function length_scales(model::EoSModel)
     if hasfield(typeof(model.params), :sigma)
         return diagvalues(model.params.sigma.values)

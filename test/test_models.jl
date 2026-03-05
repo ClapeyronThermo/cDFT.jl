@@ -24,11 +24,6 @@ using cDFT.Clapeyron
 
         @test μ1[1] ≈ μ2[1] rtol = 1e-6
 
-        # structure = Uniform1DSphr((p, T, x),[2L,20L], 3)
-        # system = DFTSystem(model, structure)
-        # μ3 = cDFT.δFδρ_res(system)
-
-        # @test μ1[1] ≈ μ3[1] rtol = 1e-6
     end
 
     @testset "PCPSAFT" begin
@@ -59,17 +54,6 @@ using cDFT.Clapeyron
         system = DFTSystem(model, structure)
         ρ = cDFT.initialize_profiles(system)
         μ2 = cDFT.δFδρ_res(system, ρ)
-
-        model = system.model
-        Gcα,Gp = cDFT.propagate(system, system.propagator, μ2, ρ)
-        A = zeros(size(μ2))
-        levels = system.species.levels
-        for i in cDFT.@comps
-            for k in cDFT.@chain(i)
-                k_children = (system.model.groups.n_intergroups[i][k,:] .== 1 .&& levels .> levels[k])
-                A[:,k] = μ2[:,k] - log.(Gp[:,k]) - sum(log.(Gcα[:,k,k_children]),dims = (2,3))
-            end
-        end
 
         @test μ1[1] ≈ A[1,1] rtol = 1e-6
     end
@@ -102,17 +86,6 @@ using cDFT.Clapeyron
         system = DFTSystem(model, structure)
         ρ = cDFT.initialize_profiles(system)
         μ2 = cDFT.δFδρ_res(system, ρ)
-
-        model = system.model
-        Gcα,Gp = cDFT.propagate(system, system.propagator, μ2, ρ)
-        A = zeros(size(μ2))
-        levels = system.species.levels
-        for i in cDFT.@comps
-            for k in cDFT.@chain(i)
-                k_children = (system.model.groups.n_intergroups[i][k,:] .== 1 .&& levels .> levels[k])
-                A[:,k] = μ2[:,k] - log.(Gp[:,k]) - sum(log.(Gcα[:,k,k_children]),dims = (2,3))
-            end
-        end
 
         @test μ1[1] ≈ A[1,1] rtol = 1e-6
     end

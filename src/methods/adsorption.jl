@@ -19,9 +19,9 @@ function adsorption(model::EoSModel, surface::ExternalFieldModel, p, T, n=[1.0],
     v = volume(model,p,T,n)
     ρ = n./v
 
-    structure = cDFT.ExternalField1DCart((p, T), ρ, bounds, (201,), surface, width)
+    structure = cDFT.ExternalField1DCart((p, T), ρ, bounds, (201,))
 
-    system = cDFT.DFTSystem(model, structure)
+    system = cDFT.DFTSystem(model, structure, surface)
 
     ρ = initialize_profiles(system)
 
