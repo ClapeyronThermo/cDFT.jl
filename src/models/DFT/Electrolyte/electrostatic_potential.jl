@@ -14,7 +14,7 @@ function ElectrostaticPotential(model::ElectrolyteModel, structure::DFTStructure
     ngrid = structure.ngrid     
     nd = length(ngrid)
    
-    ω = structure_ω(structure)
+    ω = structure_ω(structure, backend)
 
     ω_norm = allocate(CPU(), Float64, ngrid...)
 
@@ -59,7 +59,7 @@ function evaluate_external_field!(structure::DFTStructure,external_field::Electr
     end
 end
 
-function find_ψ_const(structure::DFTStructure,external_field::ElectrostaticPotentialModel,model::ElectrolyteModel,ρ::Array{Float64},z)
+function find_ψ_const(structure::DFTStructure,external_field::ElectrostaticPotentialModel,model::ElectrolyteModel,ρ::Array{Float64})
     Z = model.charge
     nbeads = length(Z)
     nd = length(structure.ngrid)

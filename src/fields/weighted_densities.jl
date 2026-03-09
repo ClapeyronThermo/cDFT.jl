@@ -16,9 +16,10 @@ struct SWeightedDensity{M,P,iP} <: ScalarField
     iplan::iP
 end
 
-function SWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}, ngrid, backend::Backend)
-    
-    R = 2π.*width'
+function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend)
+    R = Adapt.adapt(backend, 2π.*width')
+    # Reshape R based on the dimension of the system
+    R = reshape(R, 1, length(width))
     nd = length(ngrid)
 
     if type != :∫ρzdz
@@ -35,15 +36,17 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
         end
         Ω ./= 2π
     elseif type == :∫ρz²dz
-        for kk in CartesianIndices(ngrid)
-            k = Tuple(kk)
-            ω̄ = norm(@view(ω[k...,:]))
-            Ω[k...,:] = 4π./ω̄.^3 .*(sin.(ω̄.*R)-R.*ω̄.*cos.(ω̄.*R)) .*(ω̄ .!= 0.0) + R.^3/3*4π .*(ω̄ .== 0.0)
-        end
-        # Ω = 4π./ω.^3 .*(sin.(ω.*R)-R.*ω.*cos.(ω.*R)) .*(ω .!= 0.0) + R.^3/3*4π .*(ω .== 0.0)
+        ω̄ = sqrt.(sum(abs2, ω, dims=nd+1)) 
+        ω̄R   = ω̄ .* R                                 # (Nx,Ny,Nz,Nb)
+
+        mask = ω̄ .== 0  
+        Ω .= ifelse.(mask,
+                4π*R.^3/3,                                    # ω̄=0 case
+                4π./ω̄.^3 .*(sin.(ω̄R)-R.*ω̄.*cos.(ω̄R))        # ω̄≠0 case
+            )
         Ω ./= (2π)^3
     elseif type == :ρ
-        Ω = ones(ngrid...,length(width))
+        Ω .= 1.0 + 0im
     else
         error("Invalid type of field")
     end
@@ -119,10 +122,11 @@ struct VWeightedDensity{M,P,iP} <: VectorField
     iplan::iP
 end
 
-function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}, ngrid, backend::Backend)
-    
-    R = 2π.*width'
+function VWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend)
+    R = Adapt.adapt(backend, 2π.*width')
+    R = reshape(R, ntuple(i -> 1, length(ngrid))..., 1, length(width))
     nd = length(ngrid)
+
 
     if type != :∫ρzdz
         Ω = allocate(backend,ComplexF64,ngrid...,length(width))
@@ -131,18 +135,24 @@ function VWeightedDensity(type::Symbol,width::Vector{Float64},ω::Array{Float64}
     end
 
     if type == :∇ρ
-        for kk in CartesianIndices(ngrid)
-            k = Tuple(kk)
-            ω̄ = norm(@view(ω[k...,:]))
-            Ω[k...,:] = ω[k...,:].*im
-        end
+        Ω = 1im .* ω
         Ω .*= (2π)
     elseif type == :∫ρzdz
-        for kk in CartesianIndices(ngrid)
-            k = Tuple(kk)
-            ω̄ = norm(@view(ω[k...,:]))
-            Ω[k...,:,:] = @. 0.0 - 4π*im*ω[k...,:]/ω̄^3*(sin(ω̄*R)-R*ω̄*cos(ω̄*R)) *(ω̄ != 0.0)
-        end
+        ω̄ = sqrt.(sum(abs2, ω, dims=nd+1)) 
+        ω̄R   = ω̄ .* R                                 # (Nx,Ny,Nz,Nb)
+
+        mask = ω̄ .== 0                                      # (Nx,Ny,Nz,1)  broadcasts over Nb
+
+        Ω .= ifelse.(mask,
+                4π*im*R,                                    # ω̄=0 case
+                4π*im*ω./ω̄.^3 .*(sin.(ω̄R)-R.*ω̄.*cos.(ω̄R))        # ω̄≠0 case
+            )
+        # @time for kk in CartesianIndices(ngrid)
+        #     k = Tuple(kk)
+        #     ω̄ = norm(@view(ω[k...,:]))
+        #     @. Ω[k...,:,:] = 0.0 - 4π*im*ω[k...,:]/ω̄^3*(sin(ω̄*R)-R*ω̄*cos(ω̄*R)) * (ω̄ != 0.0)
+        # end
+        # println("Time for ∫ρzdz: $t seconds")
         # Ω = 4π*im./ω.^2 .*(sin.(ω.*R)-R.*ω.*cos.(ω.*R)) .*(ω .!= 0.0) .+ 0.0
         Ω ./= (2π)^3
     elseif type == :∫ρz²dz

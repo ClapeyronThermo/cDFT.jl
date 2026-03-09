@@ -96,17 +96,27 @@ function structure_fftfreq(structure::DFTStructure)
     ω = fftfreq.(ngrid, f)
 end
 
-function structure_ω(structure::DFTStructure)
+function structure_ω(structure::DFTStructure, device::Backend)
     ngrid = structure.ngrid
-    ω̂ = structure_fftfreq(structure)
-    ω = zeros(ngrid...,length(ngrid))
-    for kk in CartesianIndices(ngrid)
-        k = Tuple(kk)
-        for i in 1:length(ngrid)
-            ω[k...,i] = ω̂[i][k[i]]
-        end
+    nd = dimension(structure)
+    ω̂ = structure_fftfreq(structure)  # ntuple of fftfreq vectors, one per dimension
+
+    # Move each 1D frequency vector to GPU, then reshape for broadcasting
+    # dim 1: (Nx,1,1,...), dim 2: (1,Ny,1,...), dim 3: (1,1,Nz,...) etc.
+    ω_components = ntuple(nd) do i
+        vec = adapt(device, ComplexF64.(ω̂[i]))   # move to GPU
+        shape = ntuple(d -> d == i ? ngrid[d] : 1, nd)  # e.g. (Nx,1,1) for i=1
+        reshape(vec, shape)                               # ready to broadcast
     end
-    ω
+
+    ω = allocate(device, ComplexF64, ngrid..., nd)
+
+    # Fill each α slice via broadcast — no scalar indexing
+    for α in 1:nd
+        selectdim(ω, nd+1, α) .= ω_components[α]  # broadcasts (Ni,1,1) → (Nx,Ny,Nz)
+    end
+
+    return ω
 end
 
 function structure_dz(structure::DFTStructure)

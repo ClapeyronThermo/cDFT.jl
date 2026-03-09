@@ -53,14 +53,17 @@ function converge!(system::AbstractcDFTSystem,ρ)
             end
         end
 
-        # if hasfield(typeof(system), :external_field)
-        #     psi_c = find_ψ_const(system.structure, system.external_field, system.model, exp.(ln_Gx), Z)/k_B/system.structure.conditions[2]
-        #     for i in @comps
-        #         for k in @chain(i)
-        #             selectdim(ln_Gx,nd+1,k) .-= psi_c*model.charge[k]
-        #         end
-        #     end
-        # end
+        if any(typeof.(system.external_field) .<: ElectrostaticPotentialModel)
+            ep_model = filter(x -> x isa ElectrostaticPotentialModel, system.external_field)[1]
+            Z = model.charge
+
+            psi_c = find_ψ_const(system.structure, ep_model, system.model, exp.(ln_Gx))/k_B/system.structure.conditions[2]
+            for i in @comps
+                for k in @chain(i)
+                    selectdim(ln_Gx,nd+1,k) .-= psi_c*Z[k]
+                end
+            end
+        end
 
         clamp!(ln_Gx, -100, Inf)
         

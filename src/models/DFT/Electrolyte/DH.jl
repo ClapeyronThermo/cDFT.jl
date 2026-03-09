@@ -33,7 +33,7 @@ function get_fields(ionmodel::DHModel, species::DFTSpecies, structure::DFTStruct
     ρbulk = structure.ρbulk
     ngrid = structure.ngrid
     Z = species.charges
-    ω = structure_ω(structure)
+    ω = structure_ω(structure, device)
     κ = screening_length(ionmodel, 1., T, ρbulk, Z, dielectric_constant(ionmodel.RSPmodel, 1., T, ρbulk))
     d = species.size
     return [SWeightedDensity(:∫ρdz,d/2 .+ 1/κ,ω,ngrid,device)]
