@@ -34,7 +34,7 @@ function get_fields(model::PeTSModel, species::DFTSpecies, structure::DFTStructu
     nc = length(model)
     ψ = 1.21
 
-    ω = structure_ω(structure)
+    ω = structure_ω(structure, device)
     d = species.size
     ngrid = structure.ngrid
     

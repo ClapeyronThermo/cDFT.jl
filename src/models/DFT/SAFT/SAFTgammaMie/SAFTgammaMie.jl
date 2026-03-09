@@ -65,7 +65,7 @@ function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DF
     nb = sum(species.nbeads)
     ngrid = structure.ngrid
     nd = dimension(structure)
-    ω = structure_ω(structure)
+    ω = structure_ω(structure, device)
     d = species.size
     λ_r = diagvalues(model.params.lambda_r.values)
     λ_a = diagvalues(model.params.lambda_a.values)

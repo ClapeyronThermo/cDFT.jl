@@ -13,7 +13,7 @@ function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStruc
     nc = length(model)
     ψ = 1.3862
 
-    ω = structure_ω(structure)
+    ω = structure_ω(structure, device)
     d = species.size
     ngrid = structure.ngrid
     λ_r = diagvalues(model.params.lambda_r.values)

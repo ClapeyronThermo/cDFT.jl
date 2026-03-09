@@ -63,7 +63,7 @@ end
 function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure, backend::Backend)
     nb = sum(species.nbeads)
     ngrid = structure.ngrid
-    ω = structure_ω(structure)
+    ω = structure_ω(structure, backend)
     d = species.size
     ψ = 1.5357
     return [SWeightedDensity(:ρ,zeros(nb),ω,ngrid,backend),

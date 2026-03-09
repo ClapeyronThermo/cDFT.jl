@@ -13,7 +13,7 @@ end
 function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
     nc = length(model)
     ngrid = structure.ngrid
-    ω = structure_ω(structure)
+    ω = structure_ω(structure, device)
     d = species.size
 
     λ_r = diagvalues(model.params.lambda_r.values)
