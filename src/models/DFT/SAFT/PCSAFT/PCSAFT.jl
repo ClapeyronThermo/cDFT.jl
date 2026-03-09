@@ -25,7 +25,7 @@ function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStruc
     nc = length(model)
     ngrid = structure.ngrid
     #f = [ngrid[i]/(structure.bounds[i,2]-structure.bounds[i,1]) for i in 1:length(ngrid)]
-    ω = structure_ω(structure)
+    ω = structure_ω(structure, device)
     ψ = 1.3862
     d = species.size
     return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid,device),
