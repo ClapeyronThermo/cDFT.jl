@@ -3,7 +3,7 @@ function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTS
     nbeads = sum(species.nbeads)
     nd = dimension(structure)
     Ω = allocate(device,ComplexF64,ngrid...,nbeads,nbeads)
-    ω = structure_ω(structure)
+    ω = structure_ω(structure, device)
     ω = Adapt.adapt(device, ω)
     for i in @comps
         l = 1
