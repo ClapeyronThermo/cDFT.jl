@@ -6,4 +6,5 @@ using cDFT.Clapeyron
 @testset "cDFT" begin
     include("test_models.jl")
     include("test_methods.jl")
+    include("test_propagator.jl")
 end

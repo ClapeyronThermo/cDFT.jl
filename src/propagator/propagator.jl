@@ -23,6 +23,25 @@ struct TangentHSPropagator{M} <: DFTPropagator
     map::M
 end
 
+"""
+    DiscreteGaussianChainPropagator <: DFTPropagator
+
+Discrete Gaussian chain propagator for linear polymer chains. Computes forward
+and backward propagators using Gaussian transition probabilities via FFT.
+
+# Fields
+- `kernels`: Vector of Fourier-space Gaussian transition kernels (one per chain).
+- `b`: Statistical segment length per chain.
+- `N`: Number of segments per chain.
+- `segment_species`: Segment-to-species-index mapping per chain (`Vector{Vector{Int}}`).
+"""
+struct DiscreteGaussianChainPropagator{K} <: DFTPropagator
+    kernels::K
+    b::Vector{Float64}
+    N::Vector{Int}
+    segment_species::Vector{Vector{Int}}
+end
+
 function propagate!(system::AbstractcDFTSystem, δf_res, ρ, cache_propagator)
     if !(system.propagator isa IdealPropagator)
         return propagate!(system,system.propagator, δf_res, ρ, cache_propagator...)
@@ -31,3 +50,4 @@ end
 
 include("ideal.jl")
 include("tangent_hs.jl")
+include("discrete_gaussian_chain.jl")
