@@ -82,8 +82,7 @@ function converge!(system::AbstractcDFTSystem,ρ)
 
     ln_X0 = Adapt.adapt(CPU(), vec(log.(ρ)))
 
-    ρ_new = SIAMFANLEquations.aasol(f!, ln_X0, 0, zeros(length(ln_X0),4); beta=1e-3, rtol=1e-1, atol=1e-1, maxit=1000)
-    ρ_new = SIAMFANLEquations.aasol(f!, ρ_new.solution, 5, zeros(length(ln_X0),14); beta=1e-3, rtol=1e-4, atol=1e-4, maxit=10000)
+    ρ_new = aasol(f!, ln_X0, 0, zeros(length(ln_X0),4); beta=1e-3, rtol=1e-4, atol=1e-4, maxit=10000, picard_maxit=1000, picard_beta = 1e-3, picard_rtol=1e-1, picard_atol=1e-1)
     # println(ρ_new.history)
 
     ρ .= Adapt.adapt(device, reshape(exp.(ρ_new.solution),(ngrid...,nbeads)))

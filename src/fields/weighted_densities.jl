@@ -19,7 +19,9 @@ end
 function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend)
     R = Adapt.adapt(backend, 2π.*width')
     # Reshape R based on the dimension of the system
-    R = reshape(R, 1, length(width))
+    # R = reshape(R,length(width))
+    R = reshape(R, ntuple(i -> 1, length(ngrid))..., length(width))
+
     nd = length(ngrid)
 
     if type != :∫ρzdz
@@ -29,11 +31,16 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend
     end
 
     if type == :∫ρdz
-        for kk in CartesianIndices(ngrid)
-            k = Tuple(kk)
-            ω̄ = norm(@view(ω[k...,:]))
-            Ω[k...,:] = 2*R .* (ω̄ .== 0.0) + 2*sin.(ω̄.*R)./ω̄ .*(ω̄ .!= 0.0)
-        end
+        ω̄ = sqrt.(sum(abs2, ω, dims=nd+1)) 
+
+        ω̄R   = ω̄ .* R                                 # (Nx,Ny,Nz,Nb)
+
+        mask = ω̄ .== 0  
+
+        Ω .= ifelse.(mask,
+                2*R ,                                    # ω̄=0 case
+                2*sin.(ω̄.*R)./ω̄        # ω̄≠0 case
+            )
         Ω ./= 2π
     elseif type == :∫ρz²dz
         ω̄ = sqrt.(sum(abs2, ω, dims=nd+1)) 
@@ -74,7 +81,7 @@ function evaluate_field!(system::AbstractcDFTSystem,field::SWeightedDensity, ρ,
 
         convolve!(ni, selectdim(ρ, nd+1, i), selectdim(map,nd+1,i), P, iP, in_buf)
     end
-    synchronize(backend)
+    # synchronize(backend)
     @. n = real(n)*N_A
 end
 
@@ -100,7 +107,7 @@ function integrate_field!(system::AbstractcDFTSystem, field::SWeightedDensity, p
 
         selectdim(δfδρ_res, nd+1, i) .+= in_buf
     end
-    synchronize(backend)
+    # synchronize(backend)
 
 end
 
@@ -193,7 +200,7 @@ function evaluate_field!(system::AbstractcDFTSystem,field::VWeightedDensity, ρ,
             convolve!(nVij, selectdim(ρ, nd+1, i), mapij, P, iP, in_buf)
         end
     end
-    synchronize(backend)
+    # synchronize(backend)
     @. nV = real(nV)*N_A
 end
 
@@ -213,5 +220,5 @@ function integrate_field!(system::AbstractcDFTSystem,field::VWeightedDensity, pr
             selectdim(δfδρ_res, nd+1, i) .-= in_buf
         end
     end
-    synchronize(backend)
+    # synchronize(backend)
 end

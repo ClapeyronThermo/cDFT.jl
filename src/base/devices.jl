@@ -15,17 +15,16 @@ julia> using ThreadPinning
 julia> options = DFTOptions(CPU(4, [0,1,12,13]))
 ```
 """
-struct DFTOptions{D,S}
+struct DFTOptions{D}
     device::D
-    solver::S
 end
 
-function DFTOptions(device::Backend)
-    return DFTOptions(device,AndersonFixPoint())
-end
+# function DFTOptions(device::Backend)
+#     return DFTOptions(device)
+# end
 
 function DFTOptions()
-    return DFTOptions(CPU(; static=true),AndersonFixPoint())
+    return DFTOptions(CPU(; static=true))
 end
 
 function preallocate(system, ρ)

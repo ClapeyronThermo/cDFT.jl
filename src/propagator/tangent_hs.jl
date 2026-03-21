@@ -30,7 +30,9 @@ function preallocate_propagator(system::AbstractcDFTSystem,propagator::TangentHS
     nd = dimension(system)
     ngrid = system.structure.ngrid
     Gcα = allocate(backend, Float64, size(ρ)..., sum(system.species.nbeads))
+    Gcα .= 1.0
     Gp = allocate(backend, Float64, size(ρ)...)
+    Gp .= 1.0
     buf = similar(selectdim(ρ,nd+1,1), ComplexF64)
 
     if backend isa CPU
@@ -112,7 +114,7 @@ function propagate!(system::AbstractcDFTSystem, propagate::TangentHSPropagator, 
             else
                 α = j
             end
-            selectdim(δfδρ_res, nd+1, j) .-= log.(selectdim(Gp, nd+1, j)) + dropdims(sum(log.(view(Gcα, ntuple(Returns(:), nd)..., j, α)), dims=nd+1), dims=nd+1)
+            selectdim(δfδρ_res, nd+1, j) .-= log.(selectdim(Gp, nd+1, j)) + sum(log.(view(Gcα, ntuple(Returns(:), nd)..., j, α)), dims=nd+1)
         end
     end
 end

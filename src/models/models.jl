@@ -54,6 +54,8 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_b
 
     evaluate_field!(system, ρ, fft_buf, in_buf, out_buf, P, iP)
 
+    synchronize(backend)
+
     copyto!(n, Adapt.adapt(typeof(n), fft_buf))
 
     Threads.@threads for kk in CartesianIndices(ngrid)
@@ -64,6 +66,9 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_b
     end
 
     copyto!(fft_buf, Adapt.adapt(typeof(fft_buf), δf))
+
+    synchronize(backend)
+
 
     integrate_field!(system, fft_buf, δfδρ_res, in_buf, P, iP)
 end

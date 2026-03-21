@@ -36,6 +36,13 @@ function initialize_profiles(system::AbstractcDFTSystem)
                  initialize_profiles!(system, i, ρ)
             end
         end
+        
+        if any(typeof.(system.external_field) .<: ElectrostaticPotentialModel)
+            ψ = find_ψ_const(system.structure, system.external_field[findfirst(typeof.(system.external_field) .<: ElectrostaticPotentialModel)], system.model, ρ) ./ k_B / system.structure.conditions[2]
+            Z = system.model.charge
+            ρ .*= exp.(-ψ*Z')           
+        end
+
         return ρ
     end
 end
@@ -51,6 +58,22 @@ function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species, 
             ρ[:,j] = ρbulk[i]*ones(ngrid)
         end
     end
+    return ρ
+end
+
+function initialize_profiles(model::EoSModel,structure::Uniform2DCart, species, device)
+    nd = dimension(structure)
+    ngrid = structure.ngrid
+
+
+    ρbulk = structure.ρbulk
+    ρ = allocate(device, Float64, ngrid..., sum(species.nbeads))
+    for i in @comps
+        for j in @chain(i)
+            ρ[:,:,j] .= ρbulk[i]
+        end
+    end
+
     return ρ
 end
 

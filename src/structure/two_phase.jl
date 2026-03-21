@@ -190,6 +190,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DSphrCart, spec
     lb,ub = bounds(structure,1)
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
+    nd = dimension(structure)
     (p, T) = structure.conditions
     ρ1 = structure.ρbulk
     ρ2 = structure.ρbulk2
@@ -221,14 +222,16 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DSphrCart, spec
   
     L = length_scale(model)
     H = ub-lb
-    R = H/cbrt(8π/3)
 
     ρ = allocate(device, Float64, ngrid...,sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
-        coef = (2.4728-2.3625*T/Tc)/L
+        coef = (2.4728-2.3625*T/Tc)*H/L
+        coef = sqrt(coef^2-1)/4
         for j in @chain(i)
-            ρ_points = @. tanh_prof(r,ρ1[i],ρ2[i],R,coef)
+            ρ_points = @. cos_prof(r / H, ρ1[i], ρ2[i], (ub / 4 + 3 * lb / 4), coef)
+            ρ_points = Adapt.adapt(device, ρ_points)
+
             selectdim(ρ,nd+1,j) .= ρ_points
         end
     end
