@@ -30,14 +30,14 @@ Discrete Gaussian chain propagator for linear polymer chains. Computes forward
 and backward propagators using Gaussian transition probabilities via FFT.
 
 # Fields
-- `kernels`: Vector of Fourier-space Gaussian transition kernels (one per chain).
-- `b`: Statistical segment length per chain.
+- `kernel_map`: Dictionary mapping species pairs `(i, j)` (sorted) to Fourier-space Gaussian kernels.
+- `b_species`: Statistical segment length per species type.
 - `N`: Number of segments per chain.
 - `segment_species`: Segment-to-species-index mapping per chain (`Vector{Vector{Int}}`).
 """
 struct DiscreteGaussianChainPropagator{K} <: DFTPropagator
-    kernels::K
-    b::Vector{Float64}
+    kernel_map::K
+    b_species::Vector{Float64}
     N::Vector{Int}
     segment_species::Vector{Vector{Int}}
 end

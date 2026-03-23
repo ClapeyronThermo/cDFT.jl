@@ -22,7 +22,7 @@ using KernelAbstractions
             [b_val], [3], [[1, 1, 1]], structure, backend
         )
 
-        kernel = prop.kernels[1]
+        kernel = prop.kernel_map[(1, 1)]
 
         # Verify kernel at ν=0 is 1.0
         @test real(kernel[1]) ≈ 1.0 atol = 1e-14
@@ -31,6 +31,42 @@ using KernelAbstractions
         ν1 = 1.0 / L
         expected = exp(-2π^2 * b_val^2 * ν1^2 / 3)
         @test real(kernel[2]) ≈ expected rtol = 1e-12
+    end
+
+    @testset "Junction kernel values" begin
+        L = 10.0
+        ngrid = 64
+        structure = cDFT.Uniform1DCart((1e5, 298.15), [1.0, 1.0], [0.0, L], ngrid)
+
+        b_A = 1.0
+        b_B = 2.0
+        # A₂B₂ diblock: segments [1,1,2,2]
+        prop = cDFT.DiscreteGaussianChainPropagator(
+            [b_A, b_B], [4], [[1, 1, 2, 2]], structure, backend
+        )
+
+        # Should have 3 kernels: (1,1), (1,2), (2,2)
+        @test haskey(prop.kernel_map, (1, 1))
+        @test haskey(prop.kernel_map, (1, 2))
+        @test haskey(prop.kernel_map, (2, 2))
+
+        # Verify AA kernel at ν=0
+        @test real(prop.kernel_map[(1, 1)][1]) ≈ 1.0 atol = 1e-14
+        # Verify BB kernel at ν=0
+        @test real(prop.kernel_map[(2, 2)][1]) ≈ 1.0 atol = 1e-14
+        # Verify junction kernel at ν=0
+        @test real(prop.kernel_map[(1, 2)][1]) ≈ 1.0 atol = 1e-14
+
+        # Verify junction kernel uses b_AB = √((b_A² + b_B²)/2)
+        b_AB = sqrt((b_A^2 + b_B^2) / 2)
+        ν1 = 1.0 / L
+        expected_AA = exp(-2π^2 * b_A^2 * ν1^2 / 3)
+        expected_BB = exp(-2π^2 * b_B^2 * ν1^2 / 3)
+        expected_AB = exp(-2π^2 * b_AB^2 * ν1^2 / 3)
+
+        @test real(prop.kernel_map[(1, 1)][2]) ≈ expected_AA rtol = 1e-12
+        @test real(prop.kernel_map[(2, 2)][2]) ≈ expected_BB rtol = 1e-12
+        @test real(prop.kernel_map[(1, 2)][2]) ≈ expected_AB rtol = 1e-12
     end
 
     @testset "Uniform field - single homopolymer" begin
@@ -79,7 +115,7 @@ using KernelAbstractions
         b_val = 1.0
         seg_spec = [1, 1, 1, 2, 2]
         prop = cDFT.DiscreteGaussianChainPropagator(
-            [b_val], [N_seg], [seg_spec], structure, backend
+            [b_val, b_val], [N_seg], [seg_spec], structure, backend
         )
 
         system = MockSystem(structure, prop)

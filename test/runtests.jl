@@ -7,4 +7,5 @@ using cDFT.Clapeyron
     include("test_models.jl")
     include("test_methods.jl")
     include("test_propagator.jl")
+    include("test_scft.jl")
 end

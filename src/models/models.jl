@@ -3,6 +3,7 @@ import Clapeyron: a_res
 include("BasicIdeal.jl")
 include("DFT/dft.jl")
 include("DGT/dgt.jl")
+include("SCFT/scft.jl")
 
 """
     F_res(system::DFTSystem, ρ)

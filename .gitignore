@@ -5,3 +5,9 @@ notebook
 CLAUDE.md
 src/propagator/DGCTHEORY.md
 src/models/SCFT/SCFTTHEORY.md
+.mcp.json
+.swarm
+.claude
+.claude-flow
+.claude*
+TUNING.md
