@@ -123,6 +123,21 @@ Example:
 julia> structure = Uniform1DCart((p, T) , ρbulk, [-10L, 10L], 201)
 ```
 """
+struct Uniform2DCart <: DFTStructure2DCart
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    bounds::Matrix{Float64}
+    ngrid::Tuple{Int64,Int64}
+end
+
+function Uniform2DCart(conditions, ρbulk, bounds, ngrid::Int64)
+    Uniform2DCart(conditions, ρbulk, bounds, (ngrid, ngrid))
+end
+
+function Uniform2DCart(conditions, ρbulk, bounds, ngrid::Tuple{Int64,Int64})
+    Uniform2DCart(conditions, ρbulk, bounds, ngrid)
+end
+
 struct Uniform3DCart <: DFTStructure3DCart
     conditions::Tuple{Float64,Float64}
     ρbulk::Vector{Float64}
@@ -286,6 +301,7 @@ function TwoPhase3DSphrCart(conditions,ρbulk,ρbulk2,bounds::Vector{Float64},ng
 end
 
 export Uniform1DCart, ExternalField1DCart
+export Uniform2DCart, Uniform3DCart
 export Uniform1DSphr
 export TwoPhase1DCart, TwoPhase2DLamCart, TwoPhase3DLamCart
 export TwoPhase2DHexCart

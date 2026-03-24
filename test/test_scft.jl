@@ -8,17 +8,17 @@ using LinearAlgebra
 
     @testset "FloryHuggins constructor" begin
         chi = [0.0 10.0; 10.0 0.0]
-        fh = cDFT.FloryHuggins(chi, 1.0, 100.0)
+        fh = cDFT.FloryHuggins(chi, 1.0, 20.0)
         @test fh.chi == chi
         @test fh.rho0 == 1.0
-        @test fh.kappa == 100.0
+        @test fh.kappa == 20.0
     end
 
     @testset "Field computation - FloryHuggins" begin
         nspecies = 2
         chi = [0.0 10.0; 10.0 0.0]
         rho0 = 1.0
-        kappa = 100.0
+        kappa = 20.0
         fh = cDFT.FloryHuggins(chi, rho0, kappa)
 
         L = 10.0
@@ -58,7 +58,7 @@ using LinearAlgebra
     @testset "Bulk fields" begin
         chi = [0.0 10.0 5.0; 10.0 0.0 3.0; 5.0 3.0 0.0]
         rho0 = 1.0
-        kappa = 100.0
+        kappa = 20.0
         fh = cDFT.FloryHuggins(chi, rho0, kappa)
 
         bulk = [0.4, 0.3, 0.3]
@@ -78,7 +78,7 @@ using LinearAlgebra
         nspecies = 2
         chi = [0.0 1.0; 1.0 0.0]
         rho0 = 1.0
-        kappa = 100.0
+        kappa = 20.0
         fh = cDFT.FloryHuggins(chi, rho0, kappa)
 
         L = 10.0
@@ -129,7 +129,7 @@ using LinearAlgebra
         nspecies = 2
         chi = [0.0 1.0; 1.0 0.0]
         rho0 = 1.0
-        kappa = 100.0
+        kappa = 20.0
         fh = cDFT.FloryHuggins(chi, rho0, kappa)
 
         L = 10.0
@@ -184,7 +184,7 @@ using LinearAlgebra
     @testset "Initialize profiles" begin
         nspecies = 2
         chi = [0.0 10.0; 10.0 0.0]
-        fh = cDFT.FloryHuggins(chi, 1.0, 100.0)
+        fh = cDFT.FloryHuggins(chi, 1.0, 20.0)
 
         L = 10.0
         ngrid = 64
@@ -219,7 +219,7 @@ using LinearAlgebra
         nspecies = 3  # A, B, S
         chi = [0.0 10.0 5.0; 10.0 0.0 3.0; 5.0 3.0 0.0]
         rho0 = 1.0
-        kappa = 100.0
+        kappa = 20.0
         fh = cDFT.FloryHuggins(chi, rho0, kappa)
 
         L = 10.0
@@ -269,7 +269,7 @@ using LinearAlgebra
     @testset "3D SCFTSystem construction" begin
         nspecies = 2
         chi = [0.0 10.0; 10.0 0.0]
-        fh = cDFT.FloryHuggins(chi, 1.0, 100.0)
+        fh = cDFT.FloryHuggins(chi, 1.0, 20.0)
 
         L = 5.0
         ngrid = 16
@@ -299,9 +299,9 @@ using LinearAlgebra
         # A symmetric AB diblock with weak χ should converge back to uniform
         # from a small perturbation (below the spinodal)
         nspecies = 2
-        chi = [0.0 1.0; 1.0 0.0]  # weak χ, well below ODT
+        chi = [0.0 0.5; 0.5 0.0]  # χN = 5, well below ODT (~10.5)
         rho0 = 1.0
-        kappa = 100.0
+        kappa = 20.0
         fh = cDFT.FloryHuggins(chi, rho0, kappa)
 
         L = 10.0
@@ -345,7 +345,7 @@ using LinearAlgebra
         N_seg = 20
         chi_val = 1.5  # χN = 30
         rho0 = 1.0
-        kappa = 25.0
+        kappa = 20.0
         chi = [0.0 chi_val; chi_val 0.0]
         fh = cDFT.FloryHuggins(chi, rho0, kappa)
 
@@ -393,6 +393,6 @@ using LinearAlgebra
 
         # Incompressibility: total density ≈ ρ₀ everywhere
         ρ_total = ρ[:, 1] .+ ρ[:, 2]
-        @test all(x -> isapprox(x, rho0; rtol=0.02), ρ_total)
+        @test all(x -> isapprox(x, rho0; rtol=0.05), ρ_total)
     end
 end

@@ -10,24 +10,33 @@ propagators computed with `Δw = w - w_bulk`. The relationship to the true
 partition function is `Q = Q̃ * exp(-Σ_s w_bulk[α(s)])`, and the free energy
 terms are adjusted accordingly.
 """
-function free_energy(system::SCFTSystem, ρ, w, Q_chains, Q_solvents)
-    free_energy(system.interaction, system, ρ, w, Q_chains, Q_solvents)
+function free_energy(system::SCFTSystem, ρ, w, Q_chains, Q_solvents;
+                     V_eff=nothing, w_bulk=nothing)
+    free_energy(system.interaction, system, ρ, w, Q_chains, Q_solvents;
+                V_eff=V_eff, w_bulk=w_bulk)
 end
 
-function free_energy(fh::FloryHuggins, system::SCFTSystem, ρ, w, Q_chains, Q_solvents)
+function free_energy(fh::FloryHuggins, system::SCFTSystem, ρ, w, Q_chains, Q_solvents;
+                     V_eff=nothing, w_bulk=nothing)
     nd = dimension(system)
     ngrid = system.structure.ngrid
     nspecies = system.nspecies
     dz = structure_dz(system.structure)
 
-    V_eff = effective_volume(system, dz)
+    # Use V_eff and w_bulk from the iteration loop when provided, so the free energy
+    # is computed consistently with the quadrature rule chosen for the iteration.
+    # Fallback to recomputing from scratch (CPU Simpson) for standalone calls.
+    if V_eff === nothing
+        V_eff = effective_volume(system, dz)
+    end
+    if w_bulk === nothing
+        bulk = compute_bulk_densities(system; V_eff=V_eff)
+        w_bulk = compute_bulk_fields(fh, bulk)
+    end
 
     chi = fh.chi
     rho0 = fh.rho0
     kappa = fh.kappa
-
-    bulk = compute_bulk_densities(system)
-    w_bulk = compute_bulk_fields(fh, bulk)
 
     # U_int = (1/ρ₀) ∫ Σ_{α<β} χ_αβ ρ_α ρ_β dr
     U_int_integrand = zeros(ngrid...)
@@ -40,12 +49,13 @@ function free_energy(fh::FloryHuggins, system::SCFTSystem, ρ, w, Q_chains, Q_so
     end
     U_int = ∫(U_int_integrand, dz) / rho0
 
-    # U_comp = (ζ / 2ρ₀) ∫ (ρ₊/ρ₀ - 1)² dr
+    # U_comp = (ζ / 2) ∫ (ρ₊/ρ₀ - 1)² dr
+    # Consistent with w_comp = ζ/ρ₀ · (ρ₊/ρ₀ − 1) = δU_comp/δρ_α.
     ρ_total = zeros(ngrid...)
     for α in 1:nspecies
         ρ_total .+= Array(selectdim(ρ, nd+1, α))
     end
-    U_comp_integrand = (kappa / (2.0 * rho0)) .* (ρ_total ./ rho0 .- 1.0) .^ 2
+    U_comp_integrand = (kappa / 2.0) .* (ρ_total ./ rho0 .- 1.0) .^ 2
     U_comp = ∫(U_comp_integrand, dz)
 
     # -Σ_K ∫ w_K ρ_K dr

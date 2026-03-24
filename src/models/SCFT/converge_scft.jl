@@ -1,141 +1,250 @@
 """
-    converge!(system::SCFTSystem, ρ; picard_maxit=2000, anderson_maxit=10000, beta=1e-2, rtol=1e-8, atol=1e-8)
+    scft_iterate!(system::SCFTSystem, ρ; kwargs...)
 
-Density-based SCFT convergence. Iterates on density profiles using Anderson
-mixing (via SIAMFANLEquations.aasol).
+SCFT iteration loop: Picard mixing followed by Anderson acceleration.
 
-The fixed-point equation is:
-    ρ → fields(ρ) → propagators(fields) → Q(propagators) → ρ_new(propagators, Q)
-    G(ρ) = ρ_new - ρ = 0
+Protocol:
+1. Run Picard (w += β·r) while err ≥ `anderson_start`, accumulating field/
+   residual history in a circular buffer on every iteration.
+2. Switch to Anderson acceleration once err < `anderson_start`, using the
+   already-accumulated history immediately (no history loss at the switch).
+
+The Anderson update (Walker & Ni, 2011, Eq. 2.5) at iteration k:
+   ΔF_i = r_{k-i+1} - r_{k-i},   Δx_i = w_{k-i+1} - w_{k-i}
+   solve:  [ΔFᵢ·ΔFⱼ] γ = [ΔFᵢ·rₖ]   (m_eff × m_eff least-squares)
+   update: w ← w + β·r - Σᵢ γᵢ·(Δxᵢ + β·ΔFᵢ)
+
+Stability condition (Picard): `beta < 2 / (1 + kappa)`.
+For kappa=20 the default beta=0.01 gives ~10× safety margin.
+
+# Keyword Arguments
+- `maxit::Int=5000`: Maximum total iterations.
+- `beta::Float64=0.01`: Mixing coefficient for both Picard and Anderson steps.
+- `tol::Float64=1e-6`: Convergence tolerance on max|r|.
+- `anderson_start::Float64=1e-2`: Switch from Picard to Anderson when err < this.
+- `anderson_m::Int=5`: Anderson history length (number of past iterates kept).
+- `quadrature::Symbol=:trapz`: Quadrature rule for partition-function integrals.
+  `:trapz` — periodic composite trapezoidal (uniform weights, spectral convergence for
+  smooth periodic functions, works for any N). Recommended for periodic SCFT domains.
+  `:simpson` — composite Simpson rule (O(h⁴), requires odd N per dimension).
+- `log_interval::Int=100`: Log every N iterations (0 = never).
+- `save_interval::Int=0`: Call `save_callback` every N iterations (0 = never).
+- `save_callback`: `f(iter, ρ_array, w_array)` called at each save interval.
+- `verbose::Bool=true`: Print convergence summary and solver-switch message.
+
+# Returns
+Named tuple `(converged, iter, error)`.
 """
-function converge!(system::SCFTSystem, ρ; picard_maxit=2000, anderson_maxit=10000, beta=1e-2, rtol=1e-8, atol=1e-8)
-    nd = dimension(system)
-    ngrid = system.structure.ngrid
+function scft_iterate!(system::SCFTSystem, ρ;
+    maxit          :: Int     = 5000,
+    beta           :: Float64 = 0.01,
+    tol            :: Float64 = 1e-6,
+    anderson_start :: Float64 = 1e-2,
+    anderson_m     :: Int     = 5,
+    quadrature     :: Symbol  = :trapz,
+    log_interval   :: Int     = 100,
+    save_interval  :: Int     = 0,
+    save_callback             = nothing,
+    verbose        :: Bool    = true,
+)
+    device   = system.options.device
+    dz       = structure_dz(system.structure)
+    nd       = dimension(system)
     nspecies = system.nspecies
-    device = system.options.device
-    propagator = system.propagator
 
-    dz = structure_dz(system.structure)
+    w     = similar(ρ)
+    w_new = similar(ρ)
+    r     = similar(ρ)   # residual: r_k = w_new(w_k) - w_k
 
-    # Preallocate working arrays
-    w = similar(ρ)
-    ρ_new = similar(ρ)
+    q_fwd, q_bwd, buf, P, iP = preallocate_propagator(system, system.propagator, ρ, device)
 
-    # Propagator cache
-    nchains = length(propagator.N)
-    q_fwd, q_bwd, buf, P, iP = preallocate_propagator(
-        system, propagator, ρ, device
-    )
+    # Precompute quadrature weights on the device (shape = ngrid).
+    # :trapz — uniform weights prod(dz), spectral convergence for periodic domains.
+    # :simpson — composite Simpson 1/4/2 pattern, O(h⁴), requires odd N.
+    weights_gpu = if quadrature == :trapz
+        trapz_weights(system.structure.ngrid, dz, device)
+    elseif quadrature == :simpson
+        simpson_weights(system.structure.ngrid, dz, device)
+    else
+        error("Unknown quadrature rule: $quadrature. Use :trapz or :simpson.")
+    end
 
-    # Compute bulk densities and fields for normalization
-    bulk = compute_bulk_densities(system)
+    # V_eff is constant — compute once from the weight array.
+    V_eff = sum(weights_gpu)
+
+    # Print the effective volume
+    @info "Effective volume: $V_eff"
+
+    # Compute bulk densities using the same V_eff as the iteration, so canonical
+    # prefactors (n_chains / V_eff) are consistent with the chosen quadrature rule.
+    bulk   = compute_bulk_densities(system; V_eff=V_eff)
     w_bulk = compute_bulk_fields(system.interaction, bulk)
 
-    function obj!(G, x)
-        ρ .= Adapt.adapt(device, reshape(x, size(ρ)))
-        clamp!(ρ, 1e-15, Inf)
+    # Preallocate scratch buffer for compute_fields! to avoid per-call GPU allocations.
+    scratch = similar(selectdim(w, nd+1, 1))
 
-        compute_fields!(system, ρ, w)
-        propagate_scft!(system, w, w_bulk, q_fwd, q_bwd, buf, P, iP)
-        Q_chains, Q_solvents = compute_partition_functions(system, w, w_bulk, q_fwd, dz)
-        compute_densities!(system, w, w_bulk, q_fwd, q_bwd, Q_chains, Q_solvents, ρ_new)
+    # Preallocate exp_field[α] = exp(w_bulk[α] - w_α) and its inverse,
+    # one array per species.  Reused every iteration to avoid redundant GPU kernels
+    # when multiple segments share the same species (common in diblock chains).
+    exp_field     = [similar(selectdim(w, nd+1, 1)) for _ in 1:nspecies]
+    inv_exp_field = [similar(selectdim(w, nd+1, 1)) for _ in 1:nspecies]
 
-        G .= vec(Adapt.adapt(CPU(), ρ_new .- ρ))
-        return G
+    compute_fields!(system, ρ, w; scratch=scratch)
+
+    # ── Anderson history (circular buffer, m+1 slots for m differences) ────────
+    m      = anderson_m
+    aa_w   = [similar(w) for _ in 1:m+1]   # field values
+    aa_r   = [similar(w) for _ in 1:m+1]   # residuals
+    ΔF_buf = [similar(w) for _ in 1:m]     # preallocated ΔF work arrays
+    Δx_buf = [similar(w) for _ in 1:m]     # preallocated Δx work arrays
+    aa_count       = 0      # total history entries stored so far
+    using_anderson = false
+
+    err = Inf
+
+    for iter in 1:maxit
+
+        # ── Precompute exp_field[α] = exp(w_bulk[α] - w_α) once per iteration.
+        # This is reused by propagate_scft!, compute_partition_functions, and
+        # compute_densities! instead of recomputing per segment or per call.
+        # Note: selectdim must be called outside @. to get the view first.
+        for α in 1:nspecies
+            w_α = selectdim(w, nd+1, α)
+            @. exp_field[α]     = exp(w_bulk[α] - w_α)
+            @. inv_exp_field[α] = 1 / exp_field[α]
+        end
+
+        # ── Propagate, compute densities and new fields ───────────────────────
+        propagate_scft!(system, w, w_bulk, q_fwd, q_bwd, buf, P, iP; exp_field=exp_field)
+        Q_chains, Q_solvents = compute_partition_functions(system, w, w_bulk, q_fwd, dz;
+                                   weights=weights_gpu, V_eff=V_eff, exp_field=exp_field)
+        compute_densities!(system, w, w_bulk, q_fwd, q_bwd, Q_chains, Q_solvents, ρ;
+                           V_eff=V_eff, exp_field=exp_field, inv_exp_field=inv_exp_field)
+        compute_fields!(system, ρ, w_new; scratch=scratch)
+
+        # ── Residual and error ────────────────────────────────────────────────
+        @. r = w_new - w
+        err  = maximum(abs, r)
+
+        # ── Logging ───────────────────────────────────────────────────────────
+        if log_interval > 0 && iter % log_interval == 0
+            H     = free_energy(system, ρ, w, Q_chains, Q_solvents; V_eff=V_eff, w_bulk=w_bulk)
+            phase = using_anderson ? "AA" : "Picard"
+            @info "SCFT iter $(lpad(iter, 5)) | err = $(round(err; sigdigits=3)) | F = $(round(H; sigdigits=6)) | $(phase)"
+        end
+
+        if save_interval > 0 && iter % save_interval == 0 && save_callback !== nothing
+            save_callback(iter, Array(ρ), Array(w))
+        end
+
+        # ── Convergence check ─────────────────────────────────────────────────
+        if err < tol
+            if verbose
+                H = free_energy(system, ρ, w, Q_chains, Q_solvents; V_eff=V_eff, w_bulk=w_bulk)
+                @info "SCFT converged at iter $(iter): err = $(round(err; sigdigits=3)) | F = $(round(H; sigdigits=6))"
+            end
+            return (converged=true, iter=iter, error=err)
+        end
+
+        # ── Store (w, r) in history on EVERY iteration (Picard or Anderson) ──
+        # This ensures history is ready when the solver switches.
+        slot = mod1(aa_count + 1, m + 1)
+        aa_w[slot] .= w
+        aa_r[slot] .= r
+        aa_count += 1
+
+        # ── Decide whether to switch to Anderson ──────────────────────────────
+        if !using_anderson && err < anderson_start && aa_count >= 2
+            using_anderson = true
+            if verbose
+                @info "SCFT switching to Anderson acceleration at iter $(iter) (err = $(round(err; sigdigits=3)), m=$(m))"
+            end
+        end
+
+        # ── Field update ──────────────────────────────────────────────────────
+        if using_anderson && aa_count >= 2
+
+            m_eff = min(aa_count - 1, m)   # number of difference vectors available
+
+            # Fill preallocated difference buffers (newest difference first)
+            for i in 1:m_eff
+                s_new = mod1(aa_count - i + 1, m + 1)
+                s_old = mod1(aa_count - i,     m + 1)
+                @. ΔF_buf[i] = aa_r[s_new] - aa_r[s_old]
+                @. Δx_buf[i] = aa_w[s_new] - aa_w[s_old]
+            end
+
+            # Build (m_eff × m_eff) Gram matrix and rhs using CUBLAS dot products.
+            # dot(vec(a), vec(b)) dispatches to cuBLAS ddot — no temporary GPU array.
+            G = zeros(m_eff, m_eff)
+            g = zeros(m_eff)
+            for i in 1:m_eff
+                g[i] = dot(vec(ΔF_buf[i]), vec(r))
+                for j in i:m_eff
+                    v = dot(vec(ΔF_buf[i]), vec(ΔF_buf[j]))
+                    G[i, j] = v
+                    G[j, i] = v
+                end
+            end
+
+            # Tikhonov regularization to handle near-singular Gram matrices
+            λ = max(1e-12 * tr(G), 1e-16)
+            for i in 1:m_eff
+                G[i, i] += λ
+            end
+
+            γ = try
+                G \ g
+            catch
+                # Fall back to a pure Picard step if the solve fails
+                zeros(m_eff)
+            end
+
+            # Anderson update: w ← w + β·r - Σᵢ γᵢ·(Δxᵢ + β·ΔFᵢ)
+            w .+= beta .* r
+            for i in 1:m_eff
+                @. w -= γ[i] * (Δx_buf[i] + beta * ΔF_buf[i])
+            end
+
+        else
+            # Pure Picard: w += β · r
+            w .+= beta .* r
+        end
+
+    end  # iter loop
+
+    if verbose
+        @warn "SCFT did not converge after $(maxit) iterations (err = $(round(err; sigdigits=3)))"
     end
+    return (converged=false, iter=maxit, error=err)
+end
 
-    x0 = Adapt.adapt(CPU(), vec(copy(ρ)))
-    n = length(x0)
 
-    # Phase 1: Picard iterations (m=0, skip if picard_maxit == 0)
-    if picard_maxit > 0
-        result = SIAMFANLEquations.aasol(obj!, x0, 0, zeros(n, 4);
-            beta=beta, rtol=1e-1, atol=1e-1, maxit=picard_maxit)
-        x_start = result.solution
-    else
-        x_start = x0
-    end
+"""
+    converge_fields!(system::SCFTSystem, ρ; kwargs...)
 
-    # Phase 2: Anderson mixing
-    result = SIAMFANLEquations.aasol(obj!, x_start, 5, zeros(n, 14);
-        beta=beta, rtol=rtol, atol=atol, maxit=anderson_maxit)
+Field-based SCFT convergence using Picard mixing followed by Anderson
+acceleration. Updates `ρ` in-place.
 
-    ρ .= Adapt.adapt(device, reshape(result.solution, size(ρ)))
-    clamp!(ρ, 1e-15, Inf)
+Key parameters (forwarded to `scft_iterate!`):
+- `maxit=5000`, `beta=0.01`, `tol=1e-6`
+- `anderson_start=1e-2`: switch from Picard to Anderson when err < this
+- `anderson_m=5`: number of Anderson history vectors
+- `quadrature=:trapz`: `:trapz` (periodic trapezoidal, default) or `:simpson`
+- `log_interval=100`, `verbose=true`
+- `save_interval=0`, `save_callback=nothing`
 
-    return result
+Returns `(converged, iter, error)`.
+"""
+function converge_fields!(system::SCFTSystem, ρ; kwargs...)
+    return scft_iterate!(system, ρ; kwargs...)
 end
 
 """
-    converge_fields!(system::SCFTSystem, ρ; picard_maxit=2000, anderson_maxit=10000, beta=1e-2, rtol=1e-8, atol=1e-8)
+    converge!(system::SCFTSystem, ρ; kwargs...)
 
-Field-based SCFT convergence. Iterates on field profiles using Anderson mixing.
-
-The fixed-point equation is:
-    w → propagators(w) → Q → ρ(propagators, Q) → w_new(ρ)
-    G(w) = w_new - w = 0
-
-Returns the converged fields in `w` and updates `ρ` to the final densities.
+Alias for `converge_fields!`. Keyword arguments forwarded to `scft_iterate!`.
 """
-function converge_fields!(system::SCFTSystem, ρ; picard_maxit=2000, anderson_maxit=10000, beta=1e-2, rtol=1e-8, atol=1e-8)
-    nd = dimension(system)
-    ngrid = system.structure.ngrid
-    nspecies = system.nspecies
-    device = system.options.device
-    propagator = system.propagator
-
-    dz = structure_dz(system.structure)
-
-    # Preallocate
-    w = similar(ρ)
-    w_new = similar(ρ)
-
-    nchains = length(propagator.N)
-    q_fwd, q_bwd, buf, P, iP = preallocate_propagator(
-        system, propagator, ρ, device
-    )
-
-    bulk = compute_bulk_densities(system)
-    w_bulk = compute_bulk_fields(system.interaction, bulk)
-
-    # Initialize fields from initial density
-    compute_fields!(system, ρ, w)
-
-    function obj!(G, x)
-        w .= Adapt.adapt(device, reshape(x, size(w)))
-
-        propagate_scft!(system, w, w_bulk, q_fwd, q_bwd, buf, P, iP)
-        Q_chains, Q_solvents = compute_partition_functions(system, w, w_bulk, q_fwd, dz)
-        compute_densities!(system, w, w_bulk, q_fwd, q_bwd, Q_chains, Q_solvents, ρ)
-        clamp!(ρ, 1e-15, Inf)
-        compute_fields!(system, ρ, w_new)
-
-        G .= vec(Adapt.adapt(CPU(), w_new .- w))
-        return G
-    end
-
-    x0 = Adapt.adapt(CPU(), vec(copy(w)))
-    n = length(x0)
-
-    # Phase 1: Picard (skip if picard_maxit == 0)
-    if picard_maxit > 0
-        result = SIAMFANLEquations.aasol(obj!, x0, 0, zeros(n, 4);
-            beta=beta, rtol=1e-1, atol=1e-1, maxit=picard_maxit)
-        x_start = result.solution
-    else
-        x_start = x0
-    end
-
-    # Phase 2: Anderson
-    result = SIAMFANLEquations.aasol(obj!, x_start, 5, zeros(n, 14);
-        beta=beta, rtol=rtol, atol=atol, maxit=anderson_maxit)
-
-    # Final density from converged fields
-    w .= Adapt.adapt(device, reshape(result.solution, size(w)))
-    propagate_scft!(system, w, w_bulk, q_fwd, q_bwd, buf, P, iP)
-    Q_chains, Q_solvents = compute_partition_functions(system, w, w_bulk, q_fwd, dz)
-    compute_densities!(system, w, w_bulk, q_fwd, q_bwd, Q_chains, Q_solvents, ρ)
-    clamp!(ρ, 1e-15, Inf)
-
-    return result
+function converge!(system::SCFTSystem, ρ; kwargs...)
+    return scft_iterate!(system, ρ; kwargs...)
 end

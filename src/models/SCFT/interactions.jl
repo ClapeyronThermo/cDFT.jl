@@ -4,8 +4,8 @@
 Compute the mean-field potential fields `w` from the density profiles `ρ`.
 Dispatches to the interaction-model-specific method.
 """
-function compute_fields!(system::SCFTSystem, ρ, w)
-    compute_fields!(system.interaction, ρ, w, system)
+function compute_fields!(system::SCFTSystem, ρ, w; scratch=nothing)
+    compute_fields!(system.interaction, ρ, w, system; scratch=scratch)
 end
 
 """
@@ -17,27 +17,31 @@ Compute fields for local Flory-Huggins interactions with Helfand compressibility
 
 where ρ₊ = Σ_α ρ_α is the total density.
 """
-function compute_fields!(fh::FloryHuggins, ρ, w, system::SCFTSystem)
+function compute_fields!(fh::FloryHuggins, ρ, w, system::SCFTSystem; scratch=nothing)
     nd = dimension(system)
     nspecies = system.nspecies
-    ngrid = system.structure.ngrid
     chi = fh.chi
     rho0 = fh.rho0
     kappa = fh.kappa
 
-    # Compute total density ρ₊
-    ρ_total = zeros(ngrid...)
+    # Use preallocated scratch if provided, otherwise allocate.
+    # scratch must have the same shape/device as a single species slice of w.
+    ρ_total = scratch !== nothing ? scratch : similar(selectdim(w, nd+1, 1))
+
+    # Accumulate total density into scratch (in-place, no allocation)
+    ρ_total .= 0
     for α in 1:nspecies
         ρ_total .+= selectdim(ρ, nd+1, α)
     end
 
-    # Compressibility term: (ζ / ρ₀)(ρ₊ / ρ₀ - 1)
-    comp_term = (kappa / rho0) .* (ρ_total ./ rho0 .- 1.0)
+    # Overwrite ρ_total in-place with the compressibility term to avoid a second allocation:
+    # comp_term = (ζ / ρ₀)(ρ₊ / ρ₀ - 1)
+    @. ρ_total = (kappa / rho0) * (ρ_total / rho0 - 1.0)
 
     # Field for each species
     for α in 1:nspecies
         w_α = selectdim(w, nd+1, α)
-        w_α .= comp_term
+        w_α .= ρ_total
         for β in 1:nspecies
             if chi[α, β] != 0.0
                 w_α .+= (chi[α, β] / rho0) .* selectdim(ρ, nd+1, β)

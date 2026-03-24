@@ -164,10 +164,13 @@ function SCFTSystem(;
         Uniform1DCart((0.0, 0.0), dummy_ρbulk, Float64.(bounds), ngrid isa Int ? ngrid : ngrid[1])
     elseif bounds isa Matrix{Float64} || bounds isa Matrix
         nd = size(bounds, 1)
-        if nd == 3
+        if nd == 2
+            ng = ngrid isa Int ? (ngrid, ngrid) : Tuple(ngrid[1:2])
+            Uniform2DCart((0.0, 0.0), dummy_ρbulk, Float64.(bounds), ng)
+        elseif nd == 3
             Uniform3DCart((0.0, 0.0), dummy_ρbulk, Float64.(bounds), ngrid isa Int ? ngrid : ngrid[1])
         else
-            error("2D structures not yet supported for SCFT")
+            error("Unsupported number of dimensions: $nd (must be 1, 2, or 3)")
         end
     else
         error("Unsupported bounds type: $(typeof(bounds))")

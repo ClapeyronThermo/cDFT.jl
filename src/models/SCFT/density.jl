@@ -8,10 +8,16 @@ avoiding the numerical underflow that occurs when raw fields are large.
 The shifted propagator satisfies `q̃(r,s) = q(r,s) * exp(Σ_{t=1}^{s} w_bulk[α(t)])`,
 so `Q̃ ≈ 1` for uniform systems (instead of `Q ∼ exp(-N * w_bulk) ≈ 0`).
 """
-function propagate_scft!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, buf, P, iP)
+function propagate_scft!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, buf, P, iP;
+                         exp_field=nothing)
     nd = dimension(system)
     propagator = system.propagator
     nchains = length(propagator.N)
+
+    # Helper: return precomputed exp_field[α] if available, else compute on the fly.
+    # exp_field[α] = exp(w_bulk[α] - w_α(r))
+    ef(α) = exp_field !== nothing ? exp_field[α] :
+                exp.(w_bulk[α] .- selectdim(w, nd+1, α))
 
     for c in 1:nchains
         Nc = propagator.N[c]
@@ -19,26 +25,26 @@ function propagate_scft!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, buf, P, iP
 
         # Forward propagator with shifted fields
         α1 = seg_spec[1]
-        selectdim(q_fwd[c], nd+1, 1) .= exp.(w_bulk[α1] .- selectdim(w, nd+1, α1))
+        selectdim(q_fwd[c], nd+1, 1) .= ef(α1)
 
         for i in 2:Nc
             αi = seg_spec[i]
             bond_key = minmax(seg_spec[i-1], seg_spec[i])
             kernel = propagator.kernel_map[bond_key]
             convolve!(selectdim(q_fwd[c], nd+1, i), selectdim(q_fwd[c], nd+1, i-1), kernel, P, iP, buf)
-            selectdim(q_fwd[c], nd+1, i) .*= exp.(w_bulk[αi] .- selectdim(w, nd+1, αi))
+            selectdim(q_fwd[c], nd+1, i) .*= ef(αi)
         end
 
         # Backward propagator with shifted fields
         αN = seg_spec[Nc]
-        selectdim(q_bwd[c], nd+1, 1) .= exp.(w_bulk[αN] .- selectdim(w, nd+1, αN))
+        selectdim(q_bwd[c], nd+1, 1) .= ef(αN)
 
         for i in 2:Nc
             αi = seg_spec[Nc - i + 1]
             bond_key = minmax(seg_spec[Nc - i + 1], seg_spec[Nc - i + 2])
             kernel = propagator.kernel_map[bond_key]
             convolve!(selectdim(q_bwd[c], nd+1, i), selectdim(q_bwd[c], nd+1, i-1), kernel, P, iP, buf)
-            selectdim(q_bwd[c], nd+1, i) .*= exp.(w_bulk[αi] .- selectdim(w, nd+1, αi))
+            selectdim(q_bwd[c], nd+1, i) .*= ef(αi)
         end
     end
 end
@@ -46,13 +52,17 @@ end
 """
     effective_volume(system::SCFTSystem, dz)
 
-Compute the effective domain volume consistent with the Simpson quadrature rule.
-Uses `V_eff = ∫(ones, dz)` so that partition functions and densities are
-self-consistent regardless of quadrature accuracy.
+Compute the effective domain volume using the periodic trapezoidal rule:
+    V_eff = prod(dz) * prod(ngrid) = prod(L_i)
+
+This is exact for any N and consistent with the default `:trapz` quadrature used
+in `scft_iterate!`. The previous Simpson-based fallback gave ~5% error for typical
+3D grids because `structure_dz` returns `L/N` (periodic spacing) rather than
+`L/(N-1)` (non-periodic), causing the Simpson weights to underestimate the volume.
 """
 function effective_volume(system::SCFTSystem, dz)
     ngrid = system.structure.ngrid
-    return ∫(ones(ngrid...), dz)
+    return prod(dz) * prod(ngrid)
 end
 
 """
@@ -69,28 +79,42 @@ For solvents:
 
 Returns `(Q_chains::Vector{Float64}, Q_solvents::Vector{Float64})`.
 """
-function compute_partition_functions(system::SCFTSystem, w, w_bulk, q_fwd, dz)
+function compute_partition_functions(system::SCFTSystem, w, w_bulk, q_fwd, dz;
+                                     weights=nothing, V_eff=nothing, exp_field=nothing)
     nd = dimension(system)
     ngrid = system.structure.ngrid
     propagator = system.propagator
     nchains = length(propagator.N)
 
-    V_eff = effective_volume(system, dz)
+    V_eff = V_eff !== nothing ? V_eff : effective_volume(system, dz)
 
     # Chain partition functions (from shifted propagators)
     Q_chains = Vector{Float64}(undef, nchains)
     for c in 1:nchains
         Nc = propagator.N[c]
-        q_end = Array(selectdim(q_fwd[c], nd+1, Nc))
-        Q_chains[c] = ∫(q_end, dz) / V_eff
+        if weights !== nothing
+            # GPU-friendly: dot product with precomputed weight array — no host transfer
+            Q_chains[c] = sum(selectdim(q_fwd[c], nd+1, Nc) .* weights) / V_eff
+        else
+            q_end = Array(selectdim(q_fwd[c], nd+1, Nc))
+            Q_chains[c] = ∫(q_end, dz) / V_eff
+        end
     end
 
     # Solvent partition functions (shifted: exp(w_bulk - w))
     Q_solvents = Vector{Float64}(undef, length(system.solvents))
     for (s, solvent) in enumerate(system.solvents)
         sp = solvent.species_index
-        exp_shifted = exp.(w_bulk[sp] .- Array(selectdim(w, nd+1, sp)))
-        Q_solvents[s] = ∫(exp_shifted, dz) / V_eff
+        # Use precomputed exp_field[sp] if available (avoids recomputing exp per call)
+        ef_sp = exp_field !== nothing ? exp_field[sp] :
+                    exp.(w_bulk[sp] .- selectdim(w, nd+1, sp))
+        if weights !== nothing
+            Q_solvents[s] = sum(ef_sp .* weights) / V_eff
+        else
+            exp_shifted = exp_field !== nothing ? Array(ef_sp) :
+                              exp.(w_bulk[sp] .- Array(selectdim(w, nd+1, sp)))
+            Q_solvents[s] = ∫(exp_shifted, dz) / V_eff
+        end
     end
 
     return Q_chains, Q_solvents
@@ -114,7 +138,8 @@ For solvents (grand canonical):
 For solvents (canonical):
     ρ_α(r) = (n_S / V_eff) * exp(w_S^b - w_S(r)) / Q̃_S
 """
-function compute_densities!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, Q_chains, Q_solvents, ρ)
+function compute_densities!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, Q_chains, Q_solvents, ρ;
+                            V_eff=nothing, exp_field=nothing, inv_exp_field=nothing)
     nd = dimension(system)
     ngrid = system.structure.ngrid
     propagator = system.propagator
@@ -122,7 +147,7 @@ function compute_densities!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, Q_chain
     nspecies = system.nspecies
     dz = structure_dz(system.structure)
 
-    V_eff = effective_volume(system, dz)
+    V_eff = V_eff !== nothing ? V_eff : effective_volume(system, dz)
 
     # Zero out densities
     ρ .= 0.0
@@ -141,27 +166,31 @@ function compute_densities!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, Q_chain
             prefactor = chain.bulk_density / (chain.N * Qc)
         end
 
-        # For each segment, add contribution to the appropriate species
-        # With shifted propagators, the double-count correction uses Δw = w - w_bulk
+        # For each segment, add contribution to the appropriate species.
+        # Double-count correction: exp(w_α - w_bulk_α) = 1/exp_field[α].
+        # Use precomputed inv_exp_field if available to avoid recomputing per segment.
         for s in 1:Nc
             α = seg_spec[s]
+            inv_ef_α = inv_exp_field !== nothing ? inv_exp_field[α] :
+                           exp.(selectdim(w, nd+1, α) .- w_bulk[α])
             selectdim(ρ, nd+1, α) .+= prefactor .* selectdim(q_fwd[c], nd+1, s) .*
-                selectdim(q_bwd[c], nd+1, Nc + 1 - s) .*
-                exp.(selectdim(w, nd+1, α) .- w_bulk[α])
+                selectdim(q_bwd[c], nd+1, Nc + 1 - s) .* inv_ef_α
         end
     end
 
     # Solvent contributions
     for (s, solvent) in enumerate(system.solvents)
         sp = solvent.species_index
+        # Use precomputed exp_field[sp] if available
+        ef_sp = exp_field !== nothing ? exp_field[sp] :
+                    exp.(w_bulk[sp] .- selectdim(w, nd+1, sp))
         if solvent.ensemble == :grand_canonical
             # ρ_S(r) = ρ_S^b * exp(w_S^b - w_S(r))
-            selectdim(ρ, nd+1, sp) .+= solvent.bulk_density .* exp.(w_bulk[sp] .- selectdim(w, nd+1, sp))
+            selectdim(ρ, nd+1, sp) .+= solvent.bulk_density .* ef_sp
         else
             # Canonical solvent: ρ_S = (n_S/V_eff) * exp(w_S^b - w_S(r)) / Q̃_S
             Qs = Q_solvents[s]
-            selectdim(ρ, nd+1, sp) .+= (solvent.n_molecules / V_eff) .*
-                exp.(w_bulk[sp] .- selectdim(w, nd+1, sp)) ./ Qs
+            selectdim(ρ, nd+1, sp) .+= (solvent.n_molecules / V_eff) .* ef_sp ./ Qs
         end
     end
 end
