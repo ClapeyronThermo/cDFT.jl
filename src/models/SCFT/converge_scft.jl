@@ -56,7 +56,7 @@ function scft_iterate!(system::SCFTSystem, ρ;
     w_new = similar(ρ)
     r     = similar(ρ)   # residual: r_k = w_new(w_k) - w_k
 
-    q_fwd, q_bwd, buf, P, iP = preallocate_propagator(system, system.propagator, ρ, device)
+    q_fwd, q_bwd, buf_r, buf_c, P, iP = preallocate_propagator(system, system.propagator, ρ, device)
 
     # Precompute quadrature weights on the device (shape = ngrid).
     # :trapz — uniform weights prod(dz), spectral convergence for periodic domains.
@@ -100,6 +100,12 @@ function scft_iterate!(system::SCFTSystem, ρ;
     aa_count       = 0      # total history entries stored so far
     using_anderson = false
 
+    # GEMM scratch for Anderson — on-device column matrix, avoids scalar dot sync points.
+    # ΔF_mat has shape (N_flat, m) where N_flat = total field elements (can be millions).
+    # GPU does the heavy (N_flat) computation; only the tiny (m×m) result transfers to CPU.
+    N_flat = length(w)
+    ΔF_mat = similar(w, N_flat, m)
+
     err = Inf
 
     for iter in 1:maxit
@@ -115,7 +121,7 @@ function scft_iterate!(system::SCFTSystem, ρ;
         end
 
         # ── Propagate, compute densities and new fields ───────────────────────
-        propagate_scft!(system, w, w_bulk, q_fwd, q_bwd, buf, P, iP; exp_field=exp_field)
+        propagate_scft!(system, w, w_bulk, q_fwd, q_bwd, buf_r, buf_c, P, iP; exp_field=exp_field)
         Q_chains, Q_solvents = compute_partition_functions(system, w, w_bulk, q_fwd, dz;
                                    weights=weights_gpu, V_eff=V_eff, exp_field=exp_field)
         compute_densities!(system, w, w_bulk, q_fwd, q_bwd, Q_chains, Q_solvents, ρ;
@@ -174,18 +180,18 @@ function scft_iterate!(system::SCFTSystem, ρ;
                 @. Δx_buf[i] = aa_w[s_new] - aa_w[s_old]
             end
 
-            # Build (m_eff × m_eff) Gram matrix and rhs using CUBLAS dot products.
-            # dot(vec(a), vec(b)) dispatches to cuBLAS ddot — no temporary GPU array.
-            G = zeros(m_eff, m_eff)
-            g = zeros(m_eff)
+            # Pack ΔF columns into device matrix for GEMM.
+            # vec() is a zero-copy reshape since ΔF_buf[i] is contiguous via similar(w).
             for i in 1:m_eff
-                g[i] = dot(vec(ΔF_buf[i]), vec(r))
-                for j in i:m_eff
-                    v = dot(vec(ΔF_buf[i]), vec(ΔF_buf[j]))
-                    G[i, j] = v
-                    G[j, i] = v
-                end
+                ΔF_mat[:, i] .= vec(ΔF_buf[i])
             end
+
+            # Build (m_eff × m_eff) Gram matrix and rhs via a single GEMM + GEMV on device.
+            # GPU sums over N_flat (millions) of rows; only the tiny (m_eff×m_eff) and
+            # (m_eff,) results are transferred to CPU. Array() is a no-op on CPU arrays.
+            DF = view(ΔF_mat, :, 1:m_eff)
+            G  = Array(DF' * DF)        # GEMM: (m_eff × N_flat) * (N_flat × m_eff) → (m_eff × m_eff)
+            g  = Array(DF' * vec(r))    # GEMV: (m_eff × N_flat) * (N_flat,)         → (m_eff,)
 
             # Tikhonov regularization to handle near-singular Gram matrices
             λ = max(1e-12 * tr(G), 1e-16)

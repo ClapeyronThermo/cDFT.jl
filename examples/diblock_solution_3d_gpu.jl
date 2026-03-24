@@ -73,7 +73,7 @@ end
 
 # ─── Parameters ──────────────────────────────────────────────────────────────
 N_seg    = 20
-N_A      = 10;  N_B = 10   # symmetric diblock
+N_A      = 6;  N_B = 14   # symmetric diblock
 nspecies = 3               # A=1, B=2, S=3
 rho0     = 1.0
 kappa    = 20.0
@@ -81,8 +81,8 @@ b        = 1.0
 
 # Interaction matrix (3×3, symmetric, zero diagonal)
 chi_AB = 1.0    # χN = 30
-chi_AS = 1.7    # A-solvent repulsion
-chi_BS = 0.3    # B-solvent (smaller → solvent prefers B domains)
+chi_AS = 2.0    # A-solvent repulsion
+chi_BS = 0.05    # B-solvent (smaller → solvent prefers B domains)
 chi    = [0.0    chi_AB  chi_AS;
           chi_AB 0.0     chi_BS;
           chi_AS chi_BS  0.0   ]
@@ -90,8 +90,8 @@ fh     = cDFT.FloryHuggins(chi, rho0, kappa)
 
 # Grand canonical polymer: total segment density = 0.70
 # Grand canonical solvent: density = 0.30   (0.70 + 0.30 = ρ₀ = 1.0)
-phi_polymer = 0.30
-phi_solvent = 0.70
+phi_polymer = 0.35
+phi_solvent = 0.65
 
 # Box: one lamellar period (L ≈ 7, matching 1D reference)
 L     = 30
@@ -154,7 +154,7 @@ zgrid = range(0.0, L; length=ngrid)
 # Random noise allows the system to find the lamellar phase spontaneously.
 # The perturbed initializer adds noise on the CPU and adapts to the GPU,
 # then normalizes to enforce ρ_total = ρ₀ at every grid point.
-ρ = cDFT.initialize_profiles(system; mode=:perturbed, perturbation=0.05)
+ρ = cDFT.initialize_profiles(system; mode=:perturbed, perturbation=0.1)
 
 function write_density_callback(iter, rho, w)
     open(joinpath(@__DIR__, "diblock_solution_3d_gpu_snapshot.dat"), "w") do io
@@ -181,7 +181,7 @@ with_logger(conv_log) do
         anderson_start = 1e-2,
         anderson_m     = 5,
         log_interval = 100,
-        save_interval = 100,
+        save_interval = 200,
         save_callback = write_density_callback,
         verbose      = true,
     )

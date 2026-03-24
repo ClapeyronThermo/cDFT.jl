@@ -23,12 +23,12 @@ function _∫(f::Array{Float64},dz)
     return ∑f
 end
 
-function convolve!(result, profile, kernel, P, iP, buf)
-    buf .= profile                     # fused real→complex broadcast, no temporary
-    P * buf                            # in-place FFT
-    elmul!(buf, buf, kernel)
-    iP * buf                           # in-place IFFT
-    @. result = real(buf)              # fused, no temporary
+function convolve!(result, profile, kernel, P, iP, buf_r, buf_c)
+    buf_r .= profile                   # copy real profile into real input buffer
+    mul!(buf_c, P,  buf_r)             # R2C FFT: buf_r → buf_c (no allocation)
+    buf_c .*= kernel                   # multiply by half-complex kernel in-place
+    mul!(buf_r, iP, buf_c)             # C2R IFFT: buf_c → buf_r (no allocation)
+    result .= buf_r                    # copy real result into output (no temporary)
 end
 
 """

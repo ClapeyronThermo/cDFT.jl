@@ -1,5 +1,5 @@
 """
-    propagate_scft!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, buf, P, iP)
+    propagate_scft!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, buf_r, buf_c, P, iP)
 
 Run DGC forward/backward propagator sweeps using shifted fields `Δw = w - w_bulk`.
 
@@ -8,7 +8,7 @@ avoiding the numerical underflow that occurs when raw fields are large.
 The shifted propagator satisfies `q̃(r,s) = q(r,s) * exp(Σ_{t=1}^{s} w_bulk[α(t)])`,
 so `Q̃ ≈ 1` for uniform systems (instead of `Q ∼ exp(-N * w_bulk) ≈ 0`).
 """
-function propagate_scft!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, buf, P, iP;
+function propagate_scft!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, buf_r, buf_c, P, iP;
                          exp_field=nothing)
     nd = dimension(system)
     propagator = system.propagator
@@ -31,7 +31,7 @@ function propagate_scft!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, buf, P, iP
             αi = seg_spec[i]
             bond_key = minmax(seg_spec[i-1], seg_spec[i])
             kernel = propagator.kernel_map[bond_key]
-            convolve!(selectdim(q_fwd[c], nd+1, i), selectdim(q_fwd[c], nd+1, i-1), kernel, P, iP, buf)
+            convolve!(selectdim(q_fwd[c], nd+1, i), selectdim(q_fwd[c], nd+1, i-1), kernel, P, iP, buf_r, buf_c)
             selectdim(q_fwd[c], nd+1, i) .*= ef(αi)
         end
 
@@ -43,7 +43,7 @@ function propagate_scft!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, buf, P, iP
             αi = seg_spec[Nc - i + 1]
             bond_key = minmax(seg_spec[Nc - i + 1], seg_spec[Nc - i + 2])
             kernel = propagator.kernel_map[bond_key]
-            convolve!(selectdim(q_bwd[c], nd+1, i), selectdim(q_bwd[c], nd+1, i-1), kernel, P, iP, buf)
+            convolve!(selectdim(q_bwd[c], nd+1, i), selectdim(q_bwd[c], nd+1, i-1), kernel, P, iP, buf_r, buf_c)
             selectdim(q_bwd[c], nd+1, i) .*= ef(αi)
         end
     end
