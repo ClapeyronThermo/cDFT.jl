@@ -1,13 +1,13 @@
-module DifferentialEquationscDFTExt
+module SciMLBasecDFTExt
     import cDFT
-    import DifferentialEquations as DE
+    import SciMLBase
     import KernelAbstractions as KA
     import FFTW
 
 
     ################### DYNAMIC DENSITY FUNCTIONAL THEORY ###################
 
-    function DE.ODEProblem(system::cDFT.AbstractcDFTSystem, ρ, tspan, kwargs...)
+    function SciMLBase.ODEProblem(system::cDFT.AbstractcDFTSystem, ρ, tspan, kwargs...)
         k        = cDFT.structure_ω(system.structure, system.options.device) .* cDFT.length_scale(system.model)
 
         ngrid    = system.structure.ngrid
@@ -86,14 +86,14 @@ module DifferentialEquationscDFTExt
                 end
             end
         end
-        return DE.ODEProblem(ddft_rhs_log!, log.(ρ), tspan, system, kwargs...)
+        return SciMLBase.ODEProblem(ddft_rhs_log!, log.(ρ), tspan, system, kwargs...)
     end
 
     ######### ALTERNATE CONVERGE! IMPLEMENTATION FOR DDFT STEADY STATES #########
-    # function cDFT.converge!(system::cDFT.AbstractcDFTSystem, ρ, alg::DE.SciMLBase.AbstractODEAlgorithm)
+    # function cDFT.converge!(system::cDFT.AbstractcDFTSystem, ρ, alg::SciMLBase.AbstractODEAlgorithm)
     #     cb = TerminateSteadyState(abstol=1e-4, reltol=1e-4)
-    #     prob = DE.ODEProblem(system, log.(ρ), (0.0, 1e6), callback=cb)
-    #     sol = DE.solve(prob, alg, save_everystep=false, save_start=false)
+    #     prob = SciMLBase.ODEProblem(system, log.(ρ), (0.0, 1e6), callback=cb)
+    #     sol = DifferentialEquations.solve(prob, alg, save_everystep=false, save_start=false)
     #     ρ .= exp.(sol[end])
     # end
 end
