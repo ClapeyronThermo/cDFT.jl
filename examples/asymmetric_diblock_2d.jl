@@ -22,9 +22,21 @@ Plot: python plot_asymmetric_2d.py
 """
 
 using cDFT
+using CUDA                 # install with: using Pkg; Pkg.add("CUDA")
 using DelimitedFiles
 using Logging
 using Printf
+
+# ─── GPU setup ───────────────────────────────────────────────────────────────
+if !CUDA.functional()
+    error("CUDA GPU not available.\n" *
+          "Check your installation with:  using CUDA; CUDA.versioninfo()")
+end
+
+device  = CUDABackend()
+options = cDFT.DFTOptions(device)
+println("GPU: $(CUDA.name(CUDA.device()))")
+println("VRAM available: $(round(CUDA.available_memory()/1024^3; sigdigits=3)) GB")
 
 # ─── Convergence logger (same helper as 1D example) ──────────────────────────
 struct ConvergenceCapture <: AbstractLogger
@@ -57,7 +69,7 @@ end
 
 # ─── Parameters ──────────────────────────────────────────────────────────────
 N_seg    = 20
-N_A      = 8        # minority A block  (f_A = 0.35)
+N_A      = 10        # minority A block  (f_A = 0.35)
 N_B      = N_seg - N_A
 f_A      = N_A / N_seg
 chi_val  = 1.7     # χN = 35, above cylinder ODT at f_A=0.35
@@ -69,10 +81,10 @@ b        = 1.0
 # Hexagonal cylinder unit cell
 # d_hex  ≈ 3.6·Rg, Rg = b·√(N/6) ≈ 1.83
 # d_hex  ≈ 6.5;  Ly = d_hex·√3/2 ≈ 5.63
-Lx   = 20
-Ly   = 20   # ≈ 5.63
-ngx  = 200
-ngy  = 200                  # ≈ Ly / (Lx/(ngx-1)) for square pixels
+Lx   = 80
+Ly   = 80   # ≈ 5.63
+ngx  = 320
+ngy  = 320                  # ≈ Ly / (Lx/(ngx-1)) for square pixels
 
 # Number of chains (canonical): ρ0 = n_chains · N / V
 V_approx = Lx * Ly
@@ -106,7 +118,7 @@ system    = cDFT.SCFTSystem(
     species_names = [:A, :B],
     bounds        = bounds_2d,
     ngrid         = (ngx, ngy),
-    options       = cDFT.DFTOptions()
+    options       = options
 )
 
 bulk = cDFT.compute_bulk_densities(system)
