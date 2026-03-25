@@ -71,8 +71,11 @@ function DiscreteGaussianChainPropagator(
         kernel_map[(α, β)] = CT.(exp.(-2π^2 * b_bond^2 .* ν_sq ./ 3))
     end
 
-    # Move kernels to device
-    device_kernel_map = Dict{Tuple{Int,Int}, typeof(Adapt.adapt(device, first(values(kernel_map))))}()
+    # Move kernels to device.
+    # Use a dummy CPU array of the right shape/type to determine the device array type,
+    # which avoids calling first() on an empty dict when nchains == 0 (solvent-only system).
+    dummy_cpu = CT.(zeros(rfft_ngrid...))
+    device_kernel_map = Dict{Tuple{Int,Int}, typeof(Adapt.adapt(device, dummy_cpu))}()
     for (key, k) in kernel_map
         device_kernel_map[key] = Adapt.adapt(device, k)
     end
@@ -87,17 +90,21 @@ function preallocate_propagator(system, propagator::DiscreteGaussianChainPropaga
 
     # Allocate forward and backward propagator arrays per chain.
     # Use a concrete element type (not Vector{Any}) to avoid type-dispatch overhead
-    # in the hot propagation loop.
+    # in the hot propagation loop. When nchains == 0 (solvent-only system), allocate
+    # empty typed vectors using a dummy size so downstream code has a concrete type.
     FT = float_type(system.options)
     CT = Complex{FT}
-    q_proto = allocate(backend, FT, ngrid..., propagator.N[1])
+    proto_N = nchains > 0 ? propagator.N[1] : 1
+    q_proto = allocate(backend, FT, ngrid..., proto_N)
     q_fwd   = Vector{typeof(q_proto)}(undef, nchains)
     q_bwd   = Vector{typeof(q_proto)}(undef, nchains)
-    q_fwd[1] = q_proto
-    q_bwd[1] = allocate(backend, FT, ngrid..., propagator.N[1])
-    for c in 2:nchains
-        q_fwd[c] = allocate(backend, FT, ngrid..., propagator.N[c])
-        q_bwd[c] = allocate(backend, FT, ngrid..., propagator.N[c])
+    if nchains > 0
+        q_fwd[1] = q_proto
+        q_bwd[1] = allocate(backend, FT, ngrid..., propagator.N[1])
+        for c in 2:nchains
+            q_fwd[c] = allocate(backend, FT, ngrid..., propagator.N[c])
+            q_bwd[c] = allocate(backend, FT, ngrid..., propagator.N[c])
+        end
     end
 
     # R2C (real-to-complex) FFT buffers:

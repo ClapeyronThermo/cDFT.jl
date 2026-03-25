@@ -78,7 +78,7 @@ function scft_iterate!(system::SCFTSystem, ρ;
     V_eff = sum(weights_gpu)
 
     # Print the effective volume
-    @info "Effective volume: $V_eff"
+    # @info "Effective volume: $V_eff"
 
     # Compute bulk densities using the same V_eff as the iteration, so canonical
     # prefactors (n_chains / V_eff) are consistent with the chosen quadrature rule.
