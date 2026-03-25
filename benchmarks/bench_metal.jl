@@ -4,7 +4,13 @@
 Publication-quality benchmark of SCFT iteration performance on Apple Metal GPU.
 
 Run:
-    julia --project benchmarks/bench_metal.jl
+    julia --project benchmarks/bench_metal.jl <hardware_tag>
+
+Example:
+    julia --project benchmarks/bench_metal.jl M4-Max
+
+The hardware tag is embedded in the output CSV filenames so results from
+different machines can coexist without overwriting each other.
 
 Metal only supports Float32 precision.
 
@@ -17,8 +23,8 @@ Reports median time per SCFT Picard step, excluding JIT startup.
 Metal.synchronize() is called inside the timed block to capture true GPU time.
 
 Outputs:
-    bench_metal_polymer_results.csv
-    bench_metal_solvent_results.csv
+    bench_metal_<hardware_tag>_polymer_results.csv
+    bench_metal_<hardware_tag>_solvent_results.csv
 """
 
 using cDFT
@@ -27,6 +33,12 @@ using KernelAbstractions
 using BenchmarkTools
 using Statistics
 using Printf
+
+if isempty(ARGS)
+    error("Usage: julia --project benchmarks/bench_metal.jl <hardware_tag>\n" *
+          "Example: julia --project benchmarks/bench_metal.jl M4-Max")
+end
+const HW_TAG = ARGS[1]
 
 if !Metal.functional()
     error("Metal GPU not available.\n" *
@@ -37,11 +49,11 @@ BenchmarkTools.DEFAULT_PARAMETERS.samples = 5
 BenchmarkTools.DEFAULT_PARAMETERS.evals   = 1
 
 # ── Benchmark settings ────────────────────────────────────────────────────────
-const N_STEPS = 8
+const N_STEPS = 100
 
-const SIZES_1D = [64, 128, 256, 512, 1024]
-const SIZES_2D = [32, 64, 128, 256, 512]
-const SIZES_3D = [16, 32, 64, 128]
+const SIZES_1D = [64, 128, 256, 512, 1024, 2048, 4096]
+const SIZES_2D = [32, 64, 128, 256, 512, 1024, 2048]
+const SIZES_3D = [16, 32, 64, 128, 160]
 
 # ── Polymer (AB diblock) parameters ──────────────────────────────────────────
 const N_seg   = 30
@@ -191,10 +203,10 @@ function run_all()
 
     systems_to_bench = [
         ("Polymer (AB diblock copolymer)", make_polymer_system,
-         "bench_metal_polymer_results.csv",
+         "bench_metal_$(HW_TAG)_polymer_results.csv",
          "System: diblock copolymer  N=$N_seg N_A=$N_A chi=$chi_val kappa=$kappa rho0=$rho0"),
         ("Solvent (monomeric, grand-canonical)", make_solvent_system,
-         "bench_metal_solvent_results.csv",
+         "bench_metal_$(HW_TAG)_solvent_results.csv",
          "System: monomeric solvent  kappa=$kappa rho0=$rho0"),
     ]
 

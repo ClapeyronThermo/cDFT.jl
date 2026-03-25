@@ -4,7 +4,14 @@
 Publication-quality benchmark of SCFT iteration performance on CPU (Float64).
 
 Run:
-    julia -t 4 --project benchmarks/bench_cpu.jl
+    julia -t 4 --project benchmarks/bench_cpu.jl <hardware_tag>
+
+Example:
+    julia -t 4 --project benchmarks/bench_cpu.jl M4-Max
+    julia -t 4 --project benchmarks/bench_cpu.jl i9-10850K
+
+The hardware tag is embedded in the output CSV filenames so results from
+different machines can coexist without overwriting each other.
 
 What is benchmarked:
     - Polymeric system: symmetric AB diblock copolymer (canonical ensemble)
@@ -16,8 +23,8 @@ Each data point averages over N_STEPS=8 consecutive Picard steps
 (Anderson acceleration disabled so cost is purely the field-propagation loop).
 
 Outputs:
-    bench_cpu_polymer_results.csv
-    bench_cpu_solvent_results.csv
+    bench_cpu_<hardware_tag>_polymer_results.csv
+    bench_cpu_<hardware_tag>_solvent_results.csv
 """
 
 using cDFT
@@ -25,13 +32,19 @@ using BenchmarkTools
 using Statistics
 using Printf
 
+if isempty(ARGS)
+    error("Usage: julia -t 4 --project benchmarks/bench_cpu.jl <hardware_tag>\n" *
+          "Example: julia -t 4 --project benchmarks/bench_cpu.jl M4-Max")
+end
+const HW_TAG = ARGS[1]
+
 BenchmarkTools.DEFAULT_PARAMETERS.samples  = 5
 BenchmarkTools.DEFAULT_PARAMETERS.evals    = 1
 
 # ── Benchmark settings ────────────────────────────────────────────────────────
-const N_STEPS = 8       # iterations averaged per timing sample
+const N_STEPS = 100       # iterations averaged per timing sample
 
-const SIZES_1D = [64, 128, 256, 512, 1024]
+const SIZES_1D = [64, 128, 256, 512, 1024, 2048, 4096]
 const SIZES_2D = [32, 64, 128, 256, 512]
 const SIZES_3D = [16, 32, 64, 128]
 
@@ -188,10 +201,10 @@ function run_all()
 
     systems_to_bench = [
         ("Polymer (AB diblock copolymer)", make_polymer_system,
-         "bench_cpu_polymer_results.csv",
+         "bench_cpu_$(HW_TAG)_polymer_results.csv",
          "System: diblock copolymer  N=$N_seg N_A=$N_A chi=$chi_val kappa=$kappa rho0=$rho0"),
         ("Solvent (monomeric, grand-canonical)", make_solvent_system,
-         "bench_cpu_solvent_results.csv",
+         "bench_cpu_$(HW_TAG)_solvent_results.csv",
          "System: monomeric solvent  kappa=$kappa rho0=$rho0"),
     ]
 
