@@ -179,7 +179,7 @@ function SCFTSystem(;
     # Build propagator
     N_vec = [c.N for c in chains]
     seg_spec_vec = [c.segment_species for c in chains]
-    propagator = DiscreteGaussianChainPropagator(b_species, N_vec, seg_spec_vec, structure, options.device)
+    propagator = DiscreteGaussianChainPropagator(b_species, N_vec, seg_spec_vec, structure, options)
 
     return SCFTSystem(interaction, structure, propagator, chains, solvents, nspecies, species_names, options)
 end

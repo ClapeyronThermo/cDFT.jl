@@ -37,9 +37,9 @@ Named tuple `(converged, iter, error)`.
 """
 function scft_iterate!(system::SCFTSystem, ρ;
     maxit          :: Int     = 5000,
-    beta           :: Float64 = 0.01,
-    tol            :: Float64 = 1e-6,
-    anderson_start :: Float64 = 1e-2,
+    beta                     = 0.01,
+    tol                      = 1e-6,
+    anderson_start           = 1e-2,
     anderson_m     :: Int     = 5,
     quadrature     :: Symbol  = :trapz,
     log_interval   :: Int     = 100,
@@ -51,20 +51,25 @@ function scft_iterate!(system::SCFTSystem, ρ;
     dz       = structure_dz(system.structure)
     nd       = dimension(system)
     nspecies = system.nspecies
+    FT       = eltype(ρ)
+    beta_ft  = FT(beta)
+    tol_ft   = FT(tol)
+    anderson_start_ft = FT(anderson_start)
 
     w     = similar(ρ)
     w_new = similar(ρ)
     r     = similar(ρ)   # residual: r_k = w_new(w_k) - w_k
 
     q_fwd, q_bwd, buf_r, buf_c, P, iP = preallocate_propagator(system, system.propagator, ρ, device)
+    batched_fft_cache = preallocate_scft_batched_fft_cache(system, ρ)
 
     # Precompute quadrature weights on the device (shape = ngrid).
     # :trapz — uniform weights prod(dz), spectral convergence for periodic domains.
     # :simpson — composite Simpson 1/4/2 pattern, O(h⁴), requires odd N.
     weights_gpu = if quadrature == :trapz
-        trapz_weights(system.structure.ngrid, dz, device)
+        trapz_weights(system.structure.ngrid, dz, system.options)
     elseif quadrature == :simpson
-        simpson_weights(system.structure.ngrid, dz, device)
+        simpson_weights(system.structure.ngrid, dz, system.options)
     else
         error("Unknown quadrature rule: $quadrature. Use :trapz or :simpson.")
     end
@@ -106,7 +111,7 @@ function scft_iterate!(system::SCFTSystem, ρ;
     N_flat = length(w)
     ΔF_mat = similar(w, N_flat, m)
 
-    err = Inf
+    err = FT(Inf)
 
     for iter in 1:maxit
 
@@ -117,11 +122,12 @@ function scft_iterate!(system::SCFTSystem, ρ;
         for α in 1:nspecies
             w_α = selectdim(w, nd+1, α)
             @. exp_field[α]     = exp(w_bulk[α] - w_α)
-            @. inv_exp_field[α] = 1 / exp_field[α]
+            @. inv_exp_field[α] = one(FT) / exp_field[α]
         end
 
         # ── Propagate, compute densities and new fields ───────────────────────
-        propagate_scft!(system, w, w_bulk, q_fwd, q_bwd, buf_r, buf_c, P, iP; exp_field=exp_field)
+        propagate_scft!(system, w, w_bulk, q_fwd, q_bwd, buf_r, buf_c, P, iP;
+                        exp_field=exp_field, batched_fft_cache=batched_fft_cache)
         Q_chains, Q_solvents = compute_partition_functions(system, w, w_bulk, q_fwd, dz;
                                    weights=weights_gpu, V_eff=V_eff, exp_field=exp_field)
         compute_densities!(system, w, w_bulk, q_fwd, q_bwd, Q_chains, Q_solvents, ρ;
@@ -130,7 +136,7 @@ function scft_iterate!(system::SCFTSystem, ρ;
 
         # ── Residual and error ────────────────────────────────────────────────
         @. r = w_new - w
-        err  = maximum(abs, r)
+        err  = maximum(abs, Array(r))
 
         # ── Logging ───────────────────────────────────────────────────────────
         if log_interval > 0 && iter % log_interval == 0
@@ -144,7 +150,7 @@ function scft_iterate!(system::SCFTSystem, ρ;
         end
 
         # ── Convergence check ─────────────────────────────────────────────────
-        if err < tol
+        if err < tol_ft
             if verbose
                 H = free_energy(system, ρ, w, Q_chains, Q_solvents; V_eff=V_eff, w_bulk=w_bulk)
                 @info "SCFT converged at iter $(iter): err = $(round(err; sigdigits=3)) | F = $(round(H; sigdigits=6))"
@@ -160,7 +166,7 @@ function scft_iterate!(system::SCFTSystem, ρ;
         aa_count += 1
 
         # ── Decide whether to switch to Anderson ──────────────────────────────
-        if !using_anderson && err < anderson_start && aa_count >= 2
+        if !using_anderson && err < anderson_start_ft && aa_count >= 2
             using_anderson = true
             if verbose
                 @info "SCFT switching to Anderson acceleration at iter $(iter) (err = $(round(err; sigdigits=3)), m=$(m))"
@@ -200,21 +206,21 @@ function scft_iterate!(system::SCFTSystem, ρ;
             end
 
             γ = try
-                G \ g
+                FT.(G \ g)
             catch
                 # Fall back to a pure Picard step if the solve fails
-                zeros(m_eff)
+                zeros(FT, m_eff)
             end
 
             # Anderson update: w ← w + β·r - Σᵢ γᵢ·(Δxᵢ + β·ΔFᵢ)
-            w .+= beta .* r
+            w .+= beta_ft .* r
             for i in 1:m_eff
-                @. w -= γ[i] * (Δx_buf[i] + beta * ΔF_buf[i])
+                @. w -= γ[i] * (Δx_buf[i] + beta_ft * ΔF_buf[i])
             end
 
         else
             # Pure Picard: w += β · r
-            w .+= beta .* r
+            w .+= beta_ft .* r
         end
 
     end  # iter loop

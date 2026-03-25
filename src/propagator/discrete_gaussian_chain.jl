@@ -1,5 +1,5 @@
 """
-    DiscreteGaussianChainPropagator(b_species, N, segment_species, structure, device)
+    DiscreteGaussianChainPropagator(b_species, N, segment_species, structure, options)
 
 Construct a `DiscreteGaussianChainPropagator` for linear polymer chains with
 per-species-type segment lengths and automatic junction kernels.
@@ -9,7 +9,7 @@ per-species-type segment lengths and automatic junction kernels.
 - `N::Vector{Int}`: Number of segments for each chain.
 - `segment_species::Vector{Vector{Int}}`: Mapping from segment index to species index for each chain.
 - `structure::DFTStructure`: The spatial discretization structure.
-- `device::Backend`: Computation backend (CPU or GPU).
+- `options::DFTOptions`: Options containing the device backend and float precision.
 
 For same-species bonds (α, α), the kernel uses `b_α`. For junction bonds (α, β),
 the kernel uses `b_αβ = √((b_α² + b_β²) / 2)`.
@@ -19,7 +19,7 @@ function DiscreteGaussianChainPropagator(
     N::Vector{Int},
     segment_species::Vector{Vector{Int}},
     structure::DFTStructure,
-    device::Backend
+    options::DFTOptions
 )
     nchains = length(N)
     @assert length(segment_species) == nchains
@@ -56,15 +56,19 @@ function DiscreteGaussianChainPropagator(
         end
     end
 
-    # Compute kernel for each unique bond pair in R2C (half-complex) shape
-    kernel_map = Dict{Tuple{Int,Int}, Array{ComplexF64}}()
+    # Compute kernel for each unique bond pair in R2C (half-complex) shape.
+    # Precision is controlled by options.precision (Float32 on Metal, Float64 on CPU by default).
+    device = options.device
+    FT = float_type(options)
+    CT = Complex{FT}
+    kernel_map = Dict{Tuple{Int,Int}, Array{CT}}()
     for (α, β) in bond_pairs
         if α == β
             b_bond = b_species[α]
         else
             b_bond = sqrt((b_species[α]^2 + b_species[β]^2) / 2)
         end
-        kernel_map[(α, β)] = ComplexF64.(exp.(-2π^2 * b_bond^2 .* ν_sq ./ 3))
+        kernel_map[(α, β)] = CT.(exp.(-2π^2 * b_bond^2 .* ν_sq ./ 3))
     end
 
     # Move kernels to device
@@ -84,14 +88,16 @@ function preallocate_propagator(system, propagator::DiscreteGaussianChainPropaga
     # Allocate forward and backward propagator arrays per chain.
     # Use a concrete element type (not Vector{Any}) to avoid type-dispatch overhead
     # in the hot propagation loop.
-    q_proto = allocate(backend, Float64, ngrid..., propagator.N[1])
+    FT = float_type(system.options)
+    CT = Complex{FT}
+    q_proto = allocate(backend, FT, ngrid..., propagator.N[1])
     q_fwd   = Vector{typeof(q_proto)}(undef, nchains)
     q_bwd   = Vector{typeof(q_proto)}(undef, nchains)
     q_fwd[1] = q_proto
-    q_bwd[1] = allocate(backend, Float64, ngrid..., propagator.N[1])
+    q_bwd[1] = allocate(backend, FT, ngrid..., propagator.N[1])
     for c in 2:nchains
-        q_fwd[c] = allocate(backend, Float64, ngrid..., propagator.N[c])
-        q_bwd[c] = allocate(backend, Float64, ngrid..., propagator.N[c])
+        q_fwd[c] = allocate(backend, FT, ngrid..., propagator.N[c])
+        q_bwd[c] = allocate(backend, FT, ngrid..., propagator.N[c])
     end
 
     # R2C (real-to-complex) FFT buffers:
@@ -99,8 +105,8 @@ function preallocate_propagator(system, propagator::DiscreteGaussianChainPropaga
     #   buf_c — complex output, shape (ngrid[1]÷2+1, ngrid[2:end]...)
     # Using R2C instead of C2C halves the FFT work (~2× faster for real data).
     rfft_ngrid = (ngrid[1] ÷ 2 + 1, ngrid[2:end]...)
-    buf_r = allocate(backend, Float64,    ngrid...)
-    buf_c = allocate(backend, ComplexF64, rfft_ngrid...)
+    buf_r = allocate(backend, FT, ngrid...)
+    buf_c = allocate(backend, CT, rfft_ngrid...)
 
     # plan_rfft / plan_irfft are part of AbstractFFTs and are implemented by
     # FFTW (CPU), CUDA.jl (NVIDIA), AMDGPU.jl (AMD), and Metal.jl (Apple).

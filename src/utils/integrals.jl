@@ -10,16 +10,17 @@ Integrates a collection of points `f`, with constant `dz`, using simpson rule.
 #    return 1/3*dz*(f[1]+f[end]+4*sum(@view(f[2:2:end-1]))+2*sum(@view(f[3:2:end-1])))
 #end
 
-function _∫(f::Array{Float64},dz)
-    ∑f = zero(typeof(first(dz)))
+function _∫(f::AbstractArray{T}, dz) where {T<:AbstractFloat}
+    FT = promote_type(T, typeof(first(dz)))
+    ∑f = zero(FT)
     for i in CartesianIndices(size(f))
         k = Tuple(i)
         # check if the indices in each dimension is even or odd
         coef = (k.==1 .|| k.==size(f)) .+ (2 .*(k .% 2 .== 0) .+ 4 .*(k .% 2 .!= 0)).*.!(k.==1 .|| k.==size(f))
-        ∑f += prod(coef)*f[k...]
+        ∑f += FT(prod(coef)) * FT(f[k...])
     end
 
-    ∑f *= prod(dz./3)
+    ∑f *= FT(prod(dz ./ 3))
     return ∑f
 end
 
@@ -42,9 +43,10 @@ For smooth periodic functions (e.g. SCFT density profiles in a periodic box) thi
 converges spectrally (exponentially in N) via the Euler-Maclaurin theorem, compared to
 O(h⁴) for Simpson's rule. Works for any N (odd or even).
 """
-function trapz_weights(ngrid::Tuple, dz, device)
-    w = fill(prod(dz), ngrid...)
-    return Adapt.adapt(device, w)
+function trapz_weights(ngrid::Tuple, dz, options::DFTOptions)
+    FT = float_type(options)
+    w = fill(FT(prod(dz)), ngrid...)
+    return Adapt.adapt(options.device, w)
 end
 
 """
@@ -57,26 +59,27 @@ for any array `f` of the same shape, without requiring `f` to be on the CPU.
 The weights replicate the coefficient pattern of `_∫` (1/4/2 pattern per dimension)
 as an outer product, multiplied by `prod(dz ./ 3)`. Requires odd N in each dimension.
 """
-function simpson_weights(ngrid::Tuple, dz, device)
+function simpson_weights(ngrid::Tuple, dz, options::DFTOptions)
     nd = length(ngrid)
+    FT = float_type(options)
     # Build 1D weight vector for each dimension
     w1d = map(1:nd) do d
         n = ngrid[d]
         h = dz[d]
-        w = Vector{Float64}(undef, n)
-        w[1]   = 1.0
-        w[end] = 1.0
+        w = Vector{FT}(undef, n)
+        w[1]   = FT(1)
+        w[end] = FT(1)
         for i in 2:n-1
-            w[i] = i % 2 == 0 ? 2.0 : 4.0
+            w[i] = i % 2 == 0 ? FT(2) : FT(4)
         end
-        w .*= h / 3
+        w .*= FT(h / 3)
         w
     end
     # Outer product: broadcast each 1D vector along its own dimension
-    weights = ones(Float64, ngrid...)
+    weights = ones(FT, ngrid...)
     for d in 1:nd
         shape = ntuple(i -> i == d ? ngrid[d] : 1, nd)
         weights .*= reshape(w1d[d], shape...)
     end
-    return Adapt.adapt(device, weights)
+    return Adapt.adapt(options.device, weights)
 end

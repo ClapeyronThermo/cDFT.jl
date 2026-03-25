@@ -1,32 +1,62 @@
 import KernelAbstractions: Backend, get_backend, synchronize
 using Base: ScopedValue
+
+# Default float precision per backend.
+# Metal does not support Float64, so GPU backends default to Float32.
+# Users can override via the `precision` keyword of DFTOptions.
+_default_precision(::CPU)     = Float64
+_default_precision(::Backend) = Float32
+
 """
-    DFTOptions(device::Device, solver::Solvers.AbstractFixPoint)
+    DFTOptions(device, solver; precision)
 
-A struct which includes all the settings that need to be set for the convergence algorithms and devices used:
-- `device`: Specification of either CPU (pinned or un-pinned) or GPU devices. (unpinned CPU by default)
-- `solver`: Specification of the solver type and solver settings used. Must be a fixed-point method. (`AndersonFixPoint` by default)
-Example usage:
+Settings for convergence algorithms and the compute device.
+
+# Arguments
+- `device`: CPU or GPU backend (unpinned CPU by default).
+- `solver`: Fixed-point solver (`AndersonFixPoint` by default).
+
+# Keyword Arguments
+- `precision`: Element type for device arrays (`Float32` or `Float64`).
+  Defaults to `Float64` on CPU and `Float32` on GPU backends (Metal does not
+  support Float64). CUDA and ROCm support both; pass `precision=Float64` to
+  opt into double precision on those backends.
+
+# Examples
 ```julia
-julia> options = DFTOptions()
-
-julia> using ThreadPinning
-
-julia> options = DFTOptions(CPU(4, [0,1,12,13]))
+options = DFTOptions()                                    # CPU, Float64
+options = DFTOptions(CUDABackend())                       # CUDA, Float32
+options = DFTOptions(CUDABackend(); precision=Float64)    # CUDA, Float64
+options = DFTOptions(MetalBackend())                      # Metal, Float32
 ```
 """
-struct DFTOptions{D,S}
-    device::D
-    solver::S
+struct DFTOptions{D, S, T<:AbstractFloat}
+    device    :: D
+    solver    :: S
+    precision :: Type{T}
 end
 
-function DFTOptions(device::Backend)
-    return DFTOptions(device,AndersonFixPoint())
+function DFTOptions(device::Backend, solver; precision::Type{<:AbstractFloat}=_default_precision(device))
+    return DFTOptions(device, solver, precision)
 end
 
-function DFTOptions()
-    return DFTOptions(CPU(; static=true),AndersonFixPoint())
+function DFTOptions(device::Backend; precision::Type{<:AbstractFloat}=_default_precision(device))
+    return DFTOptions(device, AndersonFixPoint(), precision)
 end
+
+function DFTOptions(; precision::Type{<:AbstractFloat}=Float64)
+    return DFTOptions(CPU(; static=true), AndersonFixPoint(), precision)
+end
+
+"""
+    float_type(options::DFTOptions) -> Type
+
+Return the floating-point scalar type used for device allocations.
+Controlled by the `precision` field of `DFTOptions`.
+"""
+float_type(opts::DFTOptions) = opts.precision
+
+is_metal_backend(backend) = nameof(typeof(backend)) == :MetalBackend
 
 function preallocate(system, ρ)
     backend = system.options.device

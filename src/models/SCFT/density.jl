@@ -8,8 +8,43 @@ avoiding the numerical underflow that occurs when raw fields are large.
 The shifted propagator satisfies `q̃(r,s) = q(r,s) * exp(Σ_{t=1}^{s} w_bulk[α(t)])`,
 so `Q̃ ≈ 1` for uniform systems (instead of `Q ∼ exp(-N * w_bulk) ≈ 0`).
 """
+function preallocate_scft_batched_fft_cache(system::SCFTSystem, ρ)
+    device = system.options.device
+    if !is_metal_backend(device)
+        return nothing
+    end
+
+    nd = dimension(system)
+    ngrid = system.structure.ngrid
+    FT = eltype(ρ)
+    CT = Complex{FT}
+    rfft_ngrid = (ngrid[1] ÷ 2 + 1, ngrid[2:end]...)
+
+    buf_r = allocate(device, FT, ngrid..., 2)
+    buf_c = allocate(device, CT, rfft_ngrid..., 2)
+    P  = plan_rfft(buf_r, 1:nd)
+    iP = plan_irfft(buf_c, ngrid[1], 1:nd)
+    return (; buf_r, buf_c, P, iP)
+end
+
+function batched_convolve_pair!(result1, profile1, kernel1, result2, profile2, kernel2, cache)
+    nd = ndims(profile1)
+    buf_r = cache.buf_r
+    buf_c = cache.buf_c
+
+    selectdim(buf_r, nd+1, 1) .= profile1
+    selectdim(buf_r, nd+1, 2) .= profile2
+    mul!(buf_c, cache.P, buf_r)
+    selectdim(buf_c, nd+1, 1) .*= kernel1
+    selectdim(buf_c, nd+1, 2) .*= kernel2
+    mul!(buf_r, cache.iP, buf_c)
+    result1 .= selectdim(buf_r, nd+1, 1)
+    result2 .= selectdim(buf_r, nd+1, 2)
+    return nothing
+end
+
 function propagate_scft!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, buf_r, buf_c, P, iP;
-                         exp_field=nothing)
+                         exp_field=nothing, batched_fft_cache=nothing)
     nd = dimension(system)
     propagator = system.propagator
     nchains = length(propagator.N)
@@ -27,24 +62,44 @@ function propagate_scft!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, buf_r, buf
         α1 = seg_spec[1]
         selectdim(q_fwd[c], nd+1, 1) .= ef(α1)
 
-        for i in 2:Nc
-            αi = seg_spec[i]
-            bond_key = minmax(seg_spec[i-1], seg_spec[i])
-            kernel = propagator.kernel_map[bond_key]
-            convolve!(selectdim(q_fwd[c], nd+1, i), selectdim(q_fwd[c], nd+1, i-1), kernel, P, iP, buf_r, buf_c)
-            selectdim(q_fwd[c], nd+1, i) .*= ef(αi)
-        end
-
         # Backward propagator with shifted fields
         αN = seg_spec[Nc]
         selectdim(q_bwd[c], nd+1, 1) .= ef(αN)
 
-        for i in 2:Nc
-            αi = seg_spec[Nc - i + 1]
-            bond_key = minmax(seg_spec[Nc - i + 1], seg_spec[Nc - i + 2])
-            kernel = propagator.kernel_map[bond_key]
-            convolve!(selectdim(q_bwd[c], nd+1, i), selectdim(q_bwd[c], nd+1, i-1), kernel, P, iP, buf_r, buf_c)
-            selectdim(q_bwd[c], nd+1, i) .*= ef(αi)
+        if batched_fft_cache === nothing
+            for i in 2:Nc
+                αi = seg_spec[i]
+                bond_key = minmax(seg_spec[i-1], seg_spec[i])
+                kernel = propagator.kernel_map[bond_key]
+                convolve!(selectdim(q_fwd[c], nd+1, i), selectdim(q_fwd[c], nd+1, i-1), kernel, P, iP, buf_r, buf_c)
+                selectdim(q_fwd[c], nd+1, i) .*= ef(αi)
+            end
+
+            for i in 2:Nc
+                αi = seg_spec[Nc - i + 1]
+                bond_key = minmax(seg_spec[Nc - i + 1], seg_spec[Nc - i + 2])
+                kernel = propagator.kernel_map[bond_key]
+                convolve!(selectdim(q_bwd[c], nd+1, i), selectdim(q_bwd[c], nd+1, i-1), kernel, P, iP, buf_r, buf_c)
+                selectdim(q_bwd[c], nd+1, i) .*= ef(αi)
+            end
+        else
+            for i in 2:Nc
+                αf = seg_spec[i]
+                αb = seg_spec[Nc - i + 1]
+                bond_key_f = minmax(seg_spec[i-1], seg_spec[i])
+                bond_key_b = minmax(seg_spec[Nc - i + 1], seg_spec[Nc - i + 2])
+                batched_convolve_pair!(
+                    selectdim(q_fwd[c], nd+1, i),
+                    selectdim(q_fwd[c], nd+1, i-1),
+                    propagator.kernel_map[bond_key_f],
+                    selectdim(q_bwd[c], nd+1, i),
+                    selectdim(q_bwd[c], nd+1, i-1),
+                    propagator.kernel_map[bond_key_b],
+                    batched_fft_cache,
+                )
+                selectdim(q_fwd[c], nd+1, i) .*= ef(αf)
+                selectdim(q_bwd[c], nd+1, i) .*= ef(αb)
+            end
         end
     end
 end
@@ -82,14 +137,14 @@ Returns `(Q_chains::Vector{Float64}, Q_solvents::Vector{Float64})`.
 function compute_partition_functions(system::SCFTSystem, w, w_bulk, q_fwd, dz;
                                      weights=nothing, V_eff=nothing, exp_field=nothing)
     nd = dimension(system)
-    ngrid = system.structure.ngrid
     propagator = system.propagator
     nchains = length(propagator.N)
+    FT = float_type(system.options)
 
-    V_eff = V_eff !== nothing ? V_eff : effective_volume(system, dz)
+    V_eff = V_eff !== nothing ? FT(V_eff) : FT(effective_volume(system, dz))
 
     # Chain partition functions (from shifted propagators)
-    Q_chains = Vector{Float64}(undef, nchains)
+    Q_chains = Vector{FT}(undef, nchains)
     for c in 1:nchains
         Nc = propagator.N[c]
         if weights !== nothing
@@ -102,7 +157,7 @@ function compute_partition_functions(system::SCFTSystem, w, w_bulk, q_fwd, dz;
     end
 
     # Solvent partition functions (shifted: exp(w_bulk - w))
-    Q_solvents = Vector{Float64}(undef, length(system.solvents))
+    Q_solvents = Vector{FT}(undef, length(system.solvents))
     for (s, solvent) in enumerate(system.solvents)
         sp = solvent.species_index
         # Use precomputed exp_field[sp] if available (avoids recomputing exp per call)
@@ -141,16 +196,15 @@ For solvents (canonical):
 function compute_densities!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, Q_chains, Q_solvents, ρ;
                             V_eff=nothing, exp_field=nothing, inv_exp_field=nothing)
     nd = dimension(system)
-    ngrid = system.structure.ngrid
     propagator = system.propagator
     nchains = length(propagator.N)
-    nspecies = system.nspecies
     dz = structure_dz(system.structure)
+    FT = eltype(ρ)
 
-    V_eff = V_eff !== nothing ? V_eff : effective_volume(system, dz)
+    V_eff = V_eff !== nothing ? FT(V_eff) : FT(effective_volume(system, dz))
 
     # Zero out densities
-    ρ .= 0.0
+    ρ .= zero(FT)
 
     # Chain contributions
     for c in 1:nchains
@@ -161,9 +215,9 @@ function compute_densities!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, Q_chain
 
         # Prefactor depends on ensemble
         if chain.ensemble == :canonical
-            prefactor = chain.n_chains / (V_eff * Qc)
+            prefactor = FT(chain.n_chains) / (V_eff * Qc)
         else
-            prefactor = chain.bulk_density / (chain.N * Qc)
+            prefactor = FT(chain.bulk_density) / (FT(chain.N) * Qc)
         end
 
         # For each segment, add contribution to the appropriate species.
@@ -186,11 +240,11 @@ function compute_densities!(system::SCFTSystem, w, w_bulk, q_fwd, q_bwd, Q_chain
                     exp.(w_bulk[sp] .- selectdim(w, nd+1, sp))
         if solvent.ensemble == :grand_canonical
             # ρ_S(r) = ρ_S^b * exp(w_S^b - w_S(r))
-            selectdim(ρ, nd+1, sp) .+= solvent.bulk_density .* ef_sp
+            selectdim(ρ, nd+1, sp) .+= FT(solvent.bulk_density) .* ef_sp
         else
             # Canonical solvent: ρ_S = (n_S/V_eff) * exp(w_S^b - w_S(r)) / Q̃_S
             Qs = Q_solvents[s]
-            selectdim(ρ, nd+1, sp) .+= (solvent.n_molecules / V_eff) .* ef_sp ./ Qs
+            selectdim(ρ, nd+1, sp) .+= (FT(solvent.n_molecules) / V_eff) .* ef_sp ./ Qs
         end
     end
 end

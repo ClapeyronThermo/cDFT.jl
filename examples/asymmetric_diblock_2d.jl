@@ -22,21 +22,25 @@ Plot: python plot_asymmetric_2d.py
 """
 
 using cDFT
-using CUDA                 # install with: using Pkg; Pkg.add("CUDA")
+using Metal
 using DelimitedFiles
 using Logging
 using Printf
 
 # ─── GPU setup ───────────────────────────────────────────────────────────────
-if !CUDA.functional()
-    error("CUDA GPU not available.\n" *
-          "Check your installation with:  using CUDA; CUDA.versioninfo()")
+if !Metal.functional()
+    error("Metal GPU not available.\n" *
+          "Check your installation with:  using Metal; Metal.versioninfo()")
 end
 
-device  = CUDABackend()
-options = cDFT.DFTOptions(device)
-println("GPU: $(CUDA.name(CUDA.device()))")
-println("VRAM available: $(round(CUDA.available_memory()/1024^3; sigdigits=3)) GB")
+device  = MetalBackend()
+# options = cDFT.DFTOptions(device)
+options = cDFT.DFTOptions()
+println("GPU: $(Metal.device().name)")
+let d = Metal.device()
+    avail = (d.recommendedMaxWorkingSetSize - d.currentAllocatedSize) / 1024^3
+    println("VRAM available: $(round(avail; sigdigits=3)) GB")
+end
 
 # ─── Convergence logger (same helper as 1D example) ──────────────────────────
 struct ConvergenceCapture <: AbstractLogger
@@ -81,10 +85,10 @@ b        = 1.0
 # Hexagonal cylinder unit cell
 # d_hex  ≈ 3.6·Rg, Rg = b·√(N/6) ≈ 1.83
 # d_hex  ≈ 6.5;  Ly = d_hex·√3/2 ≈ 5.63
-Lx   = 80
-Ly   = 80   # ≈ 5.63
-ngx  = 320
-ngy  = 320                  # ≈ Ly / (Lx/(ngx-1)) for square pixels
+Lx   = 100
+Ly   = 100   # ≈ 5.63
+ngx  = 400
+ngy  = 400                  # ≈ Ly / (Lx/(ngx-1)) for square pixels
 
 # Number of chains (canonical): ρ0 = n_chains · N / V
 V_approx = Lx * Ly
@@ -178,7 +182,7 @@ with_logger(conv_log) do
         anderson_start = 1e-2,   # switch from Picard to Anderson when err < 1e-2
         anderson_m     = 5,      # number of Anderson history vectors
         log_interval   = 50,
-        save_interval  = 100,
+        save_interval  = 200,
         save_callback  = write_density_callback,
         verbose        = true,
     )
