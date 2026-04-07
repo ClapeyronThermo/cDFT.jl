@@ -61,6 +61,7 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_b
     Threads.@threads for kk in CartesianIndices(ngrid)
         k = Tuple(kk)
         cache = take!(cache_pool)
+        # THIS IS THE FUNCTION TO BE CHANGE!
         ForwardDiff.gradient!(@view(δf[k...,:,:]), f, @view(n[k...,:,:]), cache)
         put!(cache_pool, cache)
     end
