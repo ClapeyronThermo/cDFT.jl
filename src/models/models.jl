@@ -74,7 +74,7 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_b
     integrate_field!(system, fft_buf, δfδρ_res, in_buf, P, iP)
 end
 
-function δFδρ_res(system::AbstractcDFTSystem, ρ)
+function δFδρ_res(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_buf, in_buf, out_buf, P, iP, f, cache_pool)
     δfδρ_res, cache_model, cache_external, cache_propagator = preallocate(system, ρ)
     δFδρ_res!(system, ρ, δfδρ_res, cache_model...)
     evaluate_external_field!(system, ρ, δfδρ_res, cache_external)
@@ -92,4 +92,13 @@ function length_scales(model::EoSModel)
     else
         error("No length scale defined in model")
     end
+end
+
+function δFδρ_res_GPU!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_buf, in_buf, out_buf, P, iP, f, cache_pool)
+    #todo: implement GPU
+end
+
+
+function δFδρ_res_GPU(system::AbstractcDFTSystem, ρ)
+    #todo: change the above version to the GPU version
 end

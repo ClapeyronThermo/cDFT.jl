@@ -38,6 +38,7 @@ system = DFTSystem(model, structure)
 # Evaluate the free energy and derivative
 F = cDFT.F_res(system, ρ0)
 dF = cDFT.δFδρ_res(system, ρ0)
+#dF = cDFT.δFδρ_res_GPU(system, ρ0) # the GPU version is stil under development now
 
 # Functional derivative validation (Dimensionless: μ / RT)
 μ_bulk = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), T, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / T
