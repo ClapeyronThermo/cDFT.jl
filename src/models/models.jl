@@ -61,7 +61,6 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_b
     Threads.@threads for kk in CartesianIndices(ngrid)
         k = Tuple(kk)
         cache = take!(cache_pool)
-        # THIS IS THE FUNCTION TO BE CHANGE!
         ForwardDiff.gradient!(@view(δf[k...,:,:]), f, @view(n[k...,:,:]), cache)
         put!(cache_pool, cache)
     end
@@ -74,7 +73,7 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_b
     integrate_field!(system, fft_buf, δfδρ_res, in_buf, P, iP)
 end
 
-function δFδρ_res(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_buf, in_buf, out_buf, P, iP, f, cache_pool)
+function δFδρ_res(system::AbstractcDFTSystem, ρ)
     δfδρ_res, cache_model, cache_external, cache_propagator = preallocate(system, ρ)
     δFδρ_res!(system, ρ, δfδρ_res, cache_model...)
     evaluate_external_field!(system, ρ, δfδρ_res, cache_external)
@@ -94,11 +93,45 @@ function length_scales(model::EoSModel)
     end
 end
 
-function δFδρ_res_GPU!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_buf, in_buf, out_buf, P, iP, f, cache_pool)
-    #todo: implement GPU
+function δFδρ_res_newautodiff!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_buf, in_buf, out_buf, P, iP, f, cache_pool)
+    #TO CHANGE: implement GPU, please remember to check whether f autodiff is compatible with GPU ()
+    model = system.model
+    backend = system.options.device
+    ngrid = system.structure.ngrid
+    NF      = size(n, ndims(n)-1)
+    NB      = size(n, ndims(n))
+    ND      = length(ngrid)
+
+    evaluate_field!(system, ρ, fft_buf, in_buf, out_buf, P, iP)
+
+    synchronize(backend)
+
+    # Main part to be changed
+    # ----------------------------------
+    copyto!(n, Adapt.adapt(typeof(n), fft_buf))
+
+    Threads.@threads for kk in CartesianIndices(ngrid)
+        k = Tuple(kk)
+        cache = take!(cache_pool)
+        ForwardDiff.gradient!(@view(δf[k...,:,:]), f, @view(n[k...,:,:]), cache)
+        put!(cache_pool, cache)
+    end
+
+    copyto!(fft_buf, Adapt.adapt(typeof(fft_buf), δf))
+    # ----------------------------------
+
+    synchronize(backend)
+
+
+    integrate_field!(system, fft_buf, δfδρ_res, in_buf, P, iP)
 end
 
 
-function δFδρ_res_GPU(system::AbstractcDFTSystem, ρ)
-    #todo: change the above version to the GPU version
+function δFδρ_res_newautodiff(system::AbstractcDFTSystem, ρ)
+    #TO CHANGE: change the above version to the GPU version
+    δfδρ_res, cache_model, cache_external, cache_propagator = preallocate(system, ρ)
+    δFδρ_res_newautodiff!(system, ρ, δfδρ_res, cache_model...)
+    evaluate_external_field!(system, ρ, δfδρ_res, cache_external)
+    propagate!(system, ρ, δfδρ_res, cache_propagator)
+    return δfδρ_res
 end
