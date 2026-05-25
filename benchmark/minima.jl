@@ -5,41 +5,57 @@ using cDFT.Clapeyron
 using Printf
 using LinearAlgebra
 using BenchmarkTools
+using CUDA
 
 # Adjustable grid count
 const NGRID = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 128
 
 # Physical state
+# -----------------------------------------------------------------------------
+# Example component: hexane is liquid at 300 K, 1 atm
 const T = 300.0
 const p = 1.0e5
-
-# Example component: hexane is liquid at 300 K, 1 atm
 components = ["hexane"]
 model = PCSAFT(components)
-
 # Bulk density, strictly in mol/m^3
 vl = volume(model, p, T)
 ρbulk = [1.0 / vl]
-
 # Length scale
 L = cDFT.length_scale(model)
 println("Length scale L = $(L) m")
+# -----------------------------------------------------------------------------
 
 # 1D DFT structure/domain: uniform bulk profile for benchmarking
 structure = Uniform1DCart((p, T), ρbulk, [-10L, 10L], NGRID)
 println("Created structure with bulk density: $(ρbulk[1]) mol/m^3")
 
+options = DFTOptions(CUDABackend())
+
 # Build system
-system = DFTSystem(model, structure)
+system = DFTSystem(model, structure, options)
 
 # Initial density profile
 ρ0 = cDFT.initialize_profiles(system)
+println("typeof(ρ0) = ", typeof(ρ0))
+
+# Optional: check where model buffers are allocated
+δfδρ_tmp, cache_model_tmp, _, _ = cDFT.preallocate(system, ρ0)
+n_tmp, δf_tmp, fft_buf_tmp, in_buf_tmp, out_buf_tmp, P_tmp, iP_tmp, f_tmp, cache_pool_tmp = cache_model_tmp
+
+println("typeof(n)       = ", typeof(n_tmp))
+println("typeof(δf)      = ", typeof(δf_tmp))
+println("typeof(fft_buf) = ", typeof(fft_buf_tmp))
+println("typeof(in_buf)  = ", typeof(in_buf_tmp))
+println("typeof(out_buf) = ", typeof(out_buf_tmp))
+
+# Do NOT call F_res here.
+# F_res is not GPU-safe yet because it scalar-indexes a CuArray.
+# F = cDFT.F_res(system, ρ0)
 
 # Warm-up / correctness evaluations
-F = cDFT.F_res(system, ρ0)
-
 dF_old = cDFT.δFδρ_res(system, ρ0)
-dF_new = cDFT.δFδρ_res_newautodiff(system, ρ0)  # new autodiff version
+
+dF_new = cDFT.δFδρ_res_newautodiff(system, ρ0)
 
 # Reference bulk residual chemical potential, dimensionless μ_res / RT
 μ_bulk = Clapeyron.VT_chemical_potential_res(
@@ -54,83 +70,36 @@ err_old_vs_bulk = maximum(abs.(dF_old .- μ_bulk[1]))
 err_new_vs_bulk = maximum(abs.(dF_new .- μ_bulk[1]))
 err_new_vs_old  = maximum(abs.(dF_new .- dF_old))
 
-@printf("NGRID=%d F_res=%.8e\n", NGRID, F)
+@printf("NGRID=%d\n", NGRID)
 @printf("Bulk μ_res/RT from Clapeyron: %.8f\n", μ_bulk[1])
-@printf("Max abs error: old vs bulk      = %.8e\n", err_old_vs_bulk)
-@printf("Max abs error: newautodiff vs bulk = %.8e\n", err_new_vs_bulk)
-@printf("Max abs difference: newautodiff vs old = %.8e\n", err_new_vs_old)
+@printf("Max abs error: old vs bulk              = %.8e\n", err_old_vs_bulk)
+@printf("Max abs error: newautodiff vs bulk      = %.8e\n", err_new_vs_bulk)
+@printf("Max abs difference: newautodiff vs old  = %.8e\n", err_new_vs_old)
 
 # Benchmarking
 println("\nBenchmarking δFδρ_res:")
-bench_old = @benchmark cDFT.δFδρ_res($system, $ρ0)
+bench_old = @benchmark begin
+    out = cDFT.δFδρ_res($system, $ρ0)
+end
 display(bench_old)
 
 println("\nBenchmarking δFδρ_res_newautodiff:")
-bench_new = @benchmark cDFT.δFδρ_res_newautodiff($system, $ρ0)
+bench_new = @benchmark begin
+    out = cDFT.δFδρ_res_newautodiff($system, $ρ0)
+end
 display(bench_new)
 
 # Simple timing summary
-t_old = minimum(bench_old).time
-t_new = minimum(bench_new).time
-speedup = t_old / t_new
+t_old_min = minimum(bench_old).time
+t_new_min = minimum(bench_new).time
 
-@printf("\nMinimum time old: %.3f μs\n", t_old / 1e3)
-@printf("Minimum time newautodiff: %.3f μs\n", t_new / 1e3)
-@printf("Speedup old / newautodiff: %.3fx\n", speedup)
+t_old_med = median(bench_old).time
+t_new_med = median(bench_new).time
 
-# #!/usr/bin/env julia
+@printf("\nMinimum time old: %.3f μs\n", t_old_min / 1e3)
+@printf("Minimum time newautodiff: %.3f μs\n", t_new_min / 1e3)
+@printf("Minimum speedup old / newautodiff: %.3fx\n", t_old_min / t_new_min)
 
-# using cDFT
-# using cDFT.Clapeyron
-# using Printf
-# using LinearAlgebra
-# using BenchmarkTools
-
-# # Adjustable grid count:
-# const NGRID = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 128
-
-# # Physical state:
-# const T = 300.0
-# const p = 1.0e5
-
-# # Example component. Hexane is liquid at 300K, 1atm.
-# components = ["hexane"]
-# model = PCSAFT(components)
-
-# # Bulk density
-# vl = volume(model, p, T)
-# ρbulk = [1.0/vl] # Resulting unit: mol/m³
-
-# # Length scale
-# L = cDFT.length_scale(model)
-# println("Length scale L = $(L) m")
-
-# # 1D DFT structure/domain (Uniform for benchmarking against bulk)
-# structure = Uniform1DCart((p, T), ρbulk, [-10L, 10L], NGRID)
-# println("Createda structure with pressure: $(p) Pa, temperature: $(T) K, bulk density: $(ρbulk) mol/m³, domain: [-10L, 10L] m, NGRID: $(NGRID)")
-
-# # Build system
-# system = DFTSystem(model, structure)
-
-# # Initial density profile
-# ρ0 = cDFT.initialize_profiles(system)
-# println("Initialized density profile ρ0 with length: ", length(ρ0))
-# println("Initial density profile ρ0: ", ρ0)
-
-# # Evaluate the free energy and derivative
-# # for a uniform system, an easy check is: Clapeyron.VT_chemical_potential_res(model, v, T, [1.])
-# # That should match dFres/drho
-# F = cDFT.F_res(system, ρ0)
-
-# # Functional derivative validation
-# dF = cDFT.δFδρ_res(system, ρ0)
-# μ_bulk = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), T, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / T
-
-# max_err = maximum(abs.(dF .- μ_bulk[1]))
-# @printf("NGRID=%d F_res=%.8e\n", NGRID, F)
-# @printf("Bulk μ_res (Clapeyron): %.8f\n", μ_bulk[1])
-# @printf("Max absolute error vs dF/dρ: %.8e\n", max_err)
-
-# # Performance Profiling
-# println("\nProfiling δFδρ_res performance:")
-# @btime cDFT.δFδρ_res($system, $ρ0)
+@printf("\nMedian time old: %.3f μs\n", t_old_med / 1e3)
+@printf("Median time newautodiff: %.3f μs\n", t_new_med / 1e3)
+@printf("Median speedup old / newautodiff: %.3fx\n", t_old_med / t_new_med)

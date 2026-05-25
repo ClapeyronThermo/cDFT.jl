@@ -23,7 +23,7 @@ function F_res(system::AbstractcDFTSystem, ρ)
     dz = structure_dz(system.structure)
     
     evaluate_field!(system, ρ, fft_buf, in_buf, out_buf, P, iP)
-
+    
     copyto!(n, Adapt.adapt(typeof(n), fft_buf))
 
     ϕ = similar(ρ,ngrid...)
@@ -51,6 +51,7 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_b
     NF      = size(n, ndims(n)-1)
     NB      = size(n, ndims(n))
     ND      = length(ngrid)
+    # println("backend = ", backend)
 
     evaluate_field!(system, ρ, fft_buf, in_buf, out_buf, P, iP)
 
