@@ -4,4 +4,6 @@ benchmark1: version now
 work1: gpu forwarddiff
 work2: gpu enzyme
 
+@edit to see functions source code
+
 
