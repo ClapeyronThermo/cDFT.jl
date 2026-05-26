@@ -15,7 +15,7 @@ using Clapeyron: SingleComp, PeTSModel, epsilon_LorentzBerthelot!
 using GCIdentifier, ChemicalIdentifiers
 using StaticArrays
 # using SIAMFANLEquations
-using KernelAbstractions, Adapt
+using KernelAbstractions, Adapt, Enzyme
 
 #if !isdefined(Clapeyron,Symbol("@sum"))
     include("utils/sum.jl")

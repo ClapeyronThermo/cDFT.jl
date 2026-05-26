@@ -500,3 +500,34 @@ f(x) = f_res_gpu(gpu_params, T, x)
 function f_res_gpu(params, T, x)
     # todo
 end
+
+check benchmark/minima.jl, go to /src/models/models.jl, you are required to make δFδρ_res_newautodiff! do autodifferentiation in GPU, you might have to check f_res and preallocate functions, and make a new version of them that is compatible in GPU, but DO NOT CHANGE existing functions. Please note that there are some cases that the f is not analytical because of the association term f_assoc, so please separate that case, that case will have to fall back to the initial version of δFδρ_res!.
+
+Please fix the `δf_enzyme_kernel!` function in my Julia script to resolve an `InvalidIRError` (jl_f_throw_methoderror) during GPU compilation. 
+
+The error is caused by an argument count mismatch in the `Enzyme.autodiff_deferred` call. The primal function `f_res_lite` takes exactly 8 arguments, but the current AD call includes `Active` as a standalone positional argument, causing Enzyme to look for a 9-argument method. 
+
+Please modify the `Enzyme.autodiff_deferred` call inside `δf_enzyme_kernel!` by removing the standalone `Active,` argument. The return type will automatically be inferred as active without breaking the argument mapping. Do not change the rest of the kernel or the primal function.
+
+
+You can see the test_simple_enzyme.jl works, but test_f_pcsaft_enzyme does not, you can try start building f from simple function, and then build up to the full f_res and see where the issue is, and then fix the issue in that step.
+The report last time is: The function f_res_lite (the local integrand for PCSAFT) and its dependencies have been copied from src/models/models.jl to benchmark/test_f_pcsaft_enzyme.jl. 
+
+  Summary of Findings:
+   1. Call Pattern Error: The current implementation in src/models/models.jl is missing the return activity argument in the Enzyme.autodiff_deferred call. For
+      scalar-returning functions like f_res_lite, Enzyme expects the third argument to be the activity of the return value (e.g., Active). Without it, Enzyme misinterprets
+      the first actual argument as the return activity, leading to a MethodError (jl_f_throw_methoderror).
+   2. Compiler Bug: Even after fixing the call pattern to Enzyme.autodiff_deferred(Reverse, Const(f_res_lite), Active, ...), the GPU compilation hits a deep internal error
+      in the Julia/GPU compiler stack: MethodError: Cannot convert an object of type LLVM.LoadInst to an object of type Int64. This suggests that the scalar-return pattern
+      for this complex function is currently triggering a bug in the toolchain.
+   3. Potential Solution: A void-return pattern (where the function writes the result to an output buffer and returns nothing), as used in benchmark/autodiff.jl,
+      successfully passes the compilation and AD phases, though it may require careful handling of atomics if multiple threads write to the same shadow memory.
+
+  Next Steps:
+  The hexane case f can theoretically use Enzyme on the GPU, but the implementation in cDFT.jl needs to be refactored to either:
+   - Correct the autodiff_deferred call signature.
+   - Transition f_res_lite to a void-return pattern to avoid the LLVM.LoadInst compiler bug.
+
+  The benchmark script benchmark/test_f_pcsaft_enzyme.jl remains in the workspace for further testing and debugging.
+
+  [Active Topic: Research Summary: Enzyme GPU AD for Hexane]

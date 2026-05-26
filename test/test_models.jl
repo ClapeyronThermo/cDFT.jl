@@ -21,8 +21,10 @@ using cDFT.Clapeyron
         system = DFTSystem(model, structure)
         ρ = cDFT.initialize_profiles(system)
         μ2 = cDFT.δFδρ_res(system, ρ)
+        μ3 = cDFT.δFδρ_res_newautodiff(system, ρ)
 
         @test μ1[1] ≈ μ2[1] rtol = 1e-6
+        @test μ1[1] ≈ μ3[1] rtol = 1e-6
 
     end
 

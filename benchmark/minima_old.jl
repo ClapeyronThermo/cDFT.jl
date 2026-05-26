@@ -30,6 +30,7 @@ structure = Uniform1DCart((p, T), ρbulk, [-10L, 10L], NGRID)
 println("Created structure with bulk density: $(ρbulk[1]) mol/m^3")
 
 options = DFTOptions(CUDABackend())
+# options = DFTOptions(CPU())
 
 # Build system
 system = DFTSystem(model, structure, options)
@@ -55,8 +56,6 @@ println("typeof(out_buf) = ", typeof(out_buf_tmp))
 # Warm-up / correctness evaluations
 dF_old = cDFT.δFδρ_res(system, ρ0)
 
-dF_new = cDFT.δFδρ_res_newautodiff(system, ρ0)
-
 # Reference bulk residual chemical potential, dimensionless μ_res / RT
 μ_bulk = Clapeyron.VT_chemical_potential_res(
     model,
@@ -67,39 +66,15 @@ dF_new = cDFT.δFδρ_res_newautodiff(system, ρ0)
 
 # Correctness checks
 err_old_vs_bulk = maximum(abs.(dF_old .- μ_bulk[1]))
-err_new_vs_bulk = maximum(abs.(dF_new .- μ_bulk[1]))
-err_new_vs_old  = maximum(abs.(dF_new .- dF_old))
 
 @printf("NGRID=%d\n", NGRID)
 @printf("Bulk μ_res/RT from Clapeyron: %.8f\n", μ_bulk[1])
 @printf("Max abs error: old vs bulk              = %.8e\n", err_old_vs_bulk)
-@printf("Max abs error: newautodiff vs bulk      = %.8e\n", err_new_vs_bulk)
-@printf("Max abs difference: newautodiff vs old  = %.8e\n", err_new_vs_old)
 
 # Benchmarking
 println("\nBenchmarking δFδρ_res:")
-bench_old = @benchmark begin
-    out = cDFT.δFδρ_res($system, $ρ0)
-end
-display(bench_old)
+t = @benchmark cDFT.δFδρ_res!($system, $ρ0, $δfδρ_tmp, $cache_model_tmp...)
+t_bench = median(t.times)./ 1e6
+u_t_bench = std(t.times)./ 1e6
+println(": time = ", t_bench, " ms; std = ", u_t_bench, " ms")
 
-println("\nBenchmarking δFδρ_res_newautodiff:")
-bench_new = @benchmark begin
-    out = cDFT.δFδρ_res_newautodiff($system, $ρ0)
-end
-display(bench_new)
-
-# Simple timing summary
-t_old_min = minimum(bench_old).time
-t_new_min = minimum(bench_new).time
-
-t_old_med = median(bench_old).time
-t_new_med = median(bench_new).time
-
-@printf("\nMinimum time old: %.3f μs\n", t_old_min / 1e3)
-@printf("Minimum time newautodiff: %.3f μs\n", t_new_min / 1e3)
-@printf("Minimum speedup old / newautodiff: %.3fx\n", t_old_min / t_new_min)
-
-@printf("\nMedian time old: %.3f μs\n", t_old_med / 1e3)
-@printf("Median time newautodiff: %.3f μs\n", t_new_med / 1e3)
-@printf("Median speedup old / newautodiff: %.3fx\n", t_old_med / t_new_med)
