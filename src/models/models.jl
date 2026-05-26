@@ -4,24 +4,24 @@ include("BasicIdeal.jl")
 include("DFT/dft.jl")
 include("DGT/dgt.jl")
 
-# Constants for PCSAFT dispersion
+# Constants for PCSAFT dispersion (Matching Clapeyron exactly)
 const PCSAFT_CORR1 = (
     (0.9105631445, -0.3084016918, -0.0906148351),
     (0.6361281449, 0.1860531159, 0.4527842806),
     (2.6861347891, -2.5030047259, 0.5962700728),
-    (-26.547362491, 21.419731138, -1.7241829131),
-    (97.759208784, -65.255885330, -4.1302112531),
-    (-159.59154066, 83.318680481, 13.776631870),
-    (91.297774084, -33.746922930, -8.6728470368)
+    (-26.547362491, 21.419793629, -1.7241829131),
+    (97.759208784, -65.25588533, -4.1302112531),
+    (-159.59154087, 83.318680481, 13.77663187),
+    (91.297774084, -33.74692293, -8.6728470368)
 )
 const PCSAFT_CORR2 = (
-    (0.7240946941, -0.5754482788, 0.0976883116),
-    (2.2382791861, 0.6995095521, -0.2557538506),
-    (-4.0025849485, 3.8925673390, -9.1558561530),
-    (-21.003576815, -17.215471648, 20.642075971),
+    (0.7240946941, -0.5755498075, 0.0976883116),
+    (2.2382791861, 0.6995095521, -0.2557574982),
+    (-4.0025849485, 3.892567339, -9.155856153),
+    (-21.003576815, -17.215471648, 20.642075974),
     (26.855641363, 192.67226447, -38.804430052),
-    (206.55133840, -161.82646165, 93.626774077),
-    (-355.60237127, -165.20769341, -29.666905585)
+    (206.55133841, -161.82646165, 93.626774077),
+    (-355.60235612, -165.20769346, -29.666905585)
 )
 
 @inline function I_lite(corr, m̄, η)
@@ -41,88 +41,81 @@ end
 
 @inline function f_res_lite_void_gpu(out, n, HSd, m, σ, ϵ, T, kk, ::Val{NC}, ::Val{ND}) where {NC, ND}
     _pi = 3.141592653589793
+    eps_val = 1e-15
     
-    # f_hs logic
+    # --- f_hs logic (Matching FMT.jl) ---
     n₀ = 0.0; n₁ = 0.0; n₂ = 0.0; n₃₃ = 0.0
     nv1_1 = 0.0; nv1_2 = 0.0; nv1_3 = 0.0
     nv2_1 = 0.0; nv2_2 = 0.0; nv2_3 = 0.0
     
     @inbounds for i in 1:NC
-        mi = m[i]; HSdi = HSd[i]; ni_2 = n[kk, 2, i]
+        mi = m[i]; HSdi = HSd[i]
+        ni_2 = n[kk, 2, i] # Field 2: weight 0.5*d
         nim = ni_2 * mi
         n₀ += nim / HSdi
         n₁ += 0.5 * nim
         n₂ += _pi * nim * HSdi
         
-        if ND >= 1
-            nvi = n[kk, 4, i]
-            nv1_1 += nvi * mi / HSdi
-            nv2_1 += -2.0 * _pi * nvi * mi
-        end
-        if ND >= 2
-            nvi = n[kk, 5, i]
-            nv1_2 += nvi * mi / HSdi
-            nv2_2 += -2.0 * _pi * nvi * mi
-        end
-        if ND >= 3
-            nvi = n[kk, 6, i]
-            nv1_3 += nvi * mi / HSdi
-            nv2_3 += -2.0 * _pi * nvi * mi
-        end
+        # Vector fields (Field 4)
+        if ND >= 1; nvi = n[kk, 4, i]; nv1_1 += nvi * mi / HSdi; nv2_1 += -2.0 * _pi * nvi * mi; end
+        if ND >= 2; nvi = n[kk, 5, i]; nv1_2 += nvi * mi / HSdi; nv2_2 += -2.0 * _pi * nvi * mi; end
+        if ND >= 3; nvi = n[kk, 6, i]; nv1_3 += nvi * mi / HSdi; nv2_3 += -2.0 * _pi * nvi * mi; end
         
+        # Field 3: weight 0.5*d (type :∫ρz²dz -> volume fraction n3)
         n₃₃ += n[kk, 3, i] * mi
     end
     
     n_v1_dot_v2 = nv1_1 * nv2_1 + nv1_2 * nv2_2 + nv1_3 * nv2_3
     n_v2_sq = nv2_1 * nv2_1 + nv2_2 * nv2_2 + nv2_3 * nv2_3
     
-    # Safe guards for log and division
-    eps_val = 1e-15
     denom_log = 1.0 - n₃₃
     log_1_n33 = Base.log(abs(denom_log) + eps_val)
     inv_1_n₃₃ = 1.0 / (denom_log + eps_val)
     
     denom_f_hs = 12.0 * _pi * (n₃₃ * n₃₃ + eps_val)
+    bracket_term = log_1_n33 / denom_f_hs + 1.0 / (12.0 * _pi * (n₃₃ + eps_val) * (denom_log * denom_log + eps_val))
     res_f_hs = -n₀ * log_1_n33 + (n₁ * n₂ - n_v1_dot_v2) * inv_1_n₃₃ + 
-           (n₂ * n₂ * n₂ / 3.0 - n₂ * n_v2_sq) * (log_1_n33 / denom_f_hs + 1.0 / (denom_f_hs * (denom_log * denom_log + eps_val)))
+           (n₂ * n₂ * n₂ / 3.0 - n₂ * n_v2_sq) * bracket_term
 
-    # f_hc logic
+    # --- f_hc logic (Matching PCSAFT.jl) ---
     ζ₃ = 0.0; ζ₂ = 0.0
-    idx_n6 = 4 + ND + 1
+    idx_ζ = 4 + ND # Field 5: weight d (type :∫ρz²dz)
     @inbounds for i in 1:NC
-        mi = m[i]; ρ̄hci = n[kk, idx_n6, i]; HSdi = HSd[i]
+        mi = m[i]; ρ̄hci = n[kk, idx_ζ, i]; HSdi = HSd[i]
         ζ₃ += mi * ρ̄hci; ζ₂ += mi * ρ̄hci / HSdi
     end
     ζ₃ *= 0.125; ζ₂ *= 0.125
     inv_1_ζ₃ = 1.0 / (1.0 - ζ₃ + eps_val)
+    
     res_f_hc = 0.0
-    idx_n5 = 4 + ND
+    idx_λ = 5 + ND # Field 6: weight d (type :∫ρdz)
     @inbounds for i in 1:NC
-        λ = n[kk, idx_n5, i] / (2.0 * HSd[i])
+        ρi = n[kk, 1, i]
+        λ = n[kk, idx_λ, i] / (2.0 * HSd[i])
         yᵈᵈ = inv_1_ζ₃ + 1.5 * HSd[i] * ζ₂ * inv_1_ζ₃ * inv_1_ζ₃ + 0.5 * HSd[i] * HSd[i] * ζ₂ * ζ₂ * inv_1_ζ₃ * inv_1_ζ₃ * inv_1_ζ₃
-        res_f_hc += -n[kk, 1, i] * (m[i] - 1.0) * Base.log(abs(yᵈᵈ * λ / (n[kk, 1, i] + eps_val)) + eps_val)
+        res_f_hc += -ρi * (m[i] - 1.0) * Base.log(abs(yᵈᵈ * λ / (ρi + eps_val)) + eps_val)
     end
 
-    # f_disp logic
+    # --- f_disp logic (Matching PCSAFT.jl) ---
     ψ = 1.3862
     ρ̄z_sum = eps_val; m̄_top = 0.0; η_disp = 0.0
     factor = 3.0 / (4.0 * ψ * ψ * ψ * _pi)
-    idx_n7 = 4 + ND + 2
+    idx_ρz = 6 + ND # Field 7: weight d*ψ
     @inbounds for i in 1:NC
-        ρ̄zi = n[kk, idx_n7, i] * factor / (HSd[i] * HSd[i] * HSd[i])
+        ρ̄zi = n[kk, idx_ρz, i] * factor / (HSd[i] * HSd[i] * HSd[i])
         ρ̄z_sum += ρ̄zi
         m̄_top += ρ̄zi * m[i]
         η_disp += m[i] * ρ̄zi * HSd[i] * HSd[i] * HSd[i]
     end
     m̄ = m̄_top / ρ̄z_sum
-    η_disp *= _pi / 6.0
+    ηd = _pi / 6.0 * η_disp
     
     m2ϵσ3_1 = 0.0; m2ϵσ3_2 = 0.0
     @inbounds for i in 1:NC
-        ρi = n[kk, idx_n7, i] * factor / (HSd[i] * HSd[i] * HSd[i])
+        ρzi = n[kk, idx_ρz, i] * factor / (HSd[i] * HSd[i] * HSd[i])
         @inbounds for j in i:NC
-            ρj = n[kk, idx_n7, j] * factor / (HSd[j] * HSd[j] * HSd[j])
-            const_ij = ρi * ρj * m[i] * m[j] * σ[i,j] * σ[i,j] * σ[i,j]
+            ρzj = n[kk, idx_ρz, j] * factor / (HSd[j] * HSd[j] * HSd[j])
+            const_ij = ρzi * ρzj * m[i] * m[j] * σ[i,j] * σ[i,j] * σ[i,j]
             eps_T = ϵ[i,j] / (T + eps_val)
             term1 = const_ij * eps_T
             term2 = const_ij * eps_T * eps_T
@@ -136,10 +129,10 @@ end
         end
     end
     
-    ηd = η_disp; ηd2 = ηd * ηd; ηd4 = ηd2 * ηd2
+    ηd2 = ηd * ηd; ηd4 = (1.0 - ηd + eps_val)^4
     inv_1_ηd = 1.0 / (1.0 - ηd + eps_val)
     inv_2_ηd = 1.0 / (2.0 - ηd + eps_val)
-    C₁ = 1.0 + m̄ * (8.0 * ηd - 2.0 * ηd2) / (ηd4 + eps_val) + (1.0 - m̄) * (20.0 * ηd - 27.0 * ηd2 + 12.0 * (ηd2 * ηd) - 2.0 * ηd4) * inv_1_ηd * inv_1_ηd * inv_2_ηd * inv_2_ηd
+    C₁ = 1.0 + m̄ * (8.0 * ηd - 2.0 * ηd2) / ηd4 + (1.0 - m̄) * (20.0 * ηd - 27.0 * ηd2 + 12.0 * (ηd * ηd2) - 2.0 * (ηd2 * ηd2)) * inv_1_ηd * inv_1_ηd * inv_2_ηd * inv_2_ηd
     I₁ = I_lite(PCSAFT_CORR1, m̄, ηd)
     I₂ = I_lite(PCSAFT_CORR2, m̄, ηd)
     

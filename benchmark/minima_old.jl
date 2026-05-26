@@ -8,7 +8,7 @@ using BenchmarkTools
 using CUDA
 
 # Adjustable grid count
-NGRID = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 128
+NGRID = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 4096
 
 # Physical state
 # -----------------------------------------------------------------------------
