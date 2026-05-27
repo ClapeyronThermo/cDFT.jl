@@ -18,14 +18,20 @@ The simulation utilizes a Uniform2DCart structure and a high-order ODE solver (R
 
 ## Parallelization Strategy
 
-The efficiency of cDFT.jl on GPUs comes from its specialized handling of the Helmholtz free energy functional derivatives.
+The efficiency of cDFT.jl on GPUs is achieved by moving from a host-dependent fallback to a fully device-native implementation of the free energy functional derivatives.
 
-### Grid-wise Autodiff with Enzyme.jl
-Instead of computing the full functional derivative through global automatic differentiation or manual analytical derivation (which is complex for models like PC-SAFT), we use:
-- **Enzyme.jl**: A high-performance compiler plugin that performs reverse-mode AD directly on the GPU kernels.
-- **In-place Gradients**: The gradient of the local free energy density with respect to weighted densities is computed at each grid point in parallel.
-- **Zero Host-Device Transfer**: All computations, including the AD and field integrations (using FFTs via CUDA.jl), happen entirely on the GPU.
-- **Kernel-level Optimization**: By passing system parameters as Const to the Enzyme kernel, we minimize overhead and maximize throughput.
+### Evolution from GPU-CPU-GPU to Native GPU
+Original versions of the residual Helmholtz free energy functional (`f_res`) were not compatible with GPU-based automatic differentiation (AD) or Enzyme.jl due to their reliance on complex, non-bitstype thermodynamic structures. This necessitated a **GPU-CPU-GPU** strategy:
+1.  Compute weighted densities on the GPU.
+2.  Transfer data back to the **CPU** to evaluate functional derivatives using standard AD.
+3.  Transfer results back to the **GPU** for the next step.
+
+### New "Lite" GPU Kernel
+To eliminate this bottleneck, \`cDFT.jl\` implements a specialized **GPU-native version**:
+- **f_res_lite_void_gpu**: A streamlined, bitstype-safe version of the PC-SAFT free energy density designed specifically for GPU kernels. It unrolls complex loops and uses raw arrays for maximum compatibility with Enzyme.jl.
+- **Grid-wise Reverse AD**: Instead of global AD, we perform reverse-mode autodiff at each grid point using `Enzyme.autodiff_deferred`. This computes the local gradient of the free energy density with respect to all weighted densities in a single, parallel pass.
+- **Global Void Pattern**: Uses specialized buffers (`f_val`, `δf_val`) to handle local function evaluations during the AD process without creating temporary allocations inside the kernel.
+- **Zero-Copy Execution**: By using `preallocate_newautodiff`, all necessary buffers (weighted densities `n`, gradients `δf`, and FFT buffers) are kept in GPU memory, ensuring the entire simulation loop stays on the device.
 
 ## Test Cases and Verification
 
