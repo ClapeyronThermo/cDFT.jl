@@ -30,7 +30,7 @@ structure = Uniform1DCart((p, T), ρbulk, [-10L, 10L], NGRID)
 println("Created structure with bulk density: $(ρbulk[1]) mol/m^3")
 
 # options = DFTOptions(CUDABackend())
-options = DFTOptions(CUDABackend())
+options = DFTOptions(CPU())
 print("Using backend: ", options.device, "\n")
 
 # Build system

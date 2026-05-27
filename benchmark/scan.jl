@@ -8,7 +8,7 @@ using BenchmarkTools
 using CUDA
 using Statistics
 
-NGRIDS = 2 .^ [2, 5, 8, 11, 14]
+NGRIDS = 2 .^ [20]
 
 function main()
     T = 300.0
