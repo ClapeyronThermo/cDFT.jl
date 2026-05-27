@@ -1,0 +1,58 @@
+name = "cDFT"
+uuid = "9d464fa6-e93d-4d45-9e5b-7c20149a9a88"
+authors = ["Pierre Walker <pjwalker@caltech.edu>"]
+version = "0.1.0"
+
+[deps]
+AbstractFFTs = "621f4979-c628-5d54-868e-fcf4e3e8185c"
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+ChemicalIdentifiers = "fa4ea961-1416-484e-bda2-883ee1634ba5"
+Clapeyron = "7c7805af-46cc-48c9-995b-ed0ed2dc909a"
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+FastTransforms = "057dd010-8810-581a-b7be-e3fc3b93f78c"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+GCIdentifier = "b7ea765e-cbac-4e4a-9b0d-5427cc302506"
+Hankel = "74863788-d124-456e-a676-9b76578dd39e"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+NLSolvers = "337daf1e-9722-11e9-073e-8b9effe078ba"
+ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
+[weakdeps]
+DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+ThreadPinning = "811555cd-349b-4f26-b7bc-1f208b848042"
+
+[extensions]
+DifferentialEquationscDFTExt = "DifferentialEquations"
+PlotscDFTExt = "Plots"
+ThreadPinningcDFTExt = "ThreadPinning"
+
+[compat]
+AbstractFFTs = "1.5.0"
+Adapt = "4.5.0"
+ChemicalIdentifiers = "0.1"
+Clapeyron = "0.6.12"
+DelimitedFiles = "1.9.1"
+DifferentialEquations = "8"
+FFTW = "1.8.0"
+FastTransforms = "0.17.1"
+ForwardDiff = "^0.10, 1"
+GCIdentifier = "0.3"
+Hankel = "0.5.9"
+KernelAbstractions = "0.9.40"
+LinearAlgebra = "1"
+NLSolvers = "0.5"
+Plots = "1"
+ReverseDiff = "1.16.2"
+StaticArrays = "^1.5.9"
+ThreadPinning = "0.7, 1"
+julia = "1.6"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
