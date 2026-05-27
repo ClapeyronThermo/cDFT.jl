@@ -235,9 +235,11 @@ end
 function δFδρ_res_newautodiff!(system::AbstractcDFTSystem, ρ, δfδρ_res, n, δf, fft_buf, in_buf, out_buf, P, iP, f, cache_pool, f_val, δf_val, HSd=nothing, m=nothing, sigma=nothing, epsilon=nothing, T=nothing, nc=nothing, nd=nothing)
     model = system.model
     backend = system.options.device
+    # println("Running new autodiff version with backend: ", backend, "\n")
     
+
     # Fallback to original version if association is present or on CPU or no flat data
-    if Clapeyron.assoc_pair_length(model) > 0 || backend isa CPU || isnothing(HSd)
+    if Clapeyron.assoc_pair_length(model) > 0  || isnothing(HSd)
         return δFδρ_res!(system, ρ, δfδρ_res, n, δf, fft_buf, in_buf, out_buf, P, iP, f, cache_pool)
     end
 
@@ -253,8 +255,8 @@ function δFδρ_res_newautodiff!(system::AbstractcDFTSystem, ρ, δfδρ_res, n
     copyto!(n, fft_buf)
     
     # Initialize gradient output buffer to zero as Enzyme accumulates
-    fill!(δf, 0.0)
-
+    # fill!(δf, 0.0)
+    # synchronize(backend)
     # Launch Enzyme autodiff kernel with raw arrays and static NC, ND
     kernel = δf_enzyme_kernel!(backend)
     kernel(δf, n, f_val, δf_val, HSd, m, sigma, epsilon, Float64(T), 
@@ -271,7 +273,7 @@ end
 function δFδρ_res_newautodiff(system::AbstractcDFTSystem, ρ)
     backend = system.options.device
     # Fallback for CPU or models with association
-    if backend isa CPU || Clapeyron.assoc_pair_length(system.model) > 0
+    if Clapeyron.assoc_pair_length(system.model) > 0
         return δFδρ_res(system, ρ)
     end
 
@@ -298,9 +300,9 @@ end
 
 function preallocate_model_newautodiff(system, ρ)
     backend = system.options.device
-    if backend isa CPU
-        return preallocate_model(system, ρ)
-    end
+    # if backend isa CPU
+    #     return preallocate_model(system, ρ)
+    # end
 
     # GPU-specific allocation
     nf = length_fields(system)
@@ -310,6 +312,7 @@ function preallocate_model_newautodiff(system, ρ)
     
     n = allocate(backend, Float64, ngrid...,nf,nb)
     δf = allocate(backend, Float64, ngrid...,nf,nb)
+    fill!(δf, 0.0)
     fft_buf = allocate(backend, Float64, ngrid...,nf,nb)
 
     in_buf = allocate(backend, ComplexF64, ngrid...)
