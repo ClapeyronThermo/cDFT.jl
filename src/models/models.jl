@@ -236,7 +236,7 @@ function δFδρ_res_newautodiff!(system::AbstractcDFTSystem, ρ, δfδρ_res, n
     model = system.model
     backend = system.options.device
     # println("Running new autodiff version with backend: ", backend, "\n")
-    
+    # println(HSd)
 
     # Fallback to original version if association is present or on CPU or no flat data
     if Clapeyron.assoc_pair_length(model) > 0  || isnothing(HSd)
@@ -255,7 +255,8 @@ function δFδρ_res_newautodiff!(system::AbstractcDFTSystem, ρ, δfδρ_res, n
     copyto!(n, fft_buf)
     
     # Initialize gradient output buffer to zero as Enzyme accumulates
-    # fill!(δf, 0.0)
+    fill!(δf_val, 1.0)
+    fill!(δf, 0.0)
     # synchronize(backend)
     # Launch Enzyme autodiff kernel with raw arrays and static NC, ND
     kernel = δf_enzyme_kernel!(backend)

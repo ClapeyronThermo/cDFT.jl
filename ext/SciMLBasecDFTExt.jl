@@ -24,13 +24,15 @@ module SciMLBasecDFTExt
         P        = FFTW.plan_fft!(buf)
         iP       = FFTW.plan_ifft!(buf)
         
-        μ, cache_model, cache_external_field, cache_propagator = cDFT.preallocate(system, ρ)
+        μ, cache_model, cache_external_field, cache_propagator = cDFT.preallocate_newautodiff(system, ρ)
 
         function ddft_rhs_log!(dη, η, params, t)
-            println(t, " ", minimum(η), " ", maximum(η))
             @. ρ = exp(clamp(η, -100, 50))
+            # println(t, " ", minimum(ρ), " ", maximum(ρ))
+            # println(t, " ", minimum(μ), " ", maximum(μ))
 
-            cDFT.δFδρ_res!(system, ρ, μ, cache_model...)
+            cDFT.δFδρ_res_newautodiff!(system, ρ, μ, cache_model...)
+            # println(t, " ", minimum(μ), " ", maximum(μ))
             cDFT.evaluate_external_field!(system, ρ, μ, cache_external_field)
             cDFT.propagate!(system, ρ, μ, cache_propagator)
 
@@ -56,12 +58,12 @@ module SciMLBasecDFTExt
         end
 
         function total_rhs!(dρ, ρ, params, t)
-            println(t, " ", minimum(ρ), " ", maximum(ρ))
+            # println(t, " ", minimum(ρ), " ", maximum(ρ))
 
             # system, _, μ, cache_model, cache_external_field, cache_propagator, cache_ddft = params
             # println(t, " ", minimum(ρ), " ", maximum(ρ))
             clamp!(ρ, 1e-8, 1e8)   # prevent overflow in log or exp
-            cDFT.δFδρ_res!(system, ρ, μ, cache_model...)
+            cDFT.δFδρ_res_newautodiff!(system, ρ, μ, cache_model...)
             cDFT.evaluate_external_field!(system, ρ, μ, cache_external_field)
             cDFT.propagate!(system, ρ, μ, cache_propagator)
 
