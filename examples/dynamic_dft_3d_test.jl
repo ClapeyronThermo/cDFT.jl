@@ -2,7 +2,7 @@ import Logging: global_logger
 import TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 using Pkg, CUDA, HDF5, DifferentialEquations, Revise
-Pkg.activate("..")
+# Pkg.activate("..")
 using Clapeyron, cDFT
 
 # Define model

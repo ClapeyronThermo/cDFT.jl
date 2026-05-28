@@ -8,7 +8,7 @@ using BenchmarkTools
 using CUDA
 using Statistics
 
-NGRIDS = 2 .^ [2, 5, 8, 11, 14]
+NGRIDS = 2 .^ [5, 10, 15, 20]
 
 function main()
     T = 300.0
@@ -34,7 +34,6 @@ function main()
     println("Bulk μ_res/RT from Clapeyron = $(μ_bulk[1])")
     println()
 
-    # 一共 14 个字段
     @printf("%8s  %12s  %12s  %12s  %12s  %12s  %12s  %12s  %12s  %12s  %12s  %12s  %12s  %12s\n",
         "NGRID",
         "old_cpu_min",
