@@ -1,7 +1,9 @@
 import Logging: global_logger
 import TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
-using Pkg, CUDA, HDF5, OrdinaryDiffEqStabilizedRK, DiffEqCallbacks, Revise
+using Pkg, CUDA, HDF5, OrdinaryDiffEqStabilizedRK, DiffEqCallbacks
+using DifferentialEquations # should use this for ODEProblem
+# using Revise
 # Pkg.activate("..")
 using Clapeyron, cDFT
 
@@ -37,7 +39,7 @@ for α in 1:1
     ρ0[:,:, α] .+= ρb[α] .* δ .*(-1)^α .* CUDA.rand(ngrid, ngrid, 1)
 end
 
-h5path = "traj.h5"
+h5path = "trajectory_test_2d_vle.h5"
 rm(h5path; force=true)
 
 h5open(h5path, "w") do f
