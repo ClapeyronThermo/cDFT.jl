@@ -1,7 +1,7 @@
 import Logging: global_logger
 import TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
-using Pkg, CUDA, HDF5, DifferentialEquations, DiffEqCallbacks, Revise
+using Pkg, CUDA, HDF5, OrdinaryDiffEqStabilizedRK, DiffEqCallbacks, Revise
 # Pkg.activate("..")
 using Clapeyron, cDFT
 
@@ -34,28 +34,42 @@ system = DFTSystem(model, structure, options)
 
 δ = 0.01
 for α in 1:1
-    # ρ0[:,:, α] .+= ρb[α] .* δ .*(-1)^α .* rand(ngrid, ngrid, 1)
     ρ0[:,:, α] .+= ρb[α] .* δ .*(-1)^α .* CUDA.rand(ngrid, ngrid, 1)
 end
 
-h5file = h5open("trajectory_test_2d_vle.h5", "w")
+h5path = "traj.h5"
+rm(h5path; force=true)
+
+h5open(h5path, "w") do f
+    f["created"] = 1
+end
+
 step_counter = Ref(0)
-save_every   = 1    # save every N steps
+save_every   = 1
 
 saving_callback = FunctionCallingCallback(func_everystep=true) do ρ, t, integrator
     step_counter[] += 1
+
     if step_counter[] % save_every == 0
-        h5write("trajectory_test_2d_vle.h5", "rho_$(step_counter[])", Array(exp.(ρ)))
-        h5write("trajectory_test_2d_vle.h5", "t_$(step_counter[])", t)
+        CUDA.synchronize()
+        rho_cpu = Array(exp.(ρ))
+
+        h5open(h5path, "r+") do f
+            f["rho_$(step_counter[])"] = rho_cpu
+            f["t_$(step_counter[])"] = t
+        end
     end
 end
 
-prob = ODEProblem(system, ρ0, (0.0, 10000.0))
+prob = ODEProblem(system, ρ0, (0.0, 100.0))
 
-sol  = solve(prob, ROCK2();
-callback=saving_callback,
+sol = solve(
+    prob,
+    ROCK2();
+    callback=saving_callback,
     dtmax=0.05,
-    save_everystep = false,
-    saveat         = [],
-    progress=true, 
-    progress_steps=1)
+    save_everystep=false,
+    saveat=[],
+    progress=true,
+    progress_steps=1,
+)
