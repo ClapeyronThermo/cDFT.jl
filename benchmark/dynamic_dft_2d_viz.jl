@@ -1,6 +1,6 @@
 using HDF5, Plots
 
-densities, times = h5open("trajectory_test_2d_vle.h5", "r") do f
+densities, times = h5open("trajectory_test_2d.h5", "r") do f
     rho_keys = sort(filter(k -> startswith(k, "rho_"), keys(f)),
                     by = k -> parse(Int, split(k, "_")[2]))
     t_keys   = sort(filter(k -> startswith(k, "t_"),   keys(f)),
@@ -23,14 +23,14 @@ cols_e = [RGBA(c.r, c.g, c.b, α.^2)
         for (c,α) in zip(cgrad([:white,:red],256),
                          range(0,1,length=256))]
 anim = Animation()
-anim = @animate for n=1:10:length(densities)
+anim = @animate for n=1:50:length(densities)
     # t=t+dt
     # if mod(n,40)==0
         # x = 0:0.1:2π
         # y = sin.(x .+ (n/2))
         z = densities[n]
         
-        heatmap(
+        Plots.heatmap(
             z[:,:,1],
             c=cols_w,
             clim=(0, maximum(densities[end][:,:,1])),
@@ -54,4 +54,4 @@ anim = @animate for n=1:10:length(densities)
         frame(anim)
     # end
 end
-gif(anim, "trajectory_2d_vle_hetero.gif", fps=30)
+gif(anim, "trajectory_test_2d.gif", fps=30)
