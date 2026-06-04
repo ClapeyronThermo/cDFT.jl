@@ -8,7 +8,7 @@ using BenchmarkTools
 using CUDA
 using Statistics
 
-NGRIDS = 2 .^ [5, 10, 15, 20]
+NGRIDS = 2 .^ [6, 9, 12, 15, 18, 20, 21, 22]
 
 function main()
     T = 300.0
@@ -16,7 +16,7 @@ function main()
     components = ["hexane"]
     model = PCSAFT(components)
 
-    vl = volume(model, p, T)
+    vl = Clapeyron.volume(model, p, T)
     ρbulk = [1.0 / vl]
 
     L = cDFT.length_scale(model)
@@ -34,23 +34,30 @@ function main()
     println("Bulk μ_res/RT from Clapeyron = $(μ_bulk[1])")
     println()
 
-    @printf("%8s  %12s  %12s  %12s  %12s  %12s  %12s  %12s  %12s  %12s  %12s  %12s  %12s  %12s\n",
+    f = open("scan.txt", "w")
+    @printf("%8s  %12s  %12s  %12s  %12s  %16s  %16s  %16s\n",
         "NGRID",
-        "old_cpu_min",
-        "old_cpu_med",
-        "old_gpu_min",
-        "old_gpu_med",
-        "new_cpu_min",
-        "new_cpu_med",
-        "new_gpu_min",
-        "new_gpu_med",
-        "new_cpu/old",
-        "new_gpu/old",
-        "gpu/cpu_new",
-        "diff_cpu",
-        "diff_gpu",
+        "old_cpu",
+        "old_gpu",
+        "new_cpu",
+        "new_gpu",
+        "SU:new/old_c",
+        "SU:new/old_g",
+        "SU:new_g/c"
     )
-    println("-"^175)
+    @printf(f, "%8s  %12s  %12s  %12s  %12s  %16s  %16s  %16s\n",
+        "NGRID",
+        "old_cpu",
+        "old_gpu",
+        "new_cpu",
+        "new_gpu",
+        "SU:new/old_c",
+        "SU:new/old_g",
+        "SU:new_g/c"
+    )
+    line = "-"^110
+    println(line)
+    println(f, line)
 
     for NGRID in NGRIDS
         GC.gc()
@@ -78,7 +85,9 @@ function main()
         # ============================================================
         # CPU newautodiff! version
         # ============================================================
-        δfδρ_new_cpu, cache_new_cpu, _, _ = cDFT.preallocate_newautodiff(system_cpu, ρ0_cpu)
+
+        δfδρ_new_cpu, cache_new_cpu, _, _ =
+            cDFT.preallocate_newautodiff(system_cpu, ρ0_cpu)
 
         cDFT.δFδρ_res_newautodiff!(
             system_cpu, ρ0_cpu, δfδρ_new_cpu, cache_new_cpu...
@@ -103,14 +112,18 @@ function main()
             system_gpu, ρ0_gpu, δfδρ_old_gpu, cache_old_gpu...
         )
 
+        CUDA.synchronize()
+
         bench_old_gpu = @benchmark CUDA.@sync cDFT.δFδρ_res!(
             $system_gpu, $ρ0_gpu, $δfδρ_old_gpu, $(cache_old_gpu)...
         )
+        CUDA.synchronize()
 
         # ============================================================
         # GPU newautodiff! version
         # ============================================================
-        δfδρ_new_gpu, cache_new_gpu, _, _ = cDFT.preallocate_newautodiff(system_gpu, ρ0_gpu)
+        δfδρ_new_gpu, cache_new_gpu, _, _ =
+            cDFT.preallocate_newautodiff(system_gpu, ρ0_gpu)
 
         CUDA.@sync cDFT.δFδρ_res_newautodiff!(
             system_gpu, ρ0_gpu, δfδρ_new_gpu, cache_new_gpu...
@@ -132,7 +145,9 @@ function main()
 
         diff_new_cpu = maximum(abs.(old_cpu_arr .- new_cpu_arr))
         diff_new_gpu = maximum(abs.(old_gpu_arr .- new_gpu_arr))
-
+        if diff_new_cpu > 1e-6 || diff_new_gpu > 1e-6
+            @printf("ERROR: Maximum absolute difference between old and new results exceeds tolerance! diff_new_cpu = %e, diff_new_gpu = %e\n", diff_new_cpu, diff_new_gpu)
+        end
         # ============================================================
         # Timing
         # ============================================================
@@ -152,23 +167,29 @@ function main()
         speedup_gpu = old_gpu_med_ms / new_gpu_med_ms
         speedup_new_gpu_cpu = new_cpu_med_ms / new_gpu_med_ms
 
-        @printf("%8d  %12.6f  %12.6f  %12.6f  %12.6f  %12.6f  %12.6f  %12.6f  %12.6f  %12.3f  %12.3f  %12.3f  %12.4e  %12.4e\n",
+        @printf("%8d  %12.6f  %12.6f  %12.6f  %12.6f  %16.6f  %16.6f  %16.6f\n",
             NGRID,
-            old_cpu_min_ms,
             old_cpu_med_ms,
-            old_gpu_min_ms,
             old_gpu_med_ms,
-            new_cpu_min_ms,
             new_cpu_med_ms,
-            new_gpu_min_ms,
             new_gpu_med_ms,
             speedup_cpu,
             speedup_gpu,
-            speedup_new_gpu_cpu,
-            diff_new_cpu,
-            diff_new_gpu
+            speedup_new_gpu_cpu
         )
+        @printf(f, "%8d  %12.6f  %12.6f  %12.6f  %12.6f  %16.6f  %16.6f  %16.6f\n",
+            NGRID,
+            old_cpu_med_ms,
+            old_gpu_med_ms,
+            new_cpu_med_ms,
+            new_gpu_med_ms,
+            speedup_cpu,
+            speedup_gpu,
+            speedup_new_gpu_cpu
+        )
+        flush(f)
     end
+    close(f)
 end
 
 main()
