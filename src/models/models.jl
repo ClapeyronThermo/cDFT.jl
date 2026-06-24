@@ -7,9 +7,20 @@ include("DGT/dgt.jl")
 """
     F_res(system::DFTSystem, ρ)
 
-Obtain the residual free energy of the system for a given profile `ρ`. This is done by first
-evaluating the system fields and passing these to the integrands (`f_res`) for each grid point.
-The result is then integrated over the domain. Output is a scalar of units J.
+Residual free energy for DFT systems via the Enzyme/KA kernel path.
+Runs the same δf_kernel! used by δFδρ_res! and integrates the primal f_val.
+"""
+function F_res(system::DFTSystem, ρ)
+    δfδρ_res, cache_model, _, _ = preallocate(system, ρ)
+    δFδρ_res!(system, ρ, δfδρ_res, cache_model...)
+    f_val = cache_model[9]
+    return ∫(f_val, structure_dz(system.structure))
+end
+
+"""
+    F_res(system::AbstractcDFTSystem, ρ)
+
+Residual free energy for DGT and Electrolyte systems (old scalar f_res path).
 """
 function F_res(system::AbstractcDFTSystem, ρ)
     ngrid  = system.structure.ngrid
@@ -17,8 +28,6 @@ function F_res(system::AbstractcDFTSystem, ρ)
     dz     = structure_dz(system.structure)
 
     δfδρ_res, cache_model, cache_external, cache_propagator = preallocate(system, ρ)
-    # Positions 1–7 are identical in every cache format:
-    #   1:n  2:δf  3:fft_buf  4:in_buf  5:out_buf  6:plan  7:iplan
     n       = cache_model[1]
     fft_buf = cache_model[3]
     in_buf  = cache_model[4]

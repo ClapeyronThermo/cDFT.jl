@@ -9,36 +9,6 @@ The bulk model can be obtained from Clapeyron.
 """
 PCPSAFT
 
-function f_res(system::DFTSystem, model::PCPSAFTModel,n)
-    nd = dimension(system)
-    return f_hs(system,model,n[2,:],n[3,:],n[4:4+nd-1,:]) + f_hc(system,model,n[1,:],n[4+nd,:],n[5+nd,:]) + f_disp(system,model,n[6+nd,:]) + f_polar(system,model,n[6+nd,:]) + f_assoc(system,model,n[2,:],n[3,:],n[4:4+nd-1,:])
-end
-
-function f_polar(system::DFTSystem, model::PCPSAFTModel, ρ̄)
-    species = system.species
-    T = system.structure.conditions[2]
-    μ̄² = pcp_dipole2(model)
-    has_dp = !all(iszero, μ̄²)
-    if !has_dp return zero(T+first(ρ̄)) end
-
-    ψ = 1.3862
-    HSd = species.size
-
-    m = pcp_segment(model)
-    ϵ = pcp_epsilon(model)
-    σ = pcp_sigma(model)
-
-    ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
-    η = π/6*@sum(ρ̄[i]*m[i]*HSd[i]^3)
-    ∑ρ̄ = sum(ρ̄)
-    x = ρ̄ /∑ρ̄
-    _A₂ = A2(x,m,ϵ,σ,μ̄²,η,∑ρ̄,T)
-    iszero(_A₂) && return zero(_A₂)
-    _A₃ = A3(x,m,ϵ,σ,μ̄²,η,∑ρ̄,T)
-    _a_dd = _A₂^2/(_A₂-_A₃)
-    return ∑ρ̄*_a_dd
-end
-
 function A2(x,m,ϵ,σ,μ̄²,η,ρ̄,T)
     p_comps = [i for (i, μ²) ∈ enumerate(μ̄²) if !iszero(μ²)]
     _0 = zero(T+first(x))

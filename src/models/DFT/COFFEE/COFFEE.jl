@@ -30,37 +30,6 @@ function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStruc
             SWeightedDensity(:∫ρz²dz,ψ1.*d,ω,ngrid,device)]
 end
 
-function f_res(system::DFTSystem, model::COFFEEModel,n)
-    nd = dimension(system)
-    n1,n2,n3,n4,n5 = @view(n[1,:]),@view(n[2,:]),@view(n[3:3+nd-1,:]),@view(n[3+nd,:]),@view(n[4+nd,:])
-    return f_hs(system,model,n1,n2,n3)+f_disp(system,model,n5)+f_ff(system,model,n4)+f_nf(system,model,n1,n2,n3)
-end
-
-function f_ff(system::DFTSystem, model::COFFEEModel, ρ̄)
-    species = system.species
-    T = system.structure.conditions[2]
-    μ̄² = pcp_dipole2(model)
-    has_dp = !all(iszero, μ̄²)
-    if !has_dp return zero(T+first(ρ̄)) end
-
-    ψ = 1.3862
-    HSd = species.size
-
-    m = pcp_segment(model)
-    ϵ = pcp_epsilon(model)
-    σ = pcp_sigma(model)
-
-    ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
-    η = π/6*@sum(ρ̄[i]*m[i]*HSd[i]^3)
-    ∑ρ̄ = sum(ρ̄)
-    x = ρ̄ /∑ρ̄
-    _A₂ = A2_coffee(x,m,ϵ,σ,μ̄²,η,∑ρ̄,T)
-    iszero(_A₂) && return zero(_A₂)
-    _A₃ = A3_coffee(x,m,ϵ,σ,μ̄²,η,∑ρ̄,T)
-    _a_dd = _A₂^2/(_A₂-_A₃)
-    return ∑ρ̄*_a_dd
-end
-
 function A2_coffee(x,m,ϵ,σ,μ̄²,η,ρ̄,T)
     p_comps = [i for (i, μ²) ∈ enumerate(μ̄²) if !iszero(μ²)]
     _0 = zero(T+first(x))
@@ -127,42 +96,6 @@ function J3_coffee(T,i,j,k,η,ϵ)
     return evalpoly(η,c)
 end
 
-function f_nf(system::DFTSystem, model::COFFEEModel, n, n₃, nᵥ)
-    HSd = system.species.size
-    T = system.structure.conditions[2]
-    
-    ϵ = model.params.epsilon[1]
-    σ = diagvalues(model.params.sigma.values)
-    d = model.params.shift[1] / σ[1]
-    μ² = model.params.dipole2[1]./ϵ/σ[1]^3
-    m = model.params.segment
-    μ = sqrt(μ²)
-
-    n₀ = zero(first(n) + first(m) + first(HSd))
-    n₂, nᵥ₂, η =zero(n₀), zero(nᵥ[:,1]), zero(n₀)
-    for i in 1:length(n)
-        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[:,i],HSd[i]
-        nᵢmᵢ = nᵢ*mᵢ
-        n₀ += nᵢmᵢ/HSdᵢ
-        n₂ += π*HSdᵢ*nᵢmᵢ
-        nᵥ₂ += -2π*nᵥᵢ*mᵢ
-        η += n₃[i]*mᵢ
-    end
-
-    nᵥ₂nᵥ₂ = dot(nᵥ₂,nᵥ₂)
-
-    ρ̄ = η*6/π*(σ[1]/HSd[1])^3
-    ξ = 1-nᵥ₂nᵥ₂/n₂^2
-
-    g_hs = 1/(1-η)+HSd[1]*ξ*n₂/(4*(1-η)^2)+HSd[1]^2/4*n₂^2*ξ/(18*(1-η)^3)
-    T̄ = T/ϵ
-
-    _Iμμ = Iμμ(ρ̄,T̄,μ)
-
-    Q = ∫∫∫Odξ₁dξ₂dγ12(ρ̄,T̄,μ²,d,_Iμμ)
-
-    return 19*π/12*n₀*ρ̄*g_hs*log(4π/Q)
-end
 
 function ∫∫∫Oodξ₁dξ₂dγ12(ρ̄,T̄,μ²,d,_Iμμ,Q)
     I(x) = begin

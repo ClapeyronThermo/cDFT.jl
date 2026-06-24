@@ -48,10 +48,6 @@ function get_propagator(model::PeTSModel, species::DFTSpecies, structure::DFTStr
     return IdealPropagator()
 end
 
-function f_res(system::DFTSystem, model::PeTSModel,n)
-    return f_hs(system,model,n[1,:],n[2,:],n[3,:])+f_pert(system,model,n[4,:])
-end
-
 # ── Enzyme / KernelAbstractions kernel support ──────────────────────────────
 
 """
@@ -113,26 +109,4 @@ function preallocate_params(system::DFTSystem{<:PeTSModel})
     )
     nc = length(system.model)
     return params, nc
-end
-
-function f_pert(system::DFTSystem, model::PeTSModel, ρ̄)
-    species = system.species
-    T = system.structure.conditions[2]
-    T̄ = T./diagvalues(model.params.epsilon.values)[1]
-    m = model.params.segment.values
-    σ = diagvalues(model.params.sigma.values)
-
-    ψ = 1.21
-    HSd = species.size
-
-    ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
-    ρ̃  = @sum(ρ̄[i]*m[i]*σ[i]^3)
-    η = π/6*@sum(ρ̄[i]*m[i]*HSd[i]^3)
-    ∑ρ̄ = sum(ρ̄)
-    I1 = evalpoly(η,PeTS_A)
-    I2 = evalpoly(η,PeTS_B)
-    ã1 = -2*π*ρ̃ *I1/ T̄
-    ã2 = -π*ρ̃*I2*(1 + 2*η*(4 - η)/(1 - η)^4)^-1 / T̄^2
-
-    return (ã1 + ã2)*∑ρ̄
 end

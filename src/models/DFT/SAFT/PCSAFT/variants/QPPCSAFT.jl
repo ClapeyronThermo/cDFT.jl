@@ -1,40 +1,5 @@
 using Clapeyron: QPCPSAFTModel
 
-function f_res(system::DFTSystem, model::QPCPSAFTModel,n)
-    nd = dimension(system)
-    return f_hs(system,model,n[2,:],n[3,:],n[4:4+nd-1,:]) + f_hc(system,model,n[1,:],n[4+nd,:],n[5+nd,:]) + f_disp(system,model,n[6+nd,:]) + f_polar(system,model,n[6+nd,:]) + f_assoc(system,model,n[2,:],n[3,:],n[4:4+nd-1,:])
-end
-
-
-function f_polar(system::DFTSystem, model::QPCPSAFTModel, ρ̄)
-  species = system.species
-  T = system.structure.conditions[2]
-  μ̄² = model.params.dipole2.values
-  Q̄² = model.params.quadrupole2.values
-  has_dp = !all(iszero, μ̄²)
-  has_qp = !all(iszero, Q̄²)
-  if !has_dp && !has_qp return zero(T+first(ρ̄)) end
-
-  ψ = 1.3862
-  HSd = species.size
-  m = model.params.segment.values
-  ϵ = model.params.epsilon.values
-  σ = model.params.sigma.values
-
-  ρ̄ = ρ̄*3 ./(4*ψ^3 .*HSd.^3)/π
-  η = π/6*@sum(ρ̄[i]*m[i]*HSd[i]^3)
-  ∑ρ̄ = sum(ρ̄)
-  x = ρ̄ /∑ρ̄
-  nc = length(model)
-
-  a_mp_total = zero(T+ρ̄)
-  a_mp_total += has_dp && a_dd(x,m,ϵ,σ,μ̄²,Q̄²,η,∑ρ̄,T,nc)
-  a_mp_total += has_qp && a_qq(x,m,ϵ,σ,μ̄²,Q̄²,η,∑ρ̄,T,nc)
-  a_mp_total += has_dp && has_qp && a_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,∑ρ̄,T,nc)
-
-  return ∑ρ̄*a_mp_total
-end
-
 function a_polar(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
   A₂ = A2(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
   iszero(A₂) && return zero(A₂)
