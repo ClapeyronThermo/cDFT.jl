@@ -1,219 +1,4 @@
-using Clapeyron: QPCPSAFTModel
-
-function a_polar(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
-  A₂ = A2(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
-  iszero(A₂) && return zero(A₂)
-  A₃ = A3(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
-  return A₂^2/(A₂-A₃)
-end
-function a_dd(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-    return a_polar(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,:DD)
-end
-function a_qq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-    return a_polar(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,:QQ)
-end
-function a_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-    A₂ = A2_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-    iszero(A₂) && return zero(A₂)
-    A₃ = A3_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-    return A₂^2/(A₂-A₃)
-end
-
-function A2(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
-  dp_comps, qp_comps = polar_comps(μ̄²,Q̄²,nc)
-  
-  P̄² = []
-  p_comps = []
-  p = 0
-  coeff = 0.
-  if type == :DD
-      if isempty(dp_comps) return 0. end
-      P̄² = μ̄²
-      p_comps = dp_comps
-      p = 3
-      coeff = 1.
-  end
-  if type == :QQ
-      if isempty(qp_comps) return 0. end
-      P̄² = Q̄²
-      p_comps = qp_comps
-      p = 7
-      coeff = 9/16
-  end
-  _a_2 = zero(T+first(x))
-  @inbounds for (idx, i) ∈ enumerate(p_comps)
-      _J2_ii = J2(m[i],m[i],ϵ[i,i],η,T,type)
-      xᵢ = x[i]
-      P̄²ᵢ = P̄²[i]
-      _a_2 +=xᵢ^2*P̄²ᵢ^2/σ[i,i]^p*_J2_ii
-      for j ∈ p_comps[idx+1:end]
-          _J2_ij = J2(m[i],m[j],ϵ[i,j],η,T,type)
-          _a_2 += 2*xᵢ*x[j]*P̄²ᵢ*P̄²[j]/σ[i,j]^p*_J2_ij
-      end
-  end
-  _a_2 *= -π*coeff*ρ̄/T^2
-  return _a_2
-end
-
-function A2_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-  dp_comps, qp_comps = polar_comps(μ̄²,Q̄²,nc)
-  _a_2 = zero(T+first(x))
-  @inbounds for i in dp_comps
-      for j ∈ qp_comps
-          _J2_ij = J2(m[i],m[j],ϵ[i,j],η,T,:DQ)
-          _a_2 += x[i]*x[j]*μ̄²[i]*Q̄²[j]/σ[i,j]^5*_J2_ij
-      end
-  end
-  _a_2 *= -π*9/4*ρ̄/T^2
-  return _a_2
-end
-
-function A3(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc,type)
-  dp_comps, qp_comps = polar_comps(μ̄²,Q̄²,nc)
-  P̄² = []
-  p_comps = []
-  p = 0
-  coeff = 0.
-  _0 = zero(T+first(x))
-  if type == :DD
-      if isempty(dp_comps) return _0 end
-      P̄² = μ̄²
-      p_comps = dp_comps
-      p = 1
-      coeff = -4*π^2/3
-  end
-  if type == :QQ
-      if isempty(qp_comps) return _0 end
-      P̄² = Q̄²
-      p_comps = qp_comps
-      p = 3
-      coeff = 9*π^2/16
-  end
-
-  _a_3 = _0
-  @inbounds for (idx_i,i) ∈ enumerate(p_comps)
-      _J3_iii = J3(m[i],m[i],m[i],η,type)
-      xᵢ,P̄ᵢ² = x[i],P̄²[i]
-      a_3_i = xᵢ*P̄ᵢ²/σ[i,i]^p
-      _a_3 += a_3_i^3*_J3_iii
-      for (idx_j,j) ∈ enumerate(p_comps[idx_i+1:end])
-          xⱼ,P̄ⱼ² = x[j],P̄²[j]
-          σij⁻ᵖ = 1/σ[i,j]^p
-          a_3_iij = xᵢ*P̄ᵢ²*σij⁻ᵖ
-          a_3_ijj = xⱼ*P̄ⱼ²*σij⁻ᵖ
-          a_3_j = xⱼ*P̄ⱼ²/σ[j,j]^p
-          _J3_iij = J3(m[i],m[i],m[j],η,type)
-          _J3_ijj = J3(m[i],m[j],m[j],η,type)
-          _a_3 += 3*a_3_iij*a_3_ijj*(a_3_i*_J3_iij + a_3_j*_J3_ijj)
-          for k ∈ p_comps[idx_i+idx_j+1:end]
-              xₖ,P̄ₖ² = x[k],P̄²[k]
-              _J3_ijk = J3(m[i],m[j],m[k],η,type)
-              _a_3 += 6*xᵢ*xⱼ*xₖ*P̄ᵢ²*P̄ⱼ²*P̄ₖ²*σij⁻ᵖ/(σ[i,k]*σ[j,k])^p*_J3_ijk
-          end
-      end
-  end
-  _a_3 *= coeff*ρ̄^2/T^3
-  return _a_3
-end
-
-function A3_dq(x,m,ϵ,σ,μ̄²,Q̄²,η,ρ̄,T,nc)
-  dp_comps, qp_comps = polar_comps(μ̄²,Q̄²,nc)
-  _a_3 = zero(T+first(x))
-  @inbounds for i ∈ dp_comps
-      for j ∈ union(dp_comps, qp_comps)
-          for k ∈ qp_comps
-              _J3_ijk = J3(m[i],m[j],m[k],η,:DQ)
-              _a_3 += x[i]*x[j]*x[k]*σ[i,i]/
-                  (σ[k,k]*(σ[i,j]*σ[i,k]*σ[j,k])^2)*
-                  μ̄²[i]*Q̄²[k]*(σ[j,j]*μ̄²[j]+1.19374/σ[j,j]*Q̄²[j])*_J3_ijk
-          end
-      end
-  end
-  _a_3 *= -ρ̄^2/T^3
-  return _a_3
-end
-
-# Returns [Dipole Comp idxs], [Quadrupole Comp idxs]
-function polar_comps(μ̄²,Q̄²,nc)
-  dipole_comps = []
-  quadrupole_comps = []
-  for i in 1:nc
-      if !iszero(μ̄²[i]) push!(dipole_comps,i) end
-      if !iszero(Q̄²[i]) push!(quadrupole_comps,i) end
-  end
-  return dipole_comps, quadrupole_comps
-end
-
-function J2(mᵢ,mⱼ,ϵᵢⱼ,η,T,type::Symbol)
-  corr_consts = NamedTuple()
-  ϵᵢⱼT⁻¹ = ϵᵢⱼ/T
-  m̄ = sqrt(mᵢ*mⱼ)
-  n_range = 0:4
-
-  if type == :DD
-      corr_consts = DD_consts
-      m̄ = minimum([m̄, 2.0])
-  elseif type == :DQ
-      corr_consts = DQ_consts
-      n_range = 0:3 # Needs revision
-  elseif type == :QQ
-      corr_consts = QQ_consts
-  end
-
-  m1 = 1. - 1/m̄
-  m2 = m1 * (1. - 2/m̄)
-  corr_a = corr_consts[:corr_a]
-  corr_b = corr_consts[:corr_b]
-
-  J_2ij = zero(η)
-
-  for n ∈ n_range
-      a0, a1, a2 = corr_a[n+1]
-      b0, b1, b2 = corr_b[n+1]
-      a_nij = a0 + a1*m1 + a2*m2
-      b_nij = b0 + b1*m1 + b2*m2
-      J_2ij += (a_nij + b_nij*ϵᵢⱼT⁻¹) * η^n
-  end
-
-  return J_2ij
-end
-
-function J3(mᵢ,mⱼ,mₖ,η,type::Symbol)
-  m̄ = cbrt(mᵢ*mⱼ*mₖ)
-  corr_c = ()
-  m1 = 1. - 1/m̄
-  m2 = 0.
-  n_range = 0:4
-
-  if type == :DD
-      corr_c = DD_consts[:corr_c]
-      m̄ = minimum([m̄, 2.0])
-      m2 = m1 * (1. - 2/m̄)
-  elseif type == :DQ
-      corr_c = DQ_consts[:corr_c]
-      n_range = 0:3
-  elseif type == :QQ
-      corr_c = QQ_consts[:corr_c]
-      m2 = m1 * (1. - 2/m̄)
-  end
-
-  J_3ijk = zero(η)
-  if type == :DQ
-      for n ∈ n_range
-          c0, c1 = corr_c[n+1]
-          c_nijk = c0 + c1*m1
-          J_3ijk += c_nijk*η^n
-      end
-  else
-      for n ∈ n_range
-          c0, c1, c2 = corr_c[n+1]
-          c_nijk = c0 + c1*m1 + c2*m2
-          J_3ijk += c_nijk*η^n
-      end
-  end
-
-  return J_3ijk
-end
+using Clapeyron: QPCPSAFTModel, pcp_sigma, pcp_dipole2, pcp_epsilon, pcp_segment
 
 const QQ_consts = (
     corr_a = 
@@ -257,3 +42,333 @@ const DQ_consts = (
     (0.4689111, -0.1764887),
     (0., 0.))
 )
+
+# ── Enzyme / KernelAbstractions kernel support ──────────────────────────────
+
+"""
+QQ J₂ integral kernel: no min(m̄,2) clamping (unlike DD), 5 terms.
+"""
+@inline function _J2_qq_kernel(mᵢ, mⱼ, ϵᵢⱼ, η, T, corr_a, corr_b)
+    ϵT = ϵᵢⱼ / T
+    m̄  = sqrt(mᵢ * mⱼ)
+    m1  = 1.0 - 1.0/m̄
+    m2  = m1 * (1.0 - 2.0/m̄)
+    result = 0.0
+    ηn = 1.0
+    for n in 0:4
+        a0, a1, a2 = corr_a[n+1]
+        b0, b1, b2 = corr_b[n+1]
+        result += (a0 + a1*m1 + a2*m2 + (b0 + b1*m1 + b2*m2)*ϵT) * ηn
+        ηn *= η
+    end
+    return result
+end
+
+"""
+DQ J₂ integral kernel: no min clamping, 4 terms only (DQ_consts has 4 entries).
+"""
+@inline function _J2_dq_kernel(mᵢ, mⱼ, ϵᵢⱼ, η, T, corr_a, corr_b)
+    ϵT = ϵᵢⱼ / T
+    m̄  = sqrt(mᵢ * mⱼ)
+    m1  = 1.0 - 1.0/m̄
+    m2  = m1 * (1.0 - 2.0/m̄)
+    result = 0.0
+    ηn = 1.0
+    for n in 0:3
+        a0, a1, a2 = corr_a[n+1]
+        b0, b1, b2 = corr_b[n+1]
+        result += (a0 + a1*m1 + a2*m2 + (b0 + b1*m1 + b2*m2)*ϵT) * ηn
+        ηn *= η
+    end
+    return result
+end
+
+"""
+QQ J₃ integral kernel: no min clamping, 5 terms, includes m2.
+"""
+@inline function _J3_qq_kernel(mᵢ, mⱼ, mₖ, η, corr_c)
+    m̄  = cbrt(mᵢ * mⱼ * mₖ)
+    m1  = 1.0 - 1.0/m̄
+    m2  = m1 * (1.0 - 2.0/m̄)
+    result = 0.0
+    ηn = 1.0
+    for n in 0:4
+        c0, c1, c2 = corr_c[n+1]
+        result += (c0 + c1*m1 + c2*m2) * ηn
+        ηn *= η
+    end
+    return result
+end
+
+"""
+DQ J₃ integral kernel: no min clamping, 4 terms, no m2 (DQ_consts.corr_c has only (c0,c1) per entry).
+"""
+@inline function _J3_dq_kernel(mᵢ, mⱼ, mₖ, η, corr_c)
+    m̄  = cbrt(mᵢ * mⱼ * mₖ)
+    m1  = 1.0 - 1.0/m̄
+    result = 0.0
+    ηn = 1.0
+    for n in 0:3
+        c0, c1 = corr_c[n+1]
+        result += (c0 + c1*m1) * ηn
+        ηn *= η
+    end
+    return result
+end
+
+"""
+QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions.
+"""
+@inline function f_polar(n, params, T, kk, m̄, ηd, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: QPCPSAFTModel}
+    _pi   = 3.141592653589793
+    eps_v = 1e-15
+    pcp_m = params.pcp_m
+    pcp_ϵ = params.pcp_epsilon
+    pcp_σ = params.pcp_sigma
+    dip2  = params.dipole2
+    quad2 = params.quadrupole2
+    ca_dd = DD_consts.corr_a;  cb_dd = DD_consts.corr_b;  cc_dd = DD_consts.corr_c
+    ca_qq = QQ_consts.corr_a;  cb_qq = QQ_consts.corr_b;  cc_qq = QQ_consts.corr_c
+    ca_dq = DQ_consts.corr_a;  cb_dq = DQ_consts.corr_b;  cc_dq = DQ_consts.corr_c
+
+    ψ      = 1.3862
+    idx_ρz = 6 + ND
+    factor = 3.0 / (4.0*ψ*ψ*ψ*_pi)
+    ∑ρ̄_p  = eps_v
+    @inbounds for i in 1:NC
+        ∑ρ̄_p += n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
+    end
+
+    has_dipole = false;  has_quad = false
+    @inbounds for i in 1:NC
+        if dip2[i]  != 0.0; has_dipole = true; end
+        if quad2[i] != 0.0; has_quad   = true; end
+    end
+
+    res_polar = 0.0
+
+    # ── DD contribution ───────────────────────────────────────────────────────
+    if has_dipole
+        _A₂_dd = 0.0
+        @inbounds for i in 1:NC
+            dip2_i = dip2[i]
+            if dip2_i == 0.0; continue; end
+            ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
+            xᵢ = ρ̄zi_i / ∑ρ̄_p
+            σii3 = pcp_σ[i,i]*pcp_σ[i,i]*pcp_σ[i,i]
+            _J2_ii = _J2_kernel(pcp_m[i], pcp_m[i], pcp_ϵ[i,i], ηd, T, ca_dd, cb_dd)
+            _A₂_dd += xᵢ*xᵢ * dip2_i*dip2_i / σii3 * _J2_ii
+            @inbounds for j in i+1:NC
+                dip2_j = dip2[j]
+                if dip2_j == 0.0; continue; end
+                ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
+                xⱼ = ρ̄zi_j / ∑ρ̄_p
+                σij3 = pcp_σ[i,j]*pcp_σ[i,j]*pcp_σ[i,j]
+                _J2_ij = _J2_kernel(pcp_m[i], pcp_m[j], pcp_ϵ[i,j], ηd, T, ca_dd, cb_dd)
+                _A₂_dd += 2.0 * xᵢ * xⱼ * dip2_i * dip2_j / σij3 * _J2_ij
+            end
+        end
+        _A₂_dd *= -_pi * ∑ρ̄_p / (T*T)
+
+        if abs(_A₂_dd) > eps_v
+            _A₃_dd = 0.0
+            @inbounds for i in 1:NC
+                dip2_i = dip2[i]
+                if dip2_i == 0.0; continue; end
+                ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
+                xᵢ = ρ̄zi_i / ∑ρ̄_p
+                a3_i = xᵢ * dip2_i / pcp_σ[i,i]
+                _J3_iii = _J3_kernel(pcp_m[i], pcp_m[i], pcp_m[i], ηd, cc_dd)
+                _A₃_dd += a3_i*a3_i*a3_i * _J3_iii
+                @inbounds for j in i+1:NC
+                    dip2_j = dip2[j]
+                    if dip2_j == 0.0; continue; end
+                    ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
+                    xⱼ = ρ̄zi_j / ∑ρ̄_p
+                    σij⁻¹  = 1.0 / pcp_σ[i,j]
+                    a3_iij = xᵢ * dip2_i * σij⁻¹
+                    a3_ijj = xⱼ * dip2_j * σij⁻¹
+                    a3_j   = xⱼ * dip2_j / pcp_σ[j,j]
+                    _J3_iij = _J3_kernel(pcp_m[i], pcp_m[i], pcp_m[j], ηd, cc_dd)
+                    _J3_ijj = _J3_kernel(pcp_m[i], pcp_m[j], pcp_m[j], ηd, cc_dd)
+                    _A₃_dd += 3.0 * a3_iij * a3_ijj * (a3_i*_J3_iij + a3_j*_J3_ijj)
+                    @inbounds for k in j+1:NC
+                        dip2_k = dip2[k]
+                        if dip2_k == 0.0; continue; end
+                        ρ̄zi_k = n[kk, idx_ρz, k] * factor / (params.HSd[k]*params.HSd[k]*params.HSd[k])
+                        xₖ = ρ̄zi_k / ∑ρ̄_p
+                        _J3_ijk = _J3_kernel(pcp_m[i], pcp_m[j], pcp_m[k], ηd, cc_dd)
+                        _A₃_dd += 6.0 * xᵢ*xⱼ*xₖ * dip2_i*dip2_j*dip2_k *
+                                    σij⁻¹ / (pcp_σ[i,k]*pcp_σ[j,k]) * _J3_ijk
+                    end
+                end
+            end
+            _A₃_dd *= -4.0*_pi*_pi/3.0 * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
+            denom_dd = _A₂_dd - _A₃_dd
+            res_polar += ∑ρ̄_p * _A₂_dd*_A₂_dd / (denom_dd + eps_v)
+        end
+    end
+
+    # ── QQ contribution ───────────────────────────────────────────────────────
+    if has_quad
+        _A₂_qq = 0.0
+        @inbounds for i in 1:NC
+            quad2_i = quad2[i]
+            if quad2_i == 0.0; continue; end
+            ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
+            xᵢ = ρ̄zi_i / ∑ρ̄_p
+            σii_sq = pcp_σ[i,i]*pcp_σ[i,i]
+            σii7   = σii_sq*σii_sq*σii_sq*pcp_σ[i,i]
+            _J2_ii = _J2_qq_kernel(pcp_m[i], pcp_m[i], pcp_ϵ[i,i], ηd, T, ca_qq, cb_qq)
+            _A₂_qq += xᵢ*xᵢ * quad2_i*quad2_i / σii7 * _J2_ii
+            @inbounds for j in i+1:NC
+                quad2_j = quad2[j]
+                if quad2_j == 0.0; continue; end
+                ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
+                xⱼ = ρ̄zi_j / ∑ρ̄_p
+                σij_sq = pcp_σ[i,j]*pcp_σ[i,j]
+                σij7   = σij_sq*σij_sq*σij_sq*pcp_σ[i,j]
+                _J2_ij = _J2_qq_kernel(pcp_m[i], pcp_m[j], pcp_ϵ[i,j], ηd, T, ca_qq, cb_qq)
+                _A₂_qq += 2.0 * xᵢ * xⱼ * quad2_i * quad2_j / σij7 * _J2_ij
+            end
+        end
+        _A₂_qq *= -(9.0/16.0) * _pi * ∑ρ̄_p / (T*T)
+
+        if abs(_A₂_qq) > eps_v
+            _A₃_qq = 0.0
+            @inbounds for i in 1:NC
+                quad2_i = quad2[i]
+                if quad2_i == 0.0; continue; end
+                ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
+                xᵢ = ρ̄zi_i / ∑ρ̄_p
+                σii3 = pcp_σ[i,i]*pcp_σ[i,i]*pcp_σ[i,i]
+                a3_i = xᵢ * quad2_i / σii3
+                _J3_iii = _J3_qq_kernel(pcp_m[i], pcp_m[i], pcp_m[i], ηd, cc_qq)
+                _A₃_qq += a3_i*a3_i*a3_i * _J3_iii
+                @inbounds for j in i+1:NC
+                    quad2_j = quad2[j]
+                    if quad2_j == 0.0; continue; end
+                    ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
+                    xⱼ = ρ̄zi_j / ∑ρ̄_p
+                    σjj3   = pcp_σ[j,j]*pcp_σ[j,j]*pcp_σ[j,j]
+                    σij3   = pcp_σ[i,j]*pcp_σ[i,j]*pcp_σ[i,j]
+                    a3_iij = xᵢ * quad2_i / σij3
+                    a3_ijj = xⱼ * quad2_j / σij3
+                    a3_j   = xⱼ * quad2_j / σjj3
+                    _J3_iij = _J3_qq_kernel(pcp_m[i], pcp_m[i], pcp_m[j], ηd, cc_qq)
+                    _J3_ijj = _J3_qq_kernel(pcp_m[i], pcp_m[j], pcp_m[j], ηd, cc_qq)
+                    _A₃_qq += 3.0 * a3_iij * a3_ijj * (a3_i*_J3_iij + a3_j*_J3_ijj)
+                    @inbounds for k in j+1:NC
+                        quad2_k = quad2[k]
+                        if quad2_k == 0.0; continue; end
+                        ρ̄zi_k = n[kk, idx_ρz, k] * factor / (params.HSd[k]*params.HSd[k]*params.HSd[k])
+                        xₖ = ρ̄zi_k / ∑ρ̄_p
+                        σik3 = pcp_σ[i,k]*pcp_σ[i,k]*pcp_σ[i,k]
+                        σjk3 = pcp_σ[j,k]*pcp_σ[j,k]*pcp_σ[j,k]
+                        _J3_ijk = _J3_qq_kernel(pcp_m[i], pcp_m[j], pcp_m[k], ηd, cc_qq)
+                        _A₃_qq += 6.0 * xᵢ*xⱼ*xₖ * quad2_i*quad2_j*quad2_k /
+                                    (σij3*σik3*σjk3) * _J3_ijk
+                    end
+                end
+            end
+            _A₃_qq *= (9.0*_pi*_pi/16.0) * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
+            denom_qq = _A₂_qq - _A₃_qq
+            res_polar += ∑ρ̄_p * _A₂_qq*_A₂_qq / (denom_qq + eps_v)
+        end
+    end
+
+    # ── DQ cross contribution ─────────────────────────────────────────────────
+    if has_dipole && has_quad
+        _A₂_dq = 0.0
+        @inbounds for i in 1:NC
+            dip2_i = dip2[i]
+            if dip2_i == 0.0; continue; end
+            ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
+            xᵢ = ρ̄zi_i / ∑ρ̄_p
+            @inbounds for j in 1:NC
+                quad2_j = quad2[j]
+                if quad2_j == 0.0; continue; end
+                ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
+                xⱼ = ρ̄zi_j / ∑ρ̄_p
+                σij_sq = pcp_σ[i,j]*pcp_σ[i,j]
+                σij5   = σij_sq*σij_sq*pcp_σ[i,j]
+                _J2_ij = _J2_dq_kernel(pcp_m[i], pcp_m[j], pcp_ϵ[i,j], ηd, T, ca_dq, cb_dq)
+                _A₂_dq += xᵢ * xⱼ * dip2_i * quad2_j / σij5 * _J2_ij
+            end
+        end
+        _A₂_dq *= -(9.0/4.0) * _pi * ∑ρ̄_p / (T*T)
+
+        if abs(_A₂_dq) > eps_v
+            _A₃_dq = 0.0
+            @inbounds for i in 1:NC
+                dip2_i = dip2[i]
+                if dip2_i == 0.0; continue; end
+                ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
+                xᵢ = ρ̄zi_i / ∑ρ̄_p
+                @inbounds for j in 1:NC
+                    # j ∈ dp_comps ∪ qp_comps: contributes if it has dipole or quadrupole
+                    if dip2[j] == 0.0 && quad2[j] == 0.0; continue; end
+                    ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
+                    xⱼ = ρ̄zi_j / ∑ρ̄_p
+                    contrib_j = pcp_σ[j,j] * dip2[j] + 1.19374 / pcp_σ[j,j] * quad2[j]
+                    @inbounds for k in 1:NC
+                        quad2_k = quad2[k]
+                        if quad2_k == 0.0; continue; end
+                        ρ̄zi_k = n[kk, idx_ρz, k] * factor / (params.HSd[k]*params.HSd[k]*params.HSd[k])
+                        xₖ = ρ̄zi_k / ∑ρ̄_p
+                        σij2 = pcp_σ[i,j]*pcp_σ[i,j]
+                        σik2 = pcp_σ[i,k]*pcp_σ[i,k]
+                        σjk2 = pcp_σ[j,k]*pcp_σ[j,k]
+                        _J3_ijk = _J3_dq_kernel(pcp_m[i], pcp_m[j], pcp_m[k], ηd, cc_dq)
+                        _A₃_dq += xᵢ * xⱼ * xₖ * pcp_σ[i,i] /
+                                    (pcp_σ[k,k] * σij2*σik2*σjk2) *
+                                    dip2_i * quad2_k * contrib_j * _J3_ijk
+                    end
+                end
+            end
+            _A₃_dq *= -∑ρ̄_p*∑ρ̄_p / (T*T*T)
+            denom_dq = _A₂_dq - _A₃_dq
+            res_polar += ∑ρ̄_p * _A₂_dq*_A₂_dq / (denom_dq + eps_v)
+        end
+    end
+
+    return res_polar
+end
+
+"""
+Pointwise residual free energy for QPCP-SAFT: HS + HC + disp + polar (DD + QQ + DQ).
+
+Field layout identical to PCP-SAFT / PC-SAFT:
+  1        : ρ (unweighted)
+  2        : ∫ρdz  with 0.5*d → n₀, n₁, n₂
+  3        : ∫ρz²dz with 0.5*d → n₃
+  4..3+ND  : ∫ρzdz with 0.5*d → vector nᵥ
+  4+ND     : ∫ρz²dz with d    → ρ̄hc
+  5+ND     : ∫ρdz  with d    → λ
+  6+ND     : ∫ρz²dz with d*ψ → ρ̄z  (disp + polar)
+"""
+@inline function f_res(out, n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: QPCPSAFTModel}
+    res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(2))
+    res_hc  = f_hc(n, params, T, kk, Val(NC), Val(ND), M)
+    res_disp, m̄, ηd = f_disp(n, params, T, kk, Val(NC), Val(ND), M)
+    res_polar = f_polar(n, params, T, kk, m̄, ηd, Val(NC), Val(ND), M)
+    out[kk] = res_hs + res_hc + res_disp + res_polar
+    return nothing
+end
+
+function preallocate_params(system::DFTSystem{<:QPCPSAFTModel})
+    backend = system.options.device
+    params = (;
+        HSd         = Adapt.adapt(backend, system.species.size),
+        m           = Adapt.adapt(backend, system.model.params.segment.values),
+        sigma       = Adapt.adapt(backend, system.model.params.sigma.values),
+        epsilon     = Adapt.adapt(backend, system.model.params.epsilon.values),
+        pcp_m       = Adapt.adapt(backend, pcp_segment(system.model)),
+        pcp_sigma   = Adapt.adapt(backend, pcp_sigma(system.model)),
+        pcp_epsilon = Adapt.adapt(backend, pcp_epsilon(system.model)),
+        dipole2     = Adapt.adapt(backend, pcp_dipole2(system.model)),
+        quadrupole2 = Adapt.adapt(backend, system.model.params.quadrupole2.values),
+    )
+    nc = length(system.model)
+    return params, nc
+end

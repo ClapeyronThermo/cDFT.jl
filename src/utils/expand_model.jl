@@ -66,7 +66,9 @@ function expand_groups(model)
                 for l in 1:ngroup_types_i
                     idx_group_j_1 = findall(_groups.==model.groups.groups[i][l])
                     idx_group_j_2 = findall(group_names.==model.groups.groups[i][l])
-                    _n_intergroups[i_groups[i][idx_group_i_1],i_groups[i][idx_group_j_1]] = bondmat[idx_group_i_2,idx_group_j_2]
+                    if !isempty(idx_group_i_2) && !isempty(idx_group_j_2)
+                        _n_intergroups[i_groups[i][idx_group_i_1],i_groups[i][idx_group_j_1]] = bondmat[idx_group_i_2,idx_group_j_2]
+                    end
                 end
             end
             push!(n_intergroups, _n_intergroups)
