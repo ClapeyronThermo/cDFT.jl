@@ -38,46 +38,12 @@ function F_res(system::AbstractcDFTSystem, ρ)
     return ∫(ϕ, dz)
 end
 
-# ── Legacy ForwardDiff path (retained for DGTSystem) ─────────────────────────
-# preallocate_model returns (n, δf, fft_buf, in_buf, out_buf, plan, iplan, f, cache_pool)
-"""
-    δFδρ_res!(system, ρ, δfδρ_res, n, δf, fft_buf, in_buf, out_buf, P, iP, f, cache_pool)
-
-ForwardDiff-based functional derivative evaluation (used by DGTSystem).
-"""
-# function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
-#                    n, δf, fft_buf, in_buf, out_buf, P, iP, f, cache_pool)
-#     model   = system.model
-#     backend = system.options.device
-#     ngrid   = system.structure.ngrid
-#     NF      = size(n, ndims(n)-1)
-#     NB      = size(n, ndims(n))
-
-#     evaluate_field!(system, ρ, fft_buf, in_buf, out_buf, P, iP)
-#     synchronize(backend)
-#     copyto!(n, Adapt.adapt(typeof(n), fft_buf))
-
-#     Threads.@threads for kk in CartesianIndices(ngrid)
-#         k     = Tuple(kk)
-#         cache = take!(cache_pool)
-#         ForwardDiff.gradient!(@view(δf[k...,:,:]), f, @view(n[k...,:,:]), cache)
-#         put!(cache_pool, cache)
-#     end
-
-#     copyto!(fft_buf, Adapt.adapt(typeof(fft_buf), δf))
-#     synchronize(backend)
-#     integrate_field!(system, fft_buf, δfδρ_res, in_buf, P, iP)
-# end
-
-# ── Unified Enzyme path (used by all DFT models: PCSAFT, PeTS, etc.) ─────────
-# preallocate_model returns (n, δf, fft_buf, in_buf, out_buf, plan, iplan,
-#                            params, f_val, δf_val, nc, nd)
 """
     δFδρ_res!(system, ρ, δfδρ_res, n, δf, fft_buf, in_buf, out_buf, P, iP,
               params, f_val, δf_val, nc, nd)
 
 Enzyme/KernelAbstractions-based functional derivative evaluation. Runs on CPU or GPU
-depending on `system.options.device`. No ForwardDiff involved.
+depending on `system.options.device`.
 """
 function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
                    n, δf, fft_buf, in_buf, out_buf, P, iP,

@@ -45,43 +45,27 @@ function preallocate(system, ρ)
     return δfδρ_res, cache_model, cache_external, cache_propagator
 end
 
-function preallocate_model(system, ρ)
+function preallocate_model(system::DGTSystem, ρ)
     backend = system.options.device
-    
+
     nf = length_fields(system)
     ngrid = system.structure.ngrid
     nd = length(ngrid)
-    nb = size(ρ,nd+1)
-    n = allocate(CPU(), Float64, ngrid...,nf,nb)
-    δf = allocate(CPU(), Float64, ngrid...,nf,nb)
+    nb = size(ρ, nd+1)
 
-    fft_buf = allocate(backend, Float64, ngrid...,nf,nb)
-
-    in_buf = allocate(backend, ComplexF64, ngrid...)
-    out_buf = similar(in_buf)              #
+    n       = allocate(CPU(), Float64, ngrid..., nf, nb)
+    δf      = allocate(CPU(), Float64, ngrid..., nf, nb)
+    fft_buf = allocate(backend, Float64, ngrid..., nf, nb)
+    in_buf  = allocate(backend, ComplexF64, ngrid...)
+    out_buf = similar(in_buf)
 
     tmp = similar(in_buf)
-    if backend isa CPU
-        plan = plan_fft!(tmp, 1:length(ngrid); num_threads=Threads.nthreads())
-    else
-        plan = plan_fft!(tmp, 1:length(ngrid))
-    end
-
+    plan  = backend isa CPU ?
+            plan_fft!(tmp, 1:nd; num_threads=Threads.nthreads()) :
+            plan_fft!(tmp, 1:nd)
     iplan = inv(plan)
 
-    f(x) = f_res(system,system.model,x)
-    idx_first = ntuple(Returns(1),nd)
-    n_first = @view(n[idx_first...,:,:])
-
-    chunksize = ForwardDiff.Chunk(system)
-
-    first_config = ForwardDiff.GradientConfig(f, n_first, chunksize)
-
-    cache_pool = Channel{typeof(first_config)}(Threads.nthreads())
-    for _ in 1:Threads.nthreads()
-        put!(cache_pool, ForwardDiff.GradientConfig(f, n_first, chunksize))
-    end
-    return n, δf, fft_buf, in_buf, out_buf, plan, iplan, f, cache_pool
+    return n, δf, fft_buf, in_buf, out_buf, plan, iplan
 end
 
 function preallocate_external_potential(system, ρ)

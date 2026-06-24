@@ -1,7 +1,7 @@
 module cDFT
 
 using LinearAlgebra
-using ForwardDiff, NLSolvers, FFTW, LinearAlgebra
+using NLSolvers, FFTW, LinearAlgebra
 import AbstractFFTs: Plan
 using Clapeyron
 using Clapeyron: d, N_A, k_B, R̄, e_c, ϵ_0

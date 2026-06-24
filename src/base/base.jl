@@ -176,7 +176,6 @@ dimension(::Type{Union{DFTSystem{<:Any,<:Any,T},DGTSystem{<:Any,<:Any,T}}}) wher
 dimension(x::AbstractcDFTSystem) = dimension(x.structure)
 
 length_fields(system::AbstractcDFTSystem) = length_fields(system.chunksize)
-length_fields(::ForwardDiff.Chunk{N}) where N = N
 length_fields(::Val{N}) where N = N
 
 function compute_field_len(fields,nd)
@@ -190,10 +189,6 @@ function compute_field_len(fields,nd)
     end
     return field_len
 end
-
-ForwardDiff.Chunk(system::T) where T <: AbstractcDFTSystem = FDChunk(system.chunksize)
-FDChunk(system::T) where T <: AbstractcDFTSystem = FDChunk(system.chunksize)
-FDChunk(::Val{N}) where N = ForwardDiff.Chunk{N}()
 
 export DFTSystem, DGTSystem
 
