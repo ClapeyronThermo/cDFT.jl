@@ -457,8 +457,8 @@ const SAFTVRMIE_PHI = (
 end
 
 """
-    f_disp_mie(n, meff, HSd, sigma, epsilon, lambda_r, lambda_a, psi_eff,
-               kk, T, ::Val{NC}, ::Val{ND}, ::Val{IDX_ρz}, A, phi)
+    f_disp(n, meff, HSd, sigma, epsilon, lambda_r, lambda_a, psi_eff,
+           kk, T, ::Val{NC}, ::Val{ND}, ::Val{IDX_ρz}, A, phi, ::Type{M})
 
 SAFT-VR Mie dispersion contribution at grid point `kk`.
 - `meff[i]`: effective segment count (m*S for SAFTγMie, m otherwise)
@@ -467,8 +467,8 @@ SAFT-VR Mie dispersion contribution at grid point `kk`.
   - 4+ND for COFFEE
 Used by SAFTVRMieModel, SAFTgammaMieModel, COFFEEModel.
 """
-@inline function f_disp_mie(n, meff, HSd, sigma, epsilon, lambda_r, lambda_a, psi_eff,
-                                   kk, T, ::Val{NC}, ::Val{ND}, ::Val{IDX_ρz}, A, phi) where {NC, ND, IDX_ρz}
+@inline function f_disp(n, meff, HSd, sigma, epsilon, lambda_r, lambda_a, psi_eff,
+                        kk, T, ::Val{NC}, ::Val{ND}, ::Val{IDX_ρz}, A, phi, ::Type{M}) where {NC, ND, IDX_ρz, M}
     _pi   = 3.141592653589793
     eps_v = 1e-15
 
@@ -660,9 +660,9 @@ Field layout (same as PCSAFTModel):
                        ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: SAFTVRMieModel}
     res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(2))
     res_chain = f_chain(n, params, T, kk, Val(NC), Val(ND), M)
-    res_disp  = f_disp_mie(n, params.m, params.HSd, params.sigma, params.epsilon,
-                            params.lambda_r, params.lambda_a, params.psi_eff,
-                            kk, T, Val(NC), Val(ND), Val(6+ND), params.A, params.phi)
+    res_disp  = f_disp(n, params.m, params.HSd, params.sigma, params.epsilon,
+                       params.lambda_r, params.lambda_a, params.psi_eff,
+                       kk, T, Val(NC), Val(ND), Val(6+ND), params.A, params.phi, M)
     out[kk] = res_hs + res_chain + res_disp
     return nothing
 end

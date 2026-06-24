@@ -227,7 +227,7 @@ end
 PC-SAFT hard-chain contribution at grid point `kk`.
 Field layout assumed: field 1 = ρ (unweighted), field 4+ND = ρ̄hc, field 5+ND = λ.
 """
-@inline function f_hc(n, params, T, kk, ::Val{NC}, ::Val{ND}) where {NC, ND}
+@inline function f_hc(n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: PCSAFTModel}
     eps_v = 1e-15
     m   = params.m
     HSd = params.HSd
@@ -254,7 +254,7 @@ end
 PC-SAFT dispersion contribution at grid point `kk`. Field 6+ND is the dispersion density.
 Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the polar term.
 """
-@inline function f_disp(n, params, T, kk, ::Val{NC}, ::Val{ND}) where {NC, ND}
+@inline function f_disp(n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: PCSAFTModel}
     _pi    = 3.141592653589793
     eps_v  = 1e-15
     m      = params.m
@@ -310,8 +310,8 @@ All model parameters are unpacked from `params` (a NamedTuple of device-adapted 
 """
 @inline function f_res(out, n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: PCSAFTModel}
     res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(2))
-    res_hc  = f_hc(n, params, T, kk, Val(NC), Val(ND))
-    res_disp, _, _ = f_disp(n, params, T, kk, Val(NC), Val(ND))
+    res_hc  = f_hc(n, params, T, kk, Val(NC), Val(ND), M)
+    res_disp, _, _ = f_disp(n, params, T, kk, Val(NC), Val(ND), M)
     out[kk] = res_hs + res_hc + res_disp
     return nothing
 end

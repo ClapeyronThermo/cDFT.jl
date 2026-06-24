@@ -186,7 +186,7 @@ end
 PCP-SAFT dipole–dipole polar term (Padé: A₂²/(A₂−A₃)) at grid point `kk`.
 Takes `m̄` and `ηd` from f_disp output.
 """
-@inline function f_polar(n, params, T, kk, m̄, ηd, ::Val{NC}, ::Val{ND}) where {NC, ND}
+@inline function f_polar(n, params, T, kk, m̄, ηd, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: PCPSAFTModel}
     _pi   = 3.141592653589793
     eps_v = 1e-15
     pcp_m   = params.pcp_m
@@ -290,9 +290,9 @@ Field layout (same as PCSAFTModel):
 """
 @inline function f_res(out, n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: PCPSAFTModel}
     res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(2))
-    res_hc  = f_hc(n, params, T, kk, Val(NC), Val(ND))
-    res_disp, m̄, ηd = f_disp(n, params, T, kk, Val(NC), Val(ND))
-    res_polar = f_polar(n, params, T, kk, m̄, ηd, Val(NC), Val(ND))
+    res_hc  = f_hc(n, params, T, kk, Val(NC), Val(ND), M)
+    res_disp, m̄, ηd = f_disp(n, params, T, kk, Val(NC), Val(ND), M)
+    res_polar = f_polar(n, params, T, kk, m̄, ηd, Val(NC), Val(ND), M)
     out[kk] = res_hs + res_hc + res_disp + res_polar
     return nothing
 end

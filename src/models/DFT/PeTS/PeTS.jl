@@ -57,7 +57,7 @@ end
 """
 PeTS Barker–Henderson perturbation contribution at grid point `kk`.
 """
-@inline function f_pert(n, params, T, kk, ::Val{NC}, ::Val{ND}) where {NC, ND}
+@inline function f_pert(n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: PeTSModel}
     _pi   = 3.141592653589793
     eps_v = 1e-15
 
@@ -96,7 +96,7 @@ Field layout (for ND spatial dimensions):
 """
 @inline function f_res(out, n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: PeTSModel}
     res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(1))
-    res_pert = f_pert(n, params, T, kk, Val(NC), Val(ND))
+    res_pert = f_pert(n, params, T, kk, Val(NC), Val(ND), M)
     out[kk] = res_hs + res_pert
     return nothing
 end

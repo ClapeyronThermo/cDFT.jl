@@ -261,7 +261,7 @@ Field layout (5 fields):
   3+ND     : ∫ρz²dz with ψ*d (ψ=1.3862) → far-field polar density
   4+ND     : ∫ρz²dz with ψ1*d → dispersion density (per-component ψ1)
 """
-@inline function f_ff(n, params, T, kk, ::Val{NC}, ::Val{ND}) where {NC, ND}
+@inline function f_ff(n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: COFFEEModel}
     _pi   = 3.141592653589793
     eps_v = 1e-15
     HSd   = params.HSd
@@ -345,7 +345,7 @@ Field layout (5 fields):
     return res_polar
 end
 
-@inline function f_nf(n, params, T, kk, n₀, n₂, n₃₃, nv2_1, nv2_2, nv2_3, ::Val{NC}, ::Val{ND}) where {NC, ND}
+@inline function f_nf(n, params, T, kk, n₀, n₂, n₃₃, nv2_1, nv2_2, nv2_3, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: COFFEEModel}
     _pi   = 3.141592653589793
     eps_v = 1e-15
     HSd       = params.HSd
@@ -389,11 +389,11 @@ end
                        ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: COFFEEModel}
     res_hs, n₀, n₂, n₃₃, nv2_1, nv2_2, nv2_3 =
         f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(1))
-    res_disp = f_disp_mie(n, params.m, params.HSd, params.sigma, params.epsilon,
-                           params.lambda_r, params.lambda_a, params.psi_eff,
-                           kk, T, Val(NC), Val(ND), Val(4+ND), params.A, params.phi)
-    res_ff = f_ff(n, params, T, kk, Val(NC), Val(ND))
-    res_nf = f_nf(n, params, T, kk, n₀, n₂, n₃₃, nv2_1, nv2_2, nv2_3, Val(NC), Val(ND))
+    res_disp = f_disp(n, params.m, params.HSd, params.sigma, params.epsilon,
+                      params.lambda_r, params.lambda_a, params.psi_eff,
+                      kk, T, Val(NC), Val(ND), Val(4+ND), params.A, params.phi, M)
+    res_ff = f_ff(n, params, T, kk, Val(NC), Val(ND), M)
+    res_nf = f_nf(n, params, T, kk, n₀, n₂, n₃₃, nv2_1, nv2_2, nv2_3, Val(NC), Val(ND), M)
     out[kk] = res_hs + res_disp + res_ff + res_nf
     return nothing
 end
