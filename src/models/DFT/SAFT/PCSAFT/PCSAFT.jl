@@ -244,18 +244,61 @@ All model parameters are unpacked from `params` (a NamedTuple of device-adapted 
     res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(2))
     res_hc  = f_hc(n, params, T, kk, Val(NC), Val(ND), M)
     res_disp, _, _ = f_disp(n, params, T, kk, Val(NC), Val(ND), M)
-    out[kk] = res_hs + res_hc + res_disp
+    res_assoc = _assoc_or_zero(n, params, T, kk, Val(NC), Val(ND), M)
+    out[kk] = res_hs + res_hc + res_disp + res_assoc
     return nothing
 end
 
 function preallocate_params(system::DFTSystem{<:PCSAFTModel})
     backend = system.options.device
-    params = (;
+    model   = system.model
+
+    base = (;
         HSd     = Adapt.adapt(backend, system.species.size),
-        m       = Adapt.adapt(backend, system.model.params.segment.values),
-        sigma   = Adapt.adapt(backend, system.model.params.sigma.values),
-        epsilon = Adapt.adapt(backend, system.model.params.epsilon.values),
+        m       = Adapt.adapt(backend, model.params.segment.values),
+        sigma   = Adapt.adapt(backend, model.params.sigma.values),
+        epsilon = Adapt.adapt(backend, model.params.epsilon.values),
     )
-    nc = length(system.model)
+
+    nn = Clapeyron.assoc_pair_length(model)
+    if nn > 0
+        (assoc_icomp_v, assoc_jcomp_v, assoc_isite_v, assoc_jsite_v,
+         assoc_eps_v, assoc_kap_v, assoc_sig3_v, assoc_dij_v,
+         n_sites_flat_v, n_sites_cumsum_v, total_sites
+        ) = pack_assoc_params(model, system.species.size)
+
+        # Integer index arrays stored as NTuples so Enzyme treats them as
+        # truly-immutable Const data (avoids EnzymeRuntimeActivityError from
+        # Const Vector aliasing). Padded to fixed max sizes (20 pairs, 20 sites,
+        # 11 cumsum entries for ≤10 components).
+        nc_model = length(model)
+        assoc_icomp_t    = ntuple(p -> p <= nn           ? assoc_icomp_v[p]    : 0, Val(20))
+        assoc_jcomp_t    = ntuple(p -> p <= nn           ? assoc_jcomp_v[p]    : 0, Val(20))
+        assoc_isite_t    = ntuple(p -> p <= nn           ? assoc_isite_v[p]    : 0, Val(20))
+        assoc_jsite_t    = ntuple(p -> p <= nn           ? assoc_jsite_v[p]    : 0, Val(20))
+        n_sites_flat_t   = ntuple(j -> j <= total_sites  ? n_sites_flat_v[j]   : 0, Val(20))
+        n_sites_cumsum_t = ntuple(i -> i <= nc_model + 1 ? n_sites_cumsum_v[i] : 0, Val(11))
+
+        assoc = (;
+            has_assoc      = true,
+            assoc_n_pairs  = Val(nn),
+            assoc_icomp    = assoc_icomp_t,
+            assoc_jcomp    = assoc_jcomp_t,
+            assoc_isite    = assoc_isite_t,
+            assoc_jsite    = assoc_jsite_t,
+            assoc_eps      = Adapt.adapt(backend, assoc_eps_v),
+            assoc_kap      = Adapt.adapt(backend, assoc_kap_v),
+            assoc_sig3     = Adapt.adapt(backend, assoc_sig3_v),
+            assoc_dij      = Adapt.adapt(backend, assoc_dij_v),
+            n_sites_flat   = n_sites_flat_t,
+            n_sites_cumsum = n_sites_cumsum_t,
+            total_sites,
+        )
+        params = merge(base, assoc)
+    else
+        params = merge(base, (; has_assoc = false))
+    end
+
+    nc = length(model)
     return params, nc
 end

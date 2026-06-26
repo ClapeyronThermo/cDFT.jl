@@ -190,7 +190,7 @@ end
     k1 = evalpoly(ζ_X,(0.0,-12.0,6.0,0.0,1.0)) / (2.0*ζX3)
     k2 = -3.0*ζ_X*ζ_X / (8.0*(1.0-ζ_X)^2)
     k3 = evalpoly(ζ_X,(0.0,3.0,3.0,0.0,-1.0)) / (6.0*ζX3)
-    return exp(evalpoly(x_0,(k0,k1,k2,k3)))
+    return exp(k0 + x_0*(k1 + x_0*(k2 + x_0*k3)))
 end
 
 # ϕ: 7 tuples of 6 Float64 — GPU-safe constant (same as SAFTVRMieconsts.ϕ)
@@ -236,8 +236,16 @@ SAFT-VR Mie dispersion contribution at grid point `kk`.
   - 4+ND for COFFEE
 Used by SAFTVRMieModel, SAFTgammaMieModel, COFFEEModel.
 """
-@inline function f_disp(n, meff, HSd, sigma, epsilon, lambda_r, lambda_a, psi_eff,
-                        kk, T, ::Val{NC}, ::Val{ND}, ::Val{IDX_ρz}, A, phi, ::Type{M}) where {NC, ND, IDX_ρz, M}
+@inline function f_disp(n, params, kk, T, ::Val{NC}, ::Val{ND}, ::Val{IDX_ρz}, ::Type{M}) where {NC, ND, IDX_ρz, M}
+    meff     = params.meff
+    HSd      = params.HSd
+    sigma    = params.sigma
+    epsilon  = params.epsilon
+    lambda_r = params.lambda_r_t
+    lambda_a = params.lambda_a_t
+    psi_eff  = params.psi_eff
+    A        = params.A
+    phi      = params.phi
     _pi   = 3.141592653589793
     eps_v = 1e-15
 
@@ -271,7 +279,7 @@ Used by SAFTVRMieModel, SAFTgammaMieModel, COFFEEModel.
         di   = HSd[i]
         ρ̄zi  = n[kk, IDX_ρz, i] * 3.0/(4.0*_pi*psi_eff[i]^3)
         x_Si = ρ̄zi * meff[i] / ρS_d
-        λa=lambda_a[i,i]; λr=lambda_r[i,i]; σii=sigma[i,i]; ϵii=epsilon[i,i]
+        λa=lambda_a[i][i]; λr=lambda_r[i][i]; σii=sigma[i,i]; ϵii=epsilon[i,i]
         _C=_Cλ_kernel(λa,λr);  x0=σii/di;  dij3=di^3
         aS1_a=_aS1_kernel(λa,     ζ_Xd,A); B_a=_B_kernel(λa,    x0,ζ_Xd)
         aS1_r=_aS1_kernel(λr,     ζ_Xd,A); B_r=_B_kernel(λr,    x0,ζ_Xd)
@@ -292,7 +300,7 @@ Used by SAFTVRMieModel, SAFTgammaMieModel, COFFEEModel.
             dj   = HSd[j]
             ρ̄zj  = n[kk, IDX_ρz, j] * 3.0/(4.0*_pi*psi_eff[j]^3)
             x_Sj = ρ̄zj * meff[j] / ρS_d
-            λa2=lambda_a[i,j]; λr2=lambda_r[i,j]; σij=sigma[i,j]; ϵij=epsilon[i,j]
+            λa2=lambda_a[i][j]; λr2=lambda_r[i][j]; σij=sigma[i,j]; ϵij=epsilon[i,j]
             _C2=_Cλ_kernel(λa2,λr2); dij2=0.5*(di+dj); dij3_2=dij2^3; x0ij=σij/dij2
             aS1_a2=_aS1_kernel(λa2,      ζ_Xd,A); B_a2=_B_kernel(λa2,      x0ij,ζ_Xd)
             aS1_r2=_aS1_kernel(λr2,      ζ_Xd,A); B_r2=_B_kernel(λr2,      x0ij,ζ_Xd)
@@ -327,8 +335,8 @@ SAFT-VR Mie chain contribution (gMie contact value) at grid point `kk`.
     m_seg   = params.m
     σ       = params.sigma
     ϵ       = params.epsilon
-    λr_mat  = params.lambda_r
-    λa_mat  = params.lambda_a
+    λr_mat  = params.lambda_r_t
+    λa_mat  = params.lambda_a_t
     A       = params.A
     ϕ       = params.phi
 
@@ -366,7 +374,7 @@ SAFT-VR Mie chain contribution (gMie contact value) at grid point `kk`.
         ρ̄hci = n[kk,idx_ζ,i] * 3.0/(4.0*_pi*di^3)
         x_Si = ρ̄hci * m_seg[i] / ρS_c
 
-        λa = λa_mat[i,i];  λr = λr_mat[i,i]
+        λa = λa_mat[i][i];  λr = λr_mat[i][i]
         _C = _Cλ_kernel(λa, λr)
         x0 = σ[i,i] / di
         ϵii = ϵ[i,i]
@@ -413,8 +421,56 @@ SAFT-VR Mie chain contribution (gMie contact value) at grid point `kk`.
     return -res_chain
 end
 
+# SAFTVRMie-specific association strength: Δ = expm1(ε_assoc/T) * κ * I(Tr, ρr)
+# where I is an 11×11 polynomial in (Tr=T/ε_Mie, ρr=ρS*σ³_x).
+# Overrides the default g_hs _assoc_delta via more specific M <: SAFTVRMieModel dispatch.
+@inline function _assoc_delta(p, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v,
+                               ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: SAFTVRMieModel}
+    p > n_pairs && return 0.0
+    _pi = 3.141592653589793
+
+    # Compute ρS from individual n₃ fields (field index 3 = F2+1)
+    ρS = eps_v
+    @inbounds for k in 1:NC
+        ρS += n[kk, 3, k] * 6.0 / (_pi * params.HSd[k]^3) * params.m[k]
+    end
+
+    # σ³_x double loop: x_Sk = ρ̄k * m[k] / ρS
+    σ3_x = 0.0
+    @inbounds for k in 1:NC
+        ρ̄k  = n[kk, 3, k] * 6.0 / (_pi * params.HSd[k]^3)
+        xSk = ρ̄k * params.m[k] / ρS
+        σ3_x += xSk * xSk * params.sigma[k,k]^3
+        @inbounds for l in 1:(k-1)
+            ρ̄l  = n[kk, 3, l] * 6.0 / (_pi * params.HSd[l]^3)
+            xSl = ρ̄l * params.m[l] / ρS
+            σ3_x += 2.0 * xSk * xSl * params.sigma[k,l]^3
+        end
+    end
+    ρr = ρS * σ3_x
+
+    ic = _nti(params.assoc_icomp, p)
+    jc = _nti(params.assoc_jcomp, p)
+    Tr = T / (params.epsilon[ic, jc] + eps_v)
+
+    # I(Tr, ρr): c stored as NTuple{11, NTuple{11, Float64}} (row = n-index, col = m-index)
+    I_val = 0.0
+    ρrn   = 1.0
+    for ni in 0:10
+        row = _nti(params.VRMie_c, ni + 1)
+        Trm = 1.0
+        for mi in 0:10
+            I_val += _nti(row, mi + 1) * Trm * ρrn
+            Trm *= Tr
+        end
+        ρrn *= ρr
+    end
+
+    return expm1(params.assoc_eps[p] / T) * params.assoc_kap[p] * I_val
+end
+
 """
-Pointwise residual free energy for SAFT-VR Mie: FMT hard-sphere + chain + dispersion.
+Pointwise residual free energy for SAFT-VR Mie: FMT hard-sphere + chain + dispersion + association.
 
 Field layout (same as PCSAFTModel):
   1        : ρ (unweighted)
@@ -429,26 +485,72 @@ Field layout (same as PCSAFTModel):
                        ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: SAFTVRMieModel}
     res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(2))
     res_chain = f_chain(n, params, T, kk, Val(NC), Val(ND), M)
-    res_disp  = f_disp(n, params.m, params.HSd, params.sigma, params.epsilon,
-                       params.lambda_r, params.lambda_a, params.psi_eff,
-                       kk, T, Val(NC), Val(ND), Val(6+ND), params.A, params.phi, M)
-    out[kk] = res_hs + res_chain + res_disp
+    res_disp  = f_disp(n, params, kk, T, Val(NC), Val(ND), Val(6+ND), M)
+    res_assoc = _assoc_or_zero(n, params, T, kk, Val(NC), Val(ND), M)
+    out[kk] = res_hs + res_chain + res_disp + res_assoc
     return nothing
 end
 
 function preallocate_params(system::DFTSystem{<:SAFTVRMieModel})
     backend = system.options.device
-    params = (;
-        HSd      = Adapt.adapt(backend, system.species.size),
-        m        = Adapt.adapt(backend, system.model.params.segment.values),
-        sigma    = Adapt.adapt(backend, system.model.params.sigma.values),
-        epsilon  = Adapt.adapt(backend, system.model.params.epsilon.values),
-        lambda_r = Adapt.adapt(backend, system.model.params.lambda_r.values),
-        lambda_a = Adapt.adapt(backend, system.model.params.lambda_a.values),
-        psi_eff  = Adapt.adapt(backend, system.fields[end].width),
-        A        = SAFTVRMIE_A,
-        phi      = SAFTVRMIE_PHI,
+    model   = system.model
+    nc = length(model)
+    lr = model.params.lambda_r.values
+    la = model.params.lambda_a.values
+    lambda_r_t = ntuple(i -> ntuple(j -> lr[i,j], nc), nc)
+    lambda_a_t = ntuple(i -> ntuple(j -> la[i,j], nc), nc)
+    base = (;
+        HSd        = Adapt.adapt(backend, system.species.size),
+        m          = Adapt.adapt(backend, model.params.segment.values),
+        meff       = Adapt.adapt(backend, model.params.segment.values),
+        sigma      = Adapt.adapt(backend, model.params.sigma.values),
+        epsilon    = Adapt.adapt(backend, model.params.epsilon.values),
+        lambda_r_t = lambda_r_t,
+        lambda_a_t = lambda_a_t,
+        psi_eff    = Adapt.adapt(backend, system.fields[end].width),
+        A          = SAFTVRMIE_A,
+        phi        = SAFTVRMIE_PHI,
     )
-    nc = length(system.model)
-    return params, nc
+
+    nn = Clapeyron.assoc_pair_length(model)
+    if nn > 0
+        (assoc_icomp_v, assoc_jcomp_v, assoc_isite_v, assoc_jsite_v,
+         assoc_eps_v, assoc_kap_v, assoc_sig3_v, assoc_dij_v,
+         n_sites_flat_v, n_sites_cumsum_v, total_sites
+        ) = pack_assoc_params(model, system.species.size)
+
+        nc_model = length(model)
+        assoc_icomp_t    = ntuple(p -> p <= nn           ? assoc_icomp_v[p]    : 0, Val(20))
+        assoc_jcomp_t    = ntuple(p -> p <= nn           ? assoc_jcomp_v[p]    : 0, Val(20))
+        assoc_isite_t    = ntuple(p -> p <= nn           ? assoc_isite_v[p]    : 0, Val(20))
+        assoc_jsite_t    = ntuple(p -> p <= nn           ? assoc_jsite_v[p]    : 0, Val(20))
+        n_sites_flat_t   = ntuple(j -> j <= total_sites  ? n_sites_flat_v[j]   : 0, Val(20))
+        n_sites_cumsum_t = ntuple(i -> i <= nc_model + 1 ? n_sites_cumsum_v[i] : 0, Val(11))
+
+        # Pack I(Tr,ρr) polynomial as NTuple{11,NTuple{11,Float64}}: row=n-index, col=m-index
+        c_mat   = SAFTVRMieconsts.c
+        VRMie_c = ntuple(ni -> ntuple(mi -> c_mat[ni, mi], 11), 11)
+
+        assoc = (;
+            has_assoc      = true,
+            assoc_n_pairs  = Val(nn),
+            assoc_icomp    = assoc_icomp_t,
+            assoc_jcomp    = assoc_jcomp_t,
+            assoc_isite    = assoc_isite_t,
+            assoc_jsite    = assoc_jsite_t,
+            assoc_eps      = Adapt.adapt(backend, assoc_eps_v),
+            assoc_kap      = Adapt.adapt(backend, assoc_kap_v),
+            assoc_sig3     = Adapt.adapt(backend, assoc_sig3_v),
+            assoc_dij      = Adapt.adapt(backend, assoc_dij_v),
+            n_sites_flat   = n_sites_flat_t,
+            n_sites_cumsum = n_sites_cumsum_t,
+            total_sites,
+            VRMie_c,
+        )
+        params = merge(base, assoc)
+    else
+        params = merge(base, (; has_assoc = false))
+    end
+
+    return params, length(model)
 end

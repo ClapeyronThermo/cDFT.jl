@@ -322,9 +322,7 @@ end
                        ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: COFFEEModel}
     res_hs, n₀, n₂, n₃₃, nv2_1, nv2_2, nv2_3 =
         f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(1))
-    res_disp = f_disp(n, params.m, params.HSd, params.sigma, params.epsilon,
-                      params.lambda_r, params.lambda_a, params.psi_eff,
-                      kk, T, Val(NC), Val(ND), Val(4+ND), params.A, params.phi, M)
+    res_disp = f_disp(n, params, kk, T, Val(NC), Val(ND), Val(4+ND), M)
     res_ff = f_ff(n, params, T, kk, Val(NC), Val(ND), M)
     res_nf = f_nf(n, params, T, kk, n₀, n₂, n₃₃, nv2_1, nv2_2, nv2_3, Val(NC), Val(ND), M)
     out[kk] = res_hs + res_disp + res_ff + res_nf
@@ -340,13 +338,19 @@ function preallocate_params(system::DFTSystem{<:COFFEEModel})
     nf_d_val   = model.params.shift[1] / σ_diag[1]
     nf_sig3    = (σ_diag[1] / system.species.size[1])^3
 
+    nc = length(model)
+    lr = model.params.lambda_r.values
+    la = model.params.lambda_a.values
+    lambda_r_t = ntuple(i -> ntuple(j -> lr[i,j], nc), nc)
+    lambda_a_t = ntuple(i -> ntuple(j -> la[i,j], nc), nc)
     params = (;
         HSd         = Adapt.adapt(backend, system.species.size),
         m           = Adapt.adapt(backend, model.params.segment.values),
+        meff        = Adapt.adapt(backend, model.params.segment.values),
         sigma       = Adapt.adapt(backend, model.params.sigma.values),
         epsilon     = Adapt.adapt(backend, model.params.epsilon.values),
-        lambda_r    = Adapt.adapt(backend, model.params.lambda_r.values),
-        lambda_a    = Adapt.adapt(backend, model.params.lambda_a.values),
+        lambda_r_t  = lambda_r_t,
+        lambda_a_t  = lambda_a_t,
         psi_eff     = Adapt.adapt(backend, system.fields[end].width),
         A           = SAFTVRMIE_A,
         phi         = SAFTVRMIE_PHI,

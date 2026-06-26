@@ -158,7 +158,7 @@ Runs identically on CPU and GPU; the backend is selected at call time.
 ) where {NF, NB, NC, ND, M}
     kk = @index(Global, Cartesian)
     Enzyme.autodiff_deferred(
-        Reverse, Const(f_res), Const,
+        Enzyme.set_runtime_activity(Reverse), Const(f_res), Const,
         Duplicated(f_val, δf_val),
         Duplicated(n, δf),
         Const(params), Const(Float64(T)), Const(kk),

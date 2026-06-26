@@ -190,6 +190,43 @@ end
 
 # ── Enzyme / KernelAbstractions kernel support ──────────────────────────────
 
+# Model-specific Wertheim Δ for SAFTgammaMie: VR Mie polynomial I(Tr, ρr).
+# Uses params.meff (= m.*S) for ρS and params.assoc_ispec/jspec + params.epsilon_species
+# (nc_spec × nc_spec VR Mie ε at species level) for the reduced temperature Tr.
+@inline function _assoc_delta(p, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v,
+                               ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: SAFTgammaMieModel}
+    p > n_pairs && return 0.0
+    _pi = 3.141592653589793
+    ρS = eps_v
+    @inbounds for k in 1:NC
+        ρS += n[kk, 3, k] * 6.0 / (_pi * params.HSd[k]^3) * params.meff[k]
+    end
+    σ3_x = 0.0
+    @inbounds for k in 1:NC
+        ρ̄k  = n[kk, 3, k] * 6.0 / (_pi * params.HSd[k]^3)
+        xSk = ρ̄k * params.meff[k] / ρS
+        σ3_x += xSk * xSk * params.sigma[k,k]^3
+        @inbounds for l in 1:(k-1)
+            ρ̄l  = n[kk, 3, l] * 6.0 / (_pi * params.HSd[l]^3)
+            xSl = ρ̄l * params.meff[l] / ρS
+            σ3_x += 2.0 * xSk * xSl * params.sigma[k,l]^3
+        end
+    end
+    ρr = ρS * σ3_x
+    is = _nti(params.assoc_ispec, p)
+    js = _nti(params.assoc_jspec, p)
+    Tr = T / (params.epsilon_species[is, js] + eps_v)
+    I_val = 0.0; ρrn = 1.0
+    for ni in 0:10
+        row = _nti(params.VRMie_c, ni + 1); Trm = 1.0
+        for mi in 0:10
+            I_val += _nti(row, mi + 1) * Trm * ρrn; Trm *= Tr
+        end
+        ρrn *= ρr
+    end
+    return expm1(params.assoc_eps[p] / T) * params.assoc_kap[p] * I_val
+end
+
 """
 Pointwise residual free energy for SAFTγMie: FMT hard-sphere (with shapefactor) +
 chain (groups aggregated to species level, gMie from vrmodel params) +
@@ -222,22 +259,22 @@ NC here is the total number of groups (sum of nbeads per component).
     m_s      = params.m_species
     σ_s      = params.sigma_species
     ϵ_s      = params.epsilon_species
-    λr_s     = params.lambda_r_species
-    λa_s     = params.lambda_a_species
+    λr_s     = params.lambda_r_species_t
+    λa_s     = params.lambda_a_species_t
     nc_s     = length(nbeads_c)
 
-    ρS_c = eps_v
-    g_off = 1
+    ρS_c  = eps_v
+    sg_idx = params.species_group_idx
     @inbounds for s in 1:nc_s
         nb_s = nbeads_c[s]
         ρ̄hc_s = 0.0
-        @inbounds for kg in g_off:(g_off + nb_s - 1)
+        @inbounds for j in 1:nb_s
+            kg = sg_idx[s][j]
             dg = HSd[kg]
             ρ̄hc_s += n[kk, idx_ζ_c, kg] * 3.0/(4.0*_pi*dg^3)
         end
         ρ̄hc_s /= Float64(nb_s)
         ρS_c += ρ̄hc_s * m_s[s]
-        g_off += nb_s
     end
     kρS_c = ρS_c * _pi/6.0/8.0
 
@@ -271,17 +308,17 @@ NC here is the total number of groups (sum of nbeads per component).
     _KHSc, _∂KHSc = _KHS_fdf_kernel(ρS_c, ζ_Xc)
 
     res_chain = 0.0
-    g_off = 1
     @inbounds for s in 1:nc_s
         nb_s = nbeads_c[s]
         ρhc_s = 0.0
-        @inbounds for kg in g_off:(g_off + nb_s - 1)
+        @inbounds for j in 1:nb_s
+            kg = sg_idx[s][j]
             ρhc_s += n[kk, 1, kg]
         end
         ρhc_s /= Float64(nb_s)
 
         di_s = HSd_s[s]
-        λa_c = λa_s[s,s];  λr_c = λr_s[s,s]
+        λa_c = λa_s[s][s];  λr_c = λr_s[s][s]
         _Cc  = _Cλ_kernel(λa_c, λr_c)
         x0c  = σ_s[s,s] / di_s
         ϵiic = ϵ_s[s,s]
@@ -322,8 +359,6 @@ NC here is the total number of groups (sum of nbeads per component).
 
         ms = m_s[s]
         res_chain += ρhc_s * Base.log(abs(gMiec) + eps_v) * (ms - 1.0)
-
-        g_off += nb_s
     end
     return -res_chain
 end
@@ -331,44 +366,106 @@ end
 @inline function f_res(out, n, params, T, kk,
                        ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: SAFTgammaMieModel}
     res_hs, = f_hs(n, params.meff, params.HSd, kk, Val(NC), Val(ND), Val(2))
-    res_disp = f_disp(n, params.meff, params.HSd, params.sigma, params.epsilon,
-                      params.lambda_r, params.lambda_a, params.psi_eff,
-                      kk, T, Val(NC), Val(ND), Val(6+ND), params.A, params.phi, M)
+    res_disp  = f_disp(n, params, kk, T, Val(NC), Val(ND), Val(6+ND), M)
     res_chain = f_chain(n, params, T, kk, Val(NC), Val(ND), M)
-    out[kk] = res_hs + res_chain + res_disp
+    res_assoc = _assoc_or_zero(n, params, T, kk, Val(NC), Val(ND), M)
+    out[kk] = res_hs + res_chain + res_disp + res_assoc
     return nothing
 end
 
 function preallocate_params(system::DFTSystem{<:SAFTgammaMieModel})
     backend = system.options.device
+    model   = system.model
     T_val  = system.structure.conditions[2]
     x_val  = system.structure.ρbulk ./ sum(system.structure.ρbulk)
-    HSd_sp = d_gc_av(system.model, 1e-3, T_val, x_val, system.species.size)
+    HSd_sp = d_gc_av(model, 1e-3, T_val, x_val, system.species.size)
 
-    m_vals = system.model.params.segment.values
-    S_vals = system.model.params.shapefactor.values
+    m_vals = model.params.segment.values
+    S_vals = model.params.shapefactor.values
     meff   = m_vals .* S_vals
 
-    params = (;
-        HSd               = Adapt.adapt(backend, system.species.size),
-        m                 = Adapt.adapt(backend, m_vals),
-        S                 = Adapt.adapt(backend, S_vals),
-        meff              = Adapt.adapt(backend, meff),
-        sigma             = Adapt.adapt(backend, system.model.params.sigma.values),
-        epsilon           = Adapt.adapt(backend, system.model.params.epsilon.values),
-        lambda_r          = Adapt.adapt(backend, system.model.params.lambda_r.values),
-        lambda_a          = Adapt.adapt(backend, system.model.params.lambda_a.values),
-        psi_eff           = Adapt.adapt(backend, system.fields[end].width),
-        A                 = SAFTVRMIE_A,
-        phi               = SAFTVRMIE_PHI,
-        nbeads_comp       = Adapt.adapt(backend, system.species.nbeads),
-        HSd_species       = Adapt.adapt(backend, HSd_sp),
-        m_species         = Adapt.adapt(backend, system.model.vrmodel.params.segment.values),
-        sigma_species     = Adapt.adapt(backend, system.model.vrmodel.params.sigma.values),
-        epsilon_species   = Adapt.adapt(backend, system.model.vrmodel.params.epsilon.values),
-        lambda_r_species  = Adapt.adapt(backend, system.model.vrmodel.params.lambda_r.values),
-        lambda_a_species  = Adapt.adapt(backend, system.model.vrmodel.params.lambda_a.values),
+    nc_g = sum(system.species.nbeads)
+    lr_g = model.params.lambda_r.values
+    la_g = model.params.lambda_a.values
+    lambda_r_t = ntuple(i -> ntuple(j -> lr_g[i,j], nc_g), nc_g)
+    lambda_a_t = ntuple(i -> ntuple(j -> la_g[i,j], nc_g), nc_g)
+    ncs = size(model.vrmodel.params.lambda_r.values, 1)
+    lr_s = model.vrmodel.params.lambda_r.values
+    la_s = model.vrmodel.params.lambda_a.values
+    lambda_r_species_t = ntuple(i -> ntuple(j -> lr_s[i,j], ncs), ncs)
+    lambda_a_species_t = ntuple(i -> ntuple(j -> la_s[i,j], ncs), ncs)
+    nc_s_v   = length(system.species.nbeads)
+    nbeads_v = system.species.nbeads
+    max_nb   = maximum(nbeads_v)
+    species_group_idx = ntuple(s -> ntuple(j -> (j <= nbeads_v[s] ? model.groups.i_groups[s][j] : 0), max_nb), nc_s_v)
+    base = (;
+        HSd                = Adapt.adapt(backend, system.species.size),
+        m                  = Adapt.adapt(backend, m_vals),
+        S                  = Adapt.adapt(backend, S_vals),
+        meff               = Adapt.adapt(backend, meff),
+        sigma              = Adapt.adapt(backend, model.params.sigma.values),
+        epsilon            = Adapt.adapt(backend, model.params.epsilon.values),
+        lambda_r_t         = lambda_r_t,
+        lambda_a_t         = lambda_a_t,
+        psi_eff            = Adapt.adapt(backend, system.fields[end].width),
+        A                  = SAFTVRMIE_A,
+        phi                = SAFTVRMIE_PHI,
+        nbeads_comp        = Adapt.adapt(backend, system.species.nbeads),
+        HSd_species        = Adapt.adapt(backend, HSd_sp),
+        m_species          = Adapt.adapt(backend, model.vrmodel.params.segment.values),
+        sigma_species      = Adapt.adapt(backend, model.vrmodel.params.sigma.values),
+        epsilon_species    = Adapt.adapt(backend, model.vrmodel.params.epsilon.values),
+        lambda_r_species_t = lambda_r_species_t,
+        lambda_a_species_t = lambda_a_species_t,
+        species_group_idx  = species_group_idx,
     )
+
+    nn = Clapeyron.assoc_pair_length(model)
+    if nn > 0
+        nc_model = sum(system.species.nbeads)
+        (assoc_icomp_v, assoc_jcomp_v, assoc_ispec_v, assoc_jspec_v,
+         assoc_isite_v, assoc_jsite_v,
+         assoc_eps_v, assoc_kap_v, assoc_sig3_v, assoc_dij_v,
+         n_sites_flat_v, n_sites_cumsum_v, total_sites
+        ) = pack_assoc_params_gc(model, system.species.size)
+
+        assoc_icomp_t    = ntuple(p -> p <= nn           ? assoc_icomp_v[p]    : 0, Val(20))
+        assoc_jcomp_t    = ntuple(p -> p <= nn           ? assoc_jcomp_v[p]    : 0, Val(20))
+        assoc_ispec_t    = ntuple(p -> p <= nn           ? assoc_ispec_v[p]    : 0, Val(20))
+        assoc_jspec_t    = ntuple(p -> p <= nn           ? assoc_jspec_v[p]    : 0, Val(20))
+        assoc_isite_t    = ntuple(p -> p <= nn           ? assoc_isite_v[p]    : 0, Val(20))
+        assoc_jsite_t    = ntuple(p -> p <= nn           ? assoc_jsite_v[p]    : 0, Val(20))
+        n_sites_flat_t   = ntuple(j -> j <= total_sites  ? n_sites_flat_v[j]   : 0, Val(20))
+        n_sites_cumsum_t = ntuple(i -> i <= nc_model + 1
+                                       ? n_sites_cumsum_v[i]
+                                       : n_sites_cumsum_v[nc_model + 1], Val(30))
+
+        c_mat   = SAFTVRMieconsts.c
+        VRMie_c = ntuple(ni -> ntuple(mi -> c_mat[ni, mi], 11), 11)
+
+        assoc = (;
+            has_assoc      = true,
+            assoc_n_pairs  = Val(nn),
+            assoc_icomp    = assoc_icomp_t,
+            assoc_jcomp    = assoc_jcomp_t,
+            assoc_ispec    = assoc_ispec_t,
+            assoc_jspec    = assoc_jspec_t,
+            assoc_isite    = assoc_isite_t,
+            assoc_jsite    = assoc_jsite_t,
+            assoc_eps      = Adapt.adapt(backend, assoc_eps_v),
+            assoc_kap      = Adapt.adapt(backend, assoc_kap_v),
+            assoc_sig3     = Adapt.adapt(backend, assoc_sig3_v),
+            assoc_dij      = Adapt.adapt(backend, assoc_dij_v),
+            n_sites_flat   = n_sites_flat_t,
+            n_sites_cumsum = n_sites_cumsum_t,
+            total_sites,
+            VRMie_c,
+        )
+        params = merge(base, assoc)
+    else
+        params = merge(base, (; has_assoc = false))
+    end
+
     nc = sum(system.species.nbeads)
     return params, nc
 end

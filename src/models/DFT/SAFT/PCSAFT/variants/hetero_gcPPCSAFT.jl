@@ -233,9 +233,10 @@ end
 @inline function f_res(out, n, params, T, kk,
                        ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: HeterogcPCPSAFT}
     res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(2))
-    res_hc  = f_hc(n, params, T, kk, Val(NC), Val(ND), M)
-    res_disp = f_disp(n, params, T, kk, Val(NC), Val(ND), M)
-    out[kk] = res_hs + res_hc + res_disp
+    res_hc    = f_hc(n, params, T, kk, Val(NC), Val(ND), M)
+    res_disp  = f_disp(n, params, T, kk, Val(NC), Val(ND), M)
+    res_assoc = _assoc_or_zero(n, params, T, kk, Val(NC), Val(ND), M)
+    out[kk] = res_hs + res_hc + res_disp + res_assoc
     return nothing
 end
 
@@ -267,7 +268,7 @@ function preallocate_params(system::DFTSystem{<:HeterogcPCPSAFT})
         end
     end
 
-    params = (;
+    base = (;
         HSd              = Adapt.adapt(backend, system.species.size),
         m                = Adapt.adapt(backend, system.model.params.segment.values),
         sigma            = Adapt.adapt(backend, system.model.params.sigma.values),
@@ -277,6 +278,43 @@ function preallocate_params(system::DFTSystem{<:HeterogcPCPSAFT})
         bond_k           = Adapt.adapt(backend, bond_k_list),
         bond_l           = Adapt.adapt(backend, bond_l_list),
     )
-    nc = nc_groups
-    return params, nc
+
+    nn = Clapeyron.assoc_pair_length(model)
+    if nn > 0
+        (assoc_icomp_v, assoc_jcomp_v, _ispec, _jspec,
+         assoc_isite_v, assoc_jsite_v,
+         assoc_eps_v, assoc_kap_v, assoc_sig3_v, assoc_dij_v,
+         n_sites_flat_v, n_sites_cumsum_v, total_sites
+        ) = pack_assoc_params_gc(model, system.species.size)
+
+        assoc_icomp_t    = ntuple(p -> p <= nn           ? assoc_icomp_v[p]    : 0, Val(20))
+        assoc_jcomp_t    = ntuple(p -> p <= nn           ? assoc_jcomp_v[p]    : 0, Val(20))
+        assoc_isite_t    = ntuple(p -> p <= nn           ? assoc_isite_v[p]    : 0, Val(20))
+        assoc_jsite_t    = ntuple(p -> p <= nn           ? assoc_jsite_v[p]    : 0, Val(20))
+        n_sites_flat_t   = ntuple(j -> j <= total_sites  ? n_sites_flat_v[j]   : 0, Val(20))
+        n_sites_cumsum_t = ntuple(i -> i <= nc_groups + 1
+                                       ? n_sites_cumsum_v[i]
+                                       : n_sites_cumsum_v[nc_groups + 1], Val(30))
+
+        assoc = (;
+            has_assoc      = true,
+            assoc_n_pairs  = Val(nn),
+            assoc_icomp    = assoc_icomp_t,
+            assoc_jcomp    = assoc_jcomp_t,
+            assoc_isite    = assoc_isite_t,
+            assoc_jsite    = assoc_jsite_t,
+            assoc_eps      = Adapt.adapt(backend, assoc_eps_v),
+            assoc_kap      = Adapt.adapt(backend, assoc_kap_v),
+            assoc_sig3     = Adapt.adapt(backend, assoc_sig3_v),
+            assoc_dij      = Adapt.adapt(backend, assoc_dij_v),
+            n_sites_flat   = n_sites_flat_t,
+            n_sites_cumsum = n_sites_cumsum_t,
+            total_sites,
+        )
+        params = merge(base, assoc)
+    else
+        params = merge(base, (; has_assoc = false))
+    end
+
+    return params, nc_groups
 end
