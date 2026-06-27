@@ -44,7 +44,7 @@ function get_fields(model::PeTSModel, species::DFTSpecies, structure::DFTStructu
             SWeightedDensity(:∫ρz²dz,ψ*d,ω,ngrid,device)]
 end
 
-function get_propagator(model::PeTSModel, species::DFTSpecies, structure::DFTStructure)
+function get_propagator(model::PeTSModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
     return IdealPropagator()
 end
 

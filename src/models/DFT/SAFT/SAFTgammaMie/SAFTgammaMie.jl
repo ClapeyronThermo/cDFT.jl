@@ -82,7 +82,7 @@ function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DF
             SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device)]
 end
 
-function get_propagator(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure, device)
+function get_propagator(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
     return TangentHSPropagator(model, species, structure, device)
 end
 
@@ -213,7 +213,7 @@ NC here is the total number of groups (sum of nbeads per component).
     ρS_c  = eps_v
     sg_idx = params.species_group_idx
     @inbounds for s in 1:nc_s
-        nb_s = nbeads_c[s]
+        nb_s = _nti(nbeads_c, s)
         ρ̄hc_s = 0.0
         @inbounds for j in 1:nb_s
             kg = sg_idx[s][j]
@@ -256,7 +256,7 @@ NC here is the total number of groups (sum of nbeads per component).
 
     res_chain = 0.0
     @inbounds for s in 1:nc_s
-        nb_s = nbeads_c[s]
+        nb_s = _nti(nbeads_c, s)
         ρhc_s = 0.0
         @inbounds for j in 1:nb_s
             kg = sg_idx[s][j]
@@ -357,7 +357,7 @@ function preallocate_params(system::DFTSystem{<:SAFTgammaMieModel})
         psi_eff            = Adapt.adapt(backend, system.fields[end].width),
         A                  = SAFTVRMIE_A,
         phi                = SAFTVRMIE_PHI,
-        nbeads_comp        = Adapt.adapt(backend, system.species.nbeads),
+        nbeads_comp        = ntuple(i -> system.species.nbeads[i], nc_s_v),
         HSd_species        = Adapt.adapt(backend, HSd_sp),
         m_species          = Adapt.adapt(backend, model.vrmodel.params.segment.values),
         sigma_species      = Adapt.adapt(backend, model.vrmodel.params.sigma.values),

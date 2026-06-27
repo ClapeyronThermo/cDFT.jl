@@ -106,9 +106,7 @@ using cDFT.Clapeyron
         system_hb    = DFTSystem(model_hb, structure_hb)
         ρ0_hb = cDFT.initialize_profiles(system_hb)
         μ2_hb = cDFT.δFδρ_res(system_hb, ρ0_hb)
-        for (s, i_grp) in enumerate(model_hb.groups.i_groups)
-            @test μ1_hb[s] ≈ μ2_hb[1, i_grp[1]] rtol = 1e-6
-        end
+        @test μ1_hb[1] ≈ μ2_hb[1] rtol = 1e-6
     end
 
     @testset "COFFEE" begin

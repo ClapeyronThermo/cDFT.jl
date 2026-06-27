@@ -42,7 +42,7 @@ function get_species(model::SAFTVRMieModel,structure::DFTStructure)
     return SAFTVRMieSpecies(ones(Int64,nc),size,ρbulk,μres)
 end
 
-function get_propagator(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTStructure)
+function get_propagator(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
     return IdealPropagator()
 end
 

@@ -57,7 +57,7 @@ end
 
 For a given `model`, define the relevant propagator. 
 """
-function get_propagator(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure)
+function get_propagator(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure, backend::Backend)
     return IdealPropagator()
 end
 

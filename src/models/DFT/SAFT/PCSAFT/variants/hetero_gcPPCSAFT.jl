@@ -119,7 +119,6 @@ NC = total number of groups (sum of nbeads per component).
     eps_v = 1e-15
     HSd   = params.HSd
     m_seg = params.m
-    n_bonds = params.n_bonds
     bond_k  = params.bond_k
     bond_l  = params.bond_l
 
@@ -134,8 +133,8 @@ NC = total number of groups (sum of nbeads per component).
     inv1ζ₃ = 1.0 / (1.0 - ζ₃ + eps_v)
 
     res_hc = 0.0
-    @inbounds for ib in 1:n_bonds
-        k = bond_k[ib]; l = bond_l[ib]
+    @inbounds for ib in 1:length(bond_k)
+        k = _nti(bond_k, ib); l = _nti(bond_l, ib)
         dk = HSd[k]; dl = HSd[l]
         r_HSd = dk * dl / (dk + dl)
         ζ₂_ov3 = ζ₂ * inv1ζ₃
@@ -164,7 +163,7 @@ end
         ρ̄i  = n[kk, idx_ρz, i] * factor / (di*di*di)
         m̄_num += m_seg[i] * ρ̄i
         η_sum  += m_seg[i] * ρ̄i * di*di*di
-        ρ̄_tot  += ρ̄i / nbeads_for_group[i]
+        ρ̄_tot  += ρ̄i / _nti(nbeads_for_group, i)
     end
     m̄  = m̄_num / ρ̄_tot
     ηd = _pi/6.0 * η_sum
@@ -236,15 +235,19 @@ function preallocate_params(system::DFTSystem{<:HeterogcPCPSAFT})
         end
     end
 
+    n_bonds = length(bond_k_list)
+    bond_k_t           = ntuple(ib -> Int32(bond_k_list[ib]), n_bonds)
+    bond_l_t           = ntuple(ib -> Int32(bond_l_list[ib]), n_bonds)
+    nbeads_for_group_t = ntuple(i  -> Float64(nbeads_for_group[i]), nc_groups)
+
     base = (;
         HSd              = Adapt.adapt(backend, system.species.size),
         m                = Adapt.adapt(backend, system.model.params.segment.values),
         sigma            = Adapt.adapt(backend, system.model.params.sigma.values),
         epsilon          = Adapt.adapt(backend, system.model.params.epsilon.values),
-        nbeads_for_group = Adapt.adapt(backend, nbeads_for_group),
-        n_bonds          = length(bond_k_list),
-        bond_k           = Adapt.adapt(backend, bond_k_list),
-        bond_l           = Adapt.adapt(backend, bond_l_list),
+        nbeads_for_group = nbeads_for_group_t,
+        bond_k           = bond_k_t,
+        bond_l           = bond_l_t,
     )
 
     nn = Clapeyron.assoc_pair_length(model)

@@ -58,7 +58,7 @@ end
 
 For a given `model`, define the relevant propagator. 
 """
-function get_propagator(model::DHModel, species::DFTSpecies, structure::DFTStructure)
+function get_propagator(model::DHModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
     return IdealPropagator()
 end
 
