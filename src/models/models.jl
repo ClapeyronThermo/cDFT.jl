@@ -1,5 +1,8 @@
 import Clapeyron: a_res
 
+_kernel_type(system::AbstractcDFTSystem) = typeof(system.model)
+_kernel_type(system::DGTSystem)          = typeof(system)
+
 include("BasicIdeal.jl")
 include("DFT/dft.jl")
 include("DGT/dgt.jl")
@@ -10,7 +13,7 @@ include("DGT/dgt.jl")
 Residual free energy for DFT systems via the Enzyme/KA kernel path.
 Runs the same δf_kernel! used by δFδρ_res! and integrates the primal f_val.
 """
-function F_res(system::DFTSystem, ρ)
+function F_res(system::Union{DFTSystem, DGTSystem}, ρ)
     δfδρ_res, cache_model, _, _ = preallocate(system, ρ)
     δFδρ_res!(system, ρ, δfδρ_res, cache_model...)
     f_val = cache_model[9]
@@ -20,7 +23,7 @@ end
 """
     F_res(system::AbstractcDFTSystem, ρ)
 
-Residual free energy for DGT and Electrolyte systems (old scalar f_res path).
+Residual free energy fallback for systems that use the old scalar f_res path (e.g. Electrolyte).
 """
 function F_res(system::AbstractcDFTSystem, ρ)
     ngrid  = system.structure.ngrid
@@ -57,7 +60,6 @@ depending on `system.options.device`.
 function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
                    n, δf, fft_buf, in_buf, out_buf, P, iP,
                    params, f_val, δf_val, nc, nd)
-    model   = system.model
     backend = system.options.device
     ngrid   = system.structure.ngrid
     NF      = size(n, ndims(n)-1)
@@ -73,7 +75,7 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
 
     kernel = δf_kernel!(backend)
     kernel(δf, n, f_val, δf_val, params, Float64(T),
-           Val(NF), Val(NB), Val(nc), Val(nd), typeof(model),
+           Val(NF), Val(NB), Val(nc), Val(nd), _kernel_type(system),
            ndrange = ngrid)
     synchronize(backend)
 

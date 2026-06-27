@@ -60,7 +60,7 @@ function DFTSystem(model::EoSModel, structure::DFTStructure, external_field::Ext
     species = get_species(model, structure)
     fields = get_fields(model, species, structure, options.device)
     typed_fields = tuple(fields...)
-    propagator = get_propagator(model, species, structure)
+    propagator = get_propagator(model, species, structure, options.device)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
     return DFTSystem(model, species, structure, typed_fields, [external_field], propagator, options,chunksize)
@@ -71,7 +71,7 @@ function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions
     species = get_species(model, structure)
     fields = get_fields(model, species, structure, options.device)
     typed_fields = tuple(fields...)
-    propagator = get_propagator(model, species, structure)
+    propagator = get_propagator(model, species, structure, options.device)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
     return DFTSystem(model, species, structure, typed_fields, nothing, propagator, options,chunksize)
@@ -102,21 +102,23 @@ DFTSystem
   device: CPU
 ```
 """
-struct DGTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,G<:GradientModel,O<:DFTOptions,C}
+struct DGTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,EF,G<:GradientModel,O<:DFTOptions,C}
     model::M
     gradient::G
     species::S
     structure::T
     fields::F
+    external_field::EF
     options::O
     chunksize::Val{C}
 end
 
-function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
+function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStructure, external_field::ExternalFieldModel, options::DFTOptions = DFTOptions())
+    backend = options.device
     (p,T) = structure.conditions
     ρbulk = structure.ρbulk
     ngrid = structure.ngrid
-    ω = structure_ω(structure)
+    ω = structure_ω(structure, backend)
 
     nc = length(model)
     sizes = length_scales(model)
@@ -125,12 +127,56 @@ function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStruc
     μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), T, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / T
 
     species = DGTSpecies(nbeads,sizes,ρbulk,μres)
-    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid),
-              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid)]
+    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid, backend),
+              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid, backend)]
     typed_fields = tuple(fields...)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
-    return DGTSystem(model, gradient, species, structure, typed_fields, options, chunksize)
+    return DGTSystem(model, gradient, species, structure, typed_fields, [external_field], options, chunksize)
+end
+
+function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStructure, external_field::Vector{ExternalFieldModel}, options::DFTOptions = DFTOptions())
+    backend = options.device
+    (p,T) = structure.conditions
+    ρbulk = structure.ρbulk
+    ngrid = structure.ngrid
+    ω = structure_ω(structure, backend)
+
+    nc = length(model)
+    sizes = length_scales(model)
+    nbeads = ones(Int64,nc)
+    
+    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), T, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / T
+
+    species = DGTSpecies(nbeads,sizes,ρbulk,μres)
+    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid, backend),
+              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid, backend)]
+    typed_fields = tuple(fields...)
+    NF = compute_field_len(fields,dimension(structure))
+    chunksize = Val{NF}()
+    return DGTSystem(model, gradient, species, structure, typed_fields, external_field, options,chunksize)
+end
+
+function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
+    backend = options.device
+    (p,T) = structure.conditions
+    ρbulk = structure.ρbulk
+    ngrid = structure.ngrid
+    ω = structure_ω(structure, backend)
+
+    nc = length(model)
+    sizes = length_scales(model)
+    nbeads = ones(Int64,nc)
+    
+    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), T, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / T
+
+    species = DGTSpecies(nbeads,sizes,ρbulk,μres)
+    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid, backend),
+              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid, backend)]
+    typed_fields = tuple(fields...)
+    NF = compute_field_len(fields,dimension(structure))
+    chunksize = Val{NF}()
+    return DGTSystem(model, gradient, species, structure, typed_fields, nothing, options,chunksize)
 end
 
 """

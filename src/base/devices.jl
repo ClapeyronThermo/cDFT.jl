@@ -91,5 +91,4 @@ function preallocate_propagator(system, ρ)
     return preallocate_propagator(system, propagtor, ρ, backend)
 end
 
-
 export CPU, DFTOptions
