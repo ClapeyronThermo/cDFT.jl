@@ -190,6 +190,6 @@ function compute_field_len(fields,nd)
     return field_len
 end
 
-export DFTSystem, DGTSystem
+export DFTSystem, DGTSystem, ElectrolyteDFTSystem
 
 include("show.jl")

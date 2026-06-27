@@ -62,38 +62,74 @@ function get_propagator(model::DHModel, species::DFTSpecies, structure::DFTStruc
     return IdealPropagator()
 end
 
+function preallocate_params(system::ElectrolyteDFTSystem, model::DHModel)
+    nd         = dimension(system)
+    NF_neutral = compute_field_len(Base.front(system.fields), nd)
+    T          = Float64(system.structure.conditions[2])
+    ρbulk_ion  = system.ion_species.bulk_density
+    eps_r      = Float64(dielectric_constant(model.RSPmodel, 1., T, ρbulk_ion))
 
-function f_res(system::ElectrolyteDFTSystem, model::DHModel,n)
-    return f_dh(system,model,n)
+    nc        = length(model)
+    Z_vec     = system.ion_species.charges
+    σ_vec     = system.ion_species.size
+    width_vec = last(system.fields).width
+
+    Z_t = ntuple(i -> i <= nc ? Float64(Z_vec[i]) : 0.0, Val(10))
+    σ_t = ntuple(i -> i <= nc ? σ_vec[i]           : 0.0, Val(10))
+    w_t = ntuple(i -> i <= nc ? width_vec[i]        : 0.0, Val(10))
+
+    return (;
+        dh_eps_r      = eps_r,
+        dh_Z          = Z_t,
+        dh_sigma      = σ_t,
+        dh_width      = w_t,
+        dh_nf_neutral = Val(NF_neutral),
+    )
 end
 
-function f_dh(system::ElectrolyteDFTSystem, model::DHModel,n)
-    (_,T) = system.structure.conditions
-    σ = system.ion_species.size
-    Z = system.ion_species.charges
-    ρ = n ./ system.fields[end].width /2 ./ N_A
-
-    ϵ_r = dielectric_constant(model.RSPmodel, 1., T, ρ)
-    
-    κ = screening_length(model, 1., T, ρ, Z, ϵ_r)
-    res = zero(Base.promote_eltype(κ,σ))
-    count = 0
-    nc = length(model)
-    for i in 1:nc
-        Zi = Z[i]
-        if Z[i] != 0 && !iszero(Clapeyron.primalval(ρ[i]))
-            count +=1
-            χi = dh_term(σ[i]*κ)
-            res +=ρ[i]*Zi*Zi*χi
-        end
-    end
-    s = e_c*e_c/(4π*ϵ_0*ϵ_r*k_B*T) 
-    if iszero(count)
-        return -1*s*res
-    end
-    return -1*s*res*κ*N_A
+@inline function f_res(out, n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: DHModel}
+    out[kk] += f_dh(n, params, T, kk, Val(NC), params.dh_nf_neutral)
+    return nothing
 end
 
+"""
+GPU/Enzyme-compatible Debye-Hückel free energy density at grid point `kk`.
+
+`NF_NEUTRAL` is the number of neutral-model field slots in `n`; the DH field
+is at index `NF_NEUTRAL + 1`.  Neutral components (Z=0) contribute zero to
+`I` and `res` automatically via the Zᵢ² factor — no branching needed.
+`ε_r` is pre-computed at bulk density and stored in `params.dh_eps_r`.
+"""
+@inline function f_dh(n, params, T, kk, ::Val{NC}, ::Val{NF_NEUTRAL}) where {NC, NF_NEUTRAL}
+    _pi   = 3.141592653589793
+    eps_v = 1e-30
+    F_dh  = NF_NEUTRAL + 1
+    ε_r   = params.dh_eps_r
+
+    I = 0.0
+    @inbounds for i in 1:NC
+        Zi = _nti(params.dh_Z, i)
+        wi = _nti(params.dh_width, i)
+        ρi = n[kk, F_dh, i] / (wi * 2 + eps_v) / N_A
+        I += ρi * Zi * Zi
+    end
+
+    s0 = e_c * e_c / (ϵ_0 * ε_r * k_B * T)
+    κ  = sqrt(s0 * N_A * I + eps_v)
+
+    res = 0.0
+    @inbounds for i in 1:NC
+        Zi = _nti(params.dh_Z, i)
+        wi = _nti(params.dh_width, i)
+        σi = _nti(params.dh_sigma, i)
+        ρi = n[kk, F_dh, i] / (wi * 2 + eps_v) / N_A
+        χi = dh_term(σi * κ)
+        res += ρi * Zi * Zi * χi
+    end
+
+    s = e_c * e_c / (4 * _pi * ϵ_0 * ε_r * k_B * T)
+    return -s * res * κ * N_A
+end
 
 """
     length_scale(model::EoSModel)

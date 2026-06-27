@@ -61,53 +61,6 @@ function get_propagator(model::PCSAFTModel, species::DFTSpecies, structure::DFTS
     return IdealPropagator()
 end
 
-
-function I(model::PCSAFTModel,m̄,n₃,n)
-    if n == 1
-        corr = Clapeyron.PCSAFTconsts.corr1
-    elseif n == 2
-        corr = Clapeyron.PCSAFTconsts.corr2
-    end
-    res = zero(n₃)
-    m2 = (m̄-1)/m̄
-    m3 = (m̄-1)/m̄*(m̄-2)/m̄
-    @inbounds for i ∈ 1:7
-        ii = i-1
-        corr1,corr2,corr3 = corr[i]
-        ki = corr1 + m2*corr2 + m3*corr3
-        res += ki*n₃^ii
-    end
-    return res
-end
-
-function Δ(model::PCSAFTModel, T, n, n₃, nᵥ, i, j, a, b)
-    ϵ_assoc = model.params.epsilon_assoc.values
-    κ = model.params.bondvol.values
-    κijab = κ[i,j][a,b]
-    _0 = zero(T+first(n)+first(n₃)+first(nᵥ)+first(κijab))
-    iszero(κijab) && return _0
-
-    σ = model.params.sigma.values[i,j]
-    m = model.params.segment.values
-    HSd = d(model,1e-3,T,onevec(model))
-    dij = (HSd[i]*HSd[j])/(HSd[i]+HSd[j])
-
-    n₂, nᵥ₂, n₃₃ = _0,zero(nᵥ[:,1]),_0
-    for i in 1:length(n)
-        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[i],m[i],nᵥ[:,i],HSd[i]
-        n₂ += π*HSdᵢ*nᵢ*mᵢ
-        nᵥ₂ .+= -2π*nᵥᵢ*mᵢ
-        n₃₃ += n₃[i]*mᵢ
-    end
-    #n₂ = sum(π.*HSd.*n.*m)
-    nᵥ₂nᵥ₂ = dot(nᵥ₂,nᵥ₂)
-    #n₃  = sum(n₃.*m)
-
-    ξ = 1-nᵥ₂nᵥ₂/n₂^2
-    g_hs = 1/(1-n₃₃)+dij*ξ*n₂/(2*(1-n₃₃)^2)+dij^2*n₂^2*ξ/(18*(1-n₃₃)^3)
-    return g_hs*σ^3*expm1(ϵ_assoc[i,j][a,b]/T)*κijab
-end
-
 """
     length_scale(model::EoSModel)
 

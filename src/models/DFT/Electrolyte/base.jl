@@ -65,3 +65,32 @@ function f_res(system::ElectrolyteDFTSystem, model::ElectrolyteModel,n)
 end
 
 length_scale(model::ElectrolyteModel) = length_scale(model.neutralmodel)
+
+# ── Enzyme/KA kernel path for ElectrolyteDFTSystem ──────────────────────────
+
+function preallocate_params(system::ElectrolyteDFTSystem)
+    model   = system.model
+    n_model = model.neutralmodel
+    nd      = dimension(system)
+
+    # Drop the last field (ion) to build a proxy neutral DFTSystem
+    n_fields   = Base.front(system.fields)
+    NF_neutral = compute_field_len(n_fields, nd)
+    n_sys = DFTSystem(n_model, system.species, system.structure,
+                      n_fields, nothing, system.propagator,
+                      system.options, Val{NF_neutral}())
+    neutral_params, nc = preallocate_params(n_sys)
+
+    # Ion model params — dispatch to specific ion model implementation
+    ion_params = preallocate_params(system, model.ionmodel)
+
+    return merge(neutral_params, ion_params), nc
+end
+
+@inline function f_res(out, n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: ElectrolyteModel}
+    MN = fieldtype(M, :neutralmodel)
+    MI = fieldtype(M, :ionmodel)
+    f_res(out, n, params, T, kk, Val(NC), Val(ND), MN)
+    f_res(out, n, params, T, kk, Val(NC), Val(ND), MI)
+    return nothing
+end

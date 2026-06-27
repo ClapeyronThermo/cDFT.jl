@@ -133,6 +133,37 @@ function preallocate_model(system::DFTSystem, ρ)
     return n, δf, fft_buf, in_buf, out_buf, plan, iplan, params, f_val, δf_val, nc, nd
 end
 
+function preallocate_model(system::ElectrolyteDFTSystem, ρ)
+    backend = system.options.device
+    nf      = length_fields(system)
+    ngrid   = system.structure.ngrid
+    nd      = length(ngrid)
+    nb      = size(ρ, nd + 1)
+
+    n       = allocate(backend, Float64, ngrid..., nf, nb)
+    δf      = allocate(backend, Float64, ngrid..., nf, nb)
+    fill!(δf, 0.0)
+    fft_buf = allocate(backend, Float64, ngrid..., nf, nb)
+
+    in_buf  = allocate(backend, ComplexF64, ngrid...)
+    out_buf = similar(in_buf)
+    tmp     = similar(in_buf)
+    if backend isa CPU
+        plan = plan_fft!(tmp, 1:nd; num_threads = Threads.nthreads())
+    else
+        plan = plan_fft!(tmp, 1:nd)
+    end
+    iplan = inv(plan)
+
+    f_val  = allocate(backend, Float64, ngrid...)
+    δf_val = allocate(backend, Float64, ngrid...)
+    fill!(δf_val, 1.0)
+
+    params, nc = preallocate_params(system)
+
+    return n, δf, fft_buf, in_buf, out_buf, plan, iplan, params, f_val, δf_val, nc, nd
+end
+
 function length_scales(model::EoSModel)
     if hasfield(typeof(model.params), :sigma)
         return diagvalues(model.params.sigma.values)

@@ -92,38 +92,6 @@ end
 #     end
 #     return Δout
 # end
-
-function Δ(model::HeterogcPCPSAFT, T, n, n₃, nᵥ, i, j, a, b)
-    ϵ_assoc = model.params.epsilon_assoc.values
-    κ = model.params.bondvol.values
-    κijab = κ[i,j][a,b]
-    _0 = zero(T+first(n)+first(n₃)+first(nᵥ)+first(κijab))
-    iszero(κijab) && return _0
-
-    k,l = get_chain_idx(model,i,j,a,b)
-    σ = model.params.sigma.values[k,l]
-    m = model.params.segment.values
-    HSd = d(model,1e-3,T,onevec(model))
-    dij = (HSd[k]*HSd[l])/(HSd[k]+HSd[l])
-
-    n₂, nᵥ₂, n₃₃ = _0,zero(nᵥ[:,i]),_0
-    for kk in 1:length(n)
-        nᵢ,mᵢ,nᵥᵢ,HSdᵢ = n[kk],m[kk],nᵥ[:,kk],HSd[kk]
-        n₂ += π*HSdᵢ*nᵢ*mᵢ
-        nᵥ₂ .+= -2π*nᵥᵢ*mᵢ
-        n₃₃ += n₃[kk]*mᵢ
-    end
-    nᵥ₂nᵥ₂ = dot(nᵥ₂,nᵥ₂)
-
-    #n₂ = sum(π.*HSd.*n.*m)
-    #nᵥ₂ = sum(-2π.*nᵥ.*m)
-    #n₃  = sum(n₃.*m)
-
-    ξ = 1-nᵥ₂nᵥ₂/n₂^2
-    g_hs = 1/(1-n₃₃)+dij*ξ*n₂/(2*(1-n₃₃)^2)+dij^2*n₂^2*ξ/(18*(1-n₃₃)^3)
-    return g_hs*σ^3*expm1(ϵ_assoc[i,j][a,b]/T)*κijab
-end
-
 function length_scale(model::HeterogcPCPSAFT)
     return maximum(model.params.sigma.values)
 end

@@ -46,58 +46,6 @@ function get_propagator(model::SAFTVRMieModel, species::DFTSpecies, structure::D
     return IdealPropagator()
 end
 
-function Δ(model::SAFTVRMieModel, T, n, n₃, nᵥ, i, j, a, b)
-    _d = d(model,1e-3,T,onevec(model))
-    _σ = model.params.sigma.values
-    m = model.params.segment.values
-    ϵ_assoc = model.params.epsilon_assoc.values
-    K = model.params.bondvol.values[i,j][a,b]
-    _0 = zero(T+first(n)+first(n₃)+first(nᵥ)+first(K))
-    iszero(K) && return _0
-
-    ρ̄ = n₃*3*2 ./(_d.^3)/π
-
-    z = ρ̄ /sum(ρ̄)
-    m̄ = dot(z,m)
-    m̄inv = 1/m̄
-
-    ρS = dot(ρ̄,m)
-
-    σ3_x = zero(T+first(z)+one(eltype(model)))
-
-    for i ∈ @comps
-        x_Si = z[i]*m[i]*m̄inv
-        σ3_x += x_Si*x_Si*(_σ[i,i]^3)
-        for j ∈ 1:(i-1)
-            x_Sj = z[j]*m[j]*m̄inv
-            σ3_x += 2*x_Si*x_Sj*(_σ[i,j]^3)
-        end
-    end
-
-    ρr  = ρS*σ3_x
-    
-    ϵ = model.params.epsilon
-    Tr = T/ϵ[i,j]
-    _I = I(model,Tr,ρr)
-    
-    F = expm1(ϵ_assoc[i,j][a,b]/T)
-
-    return F*K*_I
-end
-
-function I(model::SAFTVRMieModel, Tr,ρr)
-    c  = SAFTVRMieconsts.c
-    res = zero(ρr+Tr)
-    @inbounds for n ∈ 0:10
-        ρrn = ρr^n
-        res_m = zero(res)
-        for m ∈ 0:(10-n)
-            res_m += c[n+1,m+1]*Tr^m
-        end
-        res += res_m*ρrn
-    end
-    return res
-end
 # ── Enzyme / KernelAbstractions kernel support ──────────────────────────────
 # GPU-safe constants: row-tuple form of the SAFTγMie A matrix for ζeff.
 const SAFTVRMIE_A = (
