@@ -29,10 +29,10 @@ function surface_tension(model::EoSModel, T, x = [1.0])
 end
 
 function surface_tension(system::AbstractcDFTSystem,ρ)
+    ρ = Array(ρ)
     model = system.model
     ngrid = system.structure.ngrid
     nd = dimension(system)
-    # bounds = system.structure.bounds
     _bounds = system.structure.bounds
 
     dz = structure_dz(system.structure)
@@ -40,8 +40,6 @@ function surface_tension(system::AbstractcDFTSystem,ρ)
     F = free_energy(system,ρ)
 
     (p, T) = system.structure.conditions
-    n = zeros(length(model))
-    
     ρl = system.structure.ρbulk
     x = ρl/sum(ρl)
     vl = 1/sum(ρl)

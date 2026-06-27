@@ -10,6 +10,8 @@ Integrates a collection of points `f`, with constant `dz`, using simpson rule.
 #    return 1/3*dz*(f[1]+f[end]+4*sum(@view(f[2:2:end-1]))+2*sum(@view(f[3:2:end-1])))
 #end
 
+_∫(f::AbstractArray, dz) = _∫(Array(f), dz)
+
 function _∫(f::Array{Float64},dz)
     ∑f = zero(typeof(first(dz)))
     for i in CartesianIndices(size(f))
