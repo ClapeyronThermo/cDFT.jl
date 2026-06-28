@@ -46,80 +46,31 @@ const DQ_consts = (
 # ── Enzyme / KernelAbstractions kernel support ──────────────────────────────
 
 """
-QQ J₂ integral kernel: no min(m̄,2) clamping (unlike DD), 5 terms.
-"""
-@inline function _J2_qq_kernel(mᵢ, mⱼ, ϵᵢⱼ, η, T, corr_a, corr_b)
-    ϵT = ϵᵢⱼ / T
-    m̄  = sqrt(mᵢ * mⱼ)
-    m1  = 1.0 - 1.0/m̄
-    m2  = m1 * (1.0 - 2.0/m̄)
-    result = 0.0
-    ηn = 1.0
-    for n in 0:4
-        a0, a1, a2 = corr_a[n+1]
-        b0, b1, b2 = corr_b[n+1]
-        result += (a0 + a1*m1 + a2*m2 + (b0 + b1*m1 + b2*m2)*ϵT) * ηn
-        ηn *= η
-    end
-    return result
-end
+Pointwise residual free energy for QPCP-SAFT: HS + HC + disp + polar (DD + QQ + DQ).
 
+Field layout identical to PCP-SAFT / PC-SAFT:
+  1        : ρ (unweighted)
+  2        : ∫ρdz  with 0.5*d → n₀, n₁, n₂
+  3        : ∫ρz²dz with 0.5*d → n₃
+  4..3+ND  : ∫ρzdz with 0.5*d → vector nᵥ
+  4+ND     : ∫ρz²dz with d    → ρ̄hc
+  5+ND     : ∫ρdz  with d    → λ
+  6+ND     : ∫ρz²dz with d*ψ → ρ̄z  (disp + polar)
 """
-DQ J₂ integral kernel: no min clamping, 4 terms only (DQ_consts has 4 entries).
-"""
-@inline function _J2_dq_kernel(mᵢ, mⱼ, ϵᵢⱼ, η, T, corr_a, corr_b)
-    ϵT = ϵᵢⱼ / T
-    m̄  = sqrt(mᵢ * mⱼ)
-    m1  = 1.0 - 1.0/m̄
-    m2  = m1 * (1.0 - 2.0/m̄)
-    result = 0.0
-    ηn = 1.0
-    for n in 0:3
-        a0, a1, a2 = corr_a[n+1]
-        b0, b1, b2 = corr_b[n+1]
-        result += (a0 + a1*m1 + a2*m2 + (b0 + b1*m1 + b2*m2)*ϵT) * ηn
-        ηn *= η
-    end
-    return result
-end
-
-"""
-QQ J₃ integral kernel: no min clamping, 5 terms, includes m2.
-"""
-@inline function _J3_qq_kernel(mᵢ, mⱼ, mₖ, η, corr_c)
-    m̄  = cbrt(mᵢ * mⱼ * mₖ)
-    m1  = 1.0 - 1.0/m̄
-    m2  = m1 * (1.0 - 2.0/m̄)
-    result = 0.0
-    ηn = 1.0
-    for n in 0:4
-        c0, c1, c2 = corr_c[n+1]
-        result += (c0 + c1*m1 + c2*m2) * ηn
-        ηn *= η
-    end
-    return result
-end
-
-"""
-DQ J₃ integral kernel: no min clamping, 4 terms, no m2 (DQ_consts.corr_c has only (c0,c1) per entry).
-"""
-@inline function _J3_dq_kernel(mᵢ, mⱼ, mₖ, η, corr_c)
-    m̄  = cbrt(mᵢ * mⱼ * mₖ)
-    m1  = 1.0 - 1.0/m̄
-    result = 0.0
-    ηn = 1.0
-    for n in 0:3
-        c0, c1 = corr_c[n+1]
-        result += (c0 + c1*m1) * ηn
-        ηn *= η
-    end
-    return result
+@inline function f_res(::Type{M}, kk, out, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: QPCPSAFTModel}
+    res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(2))
+    res_hc  = f_hc(M, kk, n, params, T, Val(NC), Val(ND))
+    res_disp, m̄, ηd = f_disp(M, kk, n, params, T, Val(NC), Val(ND))
+    res_polar = f_polar(M, kk, n, params, T, m̄, ηd, Val(NC), Val(ND))
+    res_assoc = _assoc_or_zero(M, kk, n, params, T, Val(NC), Val(ND))
+    out[kk] = res_hs + res_hc + res_disp + res_polar + res_assoc
+    return nothing
 end
 
 """
 QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions.
 """
-@inline function f_polar(n, params, T, kk, m̄, ηd, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: QPCPSAFTModel}
+@inline function f_polar(::Type{M}, kk, n, params, T, m̄, ηd, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: QPCPSAFTModel}
     _pi   = 3.141592653589793
     eps_v = 1e-15
     pcp_m = params.pcp_m
@@ -155,17 +106,14 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
             if dip2_i == 0.0; continue; end
             ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
             xᵢ = ρ̄zi_i / ∑ρ̄_p
-            σii3 = pcp_σ[i,i]*pcp_σ[i,i]*pcp_σ[i,i]
-            _J2_ii = _J2_kernel(pcp_m[i], pcp_m[i], pcp_ϵ[i,i], ηd, T, ca_dd, cb_dd)
-            _A₂_dd += xᵢ*xᵢ * dip2_i*dip2_i / σii3 * _J2_ii
-            @inbounds for j in i+1:NC
+            @inbounds for j in 1:NC
                 dip2_j = dip2[j]
                 if dip2_j == 0.0; continue; end
                 ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
                 xⱼ = ρ̄zi_j / ∑ρ̄_p
                 σij3 = pcp_σ[i,j]*pcp_σ[i,j]*pcp_σ[i,j]
                 _J2_ij = _J2_kernel(pcp_m[i], pcp_m[j], pcp_ϵ[i,j], ηd, T, ca_dd, cb_dd)
-                _A₂_dd += 2.0 * xᵢ * xⱼ * dip2_i * dip2_j / σij3 * _J2_ij
+                _A₂_dd += xᵢ * xⱼ * dip2_i * dip2_j / σij3 * _J2_ij
             end
         end
         _A₂_dd *= -_pi * ∑ρ̄_p / (T*T)
@@ -177,29 +125,19 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
                 if dip2_i == 0.0; continue; end
                 ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
                 xᵢ = ρ̄zi_i / ∑ρ̄_p
-                a3_i = xᵢ * dip2_i / pcp_σ[i,i]
-                _J3_iii = _J3_kernel(pcp_m[i], pcp_m[i], pcp_m[i], ηd, cc_dd)
-                _A₃_dd += a3_i*a3_i*a3_i * _J3_iii
-                @inbounds for j in i+1:NC
+                @inbounds for j in 1:NC
                     dip2_j = dip2[j]
                     if dip2_j == 0.0; continue; end
                     ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
                     xⱼ = ρ̄zi_j / ∑ρ̄_p
-                    σij⁻¹  = 1.0 / pcp_σ[i,j]
-                    a3_iij = xᵢ * dip2_i * σij⁻¹
-                    a3_ijj = xⱼ * dip2_j * σij⁻¹
-                    a3_j   = xⱼ * dip2_j / pcp_σ[j,j]
-                    _J3_iij = _J3_kernel(pcp_m[i], pcp_m[i], pcp_m[j], ηd, cc_dd)
-                    _J3_ijj = _J3_kernel(pcp_m[i], pcp_m[j], pcp_m[j], ηd, cc_dd)
-                    _A₃_dd += 3.0 * a3_iij * a3_ijj * (a3_i*_J3_iij + a3_j*_J3_ijj)
-                    @inbounds for k in j+1:NC
+                    @inbounds for k in 1:NC
                         dip2_k = dip2[k]
                         if dip2_k == 0.0; continue; end
                         ρ̄zi_k = n[kk, idx_ρz, k] * factor / (params.HSd[k]*params.HSd[k]*params.HSd[k])
                         xₖ = ρ̄zi_k / ∑ρ̄_p
                         _J3_ijk = _J3_kernel(pcp_m[i], pcp_m[j], pcp_m[k], ηd, cc_dd)
-                        _A₃_dd += 6.0 * xᵢ*xⱼ*xₖ * dip2_i*dip2_j*dip2_k *
-                                    σij⁻¹ / (pcp_σ[i,k]*pcp_σ[j,k]) * _J3_ijk
+                        _A₃_dd += xᵢ*xⱼ*xₖ * dip2_i*dip2_j*dip2_k /
+                                  (pcp_σ[i,j]*pcp_σ[i,k]*pcp_σ[j,k]) * _J3_ijk
                     end
                 end
             end
@@ -217,11 +155,7 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
             if quad2_i == 0.0; continue; end
             ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
             xᵢ = ρ̄zi_i / ∑ρ̄_p
-            σii_sq = pcp_σ[i,i]*pcp_σ[i,i]
-            σii7   = σii_sq*σii_sq*σii_sq*pcp_σ[i,i]
-            _J2_ii = _J2_qq_kernel(pcp_m[i], pcp_m[i], pcp_ϵ[i,i], ηd, T, ca_qq, cb_qq)
-            _A₂_qq += xᵢ*xᵢ * quad2_i*quad2_i / σii7 * _J2_ii
-            @inbounds for j in i+1:NC
+            @inbounds for j in 1:NC
                 quad2_j = quad2[j]
                 if quad2_j == 0.0; continue; end
                 ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
@@ -229,7 +163,7 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
                 σij_sq = pcp_σ[i,j]*pcp_σ[i,j]
                 σij7   = σij_sq*σij_sq*σij_sq*pcp_σ[i,j]
                 _J2_ij = _J2_qq_kernel(pcp_m[i], pcp_m[j], pcp_ϵ[i,j], ηd, T, ca_qq, cb_qq)
-                _A₂_qq += 2.0 * xᵢ * xⱼ * quad2_i * quad2_j / σij7 * _J2_ij
+                _A₂_qq += xᵢ * xⱼ * quad2_i * quad2_j / σij7 * _J2_ij
             end
         end
         _A₂_qq *= -(9.0/16.0) * _pi * ∑ρ̄_p / (T*T)
@@ -241,24 +175,13 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
                 if quad2_i == 0.0; continue; end
                 ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
                 xᵢ = ρ̄zi_i / ∑ρ̄_p
-                σii3 = pcp_σ[i,i]*pcp_σ[i,i]*pcp_σ[i,i]
-                a3_i = xᵢ * quad2_i / σii3
-                _J3_iii = _J3_qq_kernel(pcp_m[i], pcp_m[i], pcp_m[i], ηd, cc_qq)
-                _A₃_qq += a3_i*a3_i*a3_i * _J3_iii
-                @inbounds for j in i+1:NC
+                @inbounds for j in 1:NC
                     quad2_j = quad2[j]
                     if quad2_j == 0.0; continue; end
                     ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
                     xⱼ = ρ̄zi_j / ∑ρ̄_p
-                    σjj3   = pcp_σ[j,j]*pcp_σ[j,j]*pcp_σ[j,j]
-                    σij3   = pcp_σ[i,j]*pcp_σ[i,j]*pcp_σ[i,j]
-                    a3_iij = xᵢ * quad2_i / σij3
-                    a3_ijj = xⱼ * quad2_j / σij3
-                    a3_j   = xⱼ * quad2_j / σjj3
-                    _J3_iij = _J3_qq_kernel(pcp_m[i], pcp_m[i], pcp_m[j], ηd, cc_qq)
-                    _J3_ijj = _J3_qq_kernel(pcp_m[i], pcp_m[j], pcp_m[j], ηd, cc_qq)
-                    _A₃_qq += 3.0 * a3_iij * a3_ijj * (a3_i*_J3_iij + a3_j*_J3_ijj)
-                    @inbounds for k in j+1:NC
+                    σij3 = pcp_σ[i,j]*pcp_σ[i,j]*pcp_σ[i,j]
+                    @inbounds for k in 1:NC
                         quad2_k = quad2[k]
                         if quad2_k == 0.0; continue; end
                         ρ̄zi_k = n[kk, idx_ρz, k] * factor / (params.HSd[k]*params.HSd[k]*params.HSd[k])
@@ -266,8 +189,8 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
                         σik3 = pcp_σ[i,k]*pcp_σ[i,k]*pcp_σ[i,k]
                         σjk3 = pcp_σ[j,k]*pcp_σ[j,k]*pcp_σ[j,k]
                         _J3_ijk = _J3_qq_kernel(pcp_m[i], pcp_m[j], pcp_m[k], ηd, cc_qq)
-                        _A₃_qq += 6.0 * xᵢ*xⱼ*xₖ * quad2_i*quad2_j*quad2_k /
-                                    (σij3*σik3*σjk3) * _J3_ijk
+                        _A₃_qq += xᵢ*xⱼ*xₖ * quad2_i*quad2_j*quad2_k /
+                                  (σij3*σik3*σjk3) * _J3_ijk
                     end
                 end
             end
@@ -336,25 +259,74 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
 end
 
 """
-Pointwise residual free energy for QPCP-SAFT: HS + HC + disp + polar (DD + QQ + DQ).
-
-Field layout identical to PCP-SAFT / PC-SAFT:
-  1        : ρ (unweighted)
-  2        : ∫ρdz  with 0.5*d → n₀, n₁, n₂
-  3        : ∫ρz²dz with 0.5*d → n₃
-  4..3+ND  : ∫ρzdz with 0.5*d → vector nᵥ
-  4+ND     : ∫ρz²dz with d    → ρ̄hc
-  5+ND     : ∫ρdz  with d    → λ
-  6+ND     : ∫ρz²dz with d*ψ → ρ̄z  (disp + polar)
+QQ J₂ integral kernel: no min(m̄,2) clamping (unlike DD), 5 terms.
 """
-@inline function f_res(out, n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: QPCPSAFTModel}
-    res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(2))
-    res_hc  = f_hc(n, params, T, kk, Val(NC), Val(ND), M)
-    res_disp, m̄, ηd = f_disp(n, params, T, kk, Val(NC), Val(ND), M)
-    res_polar = f_polar(n, params, T, kk, m̄, ηd, Val(NC), Val(ND), M)
-    res_assoc = _assoc_or_zero(n, params, T, kk, Val(NC), Val(ND), M)
-    out[kk] = res_hs + res_hc + res_disp + res_polar + res_assoc
-    return nothing
+@inline function _J2_qq_kernel(mᵢ, mⱼ, ϵᵢⱼ, η, T, corr_a, corr_b)
+    ϵT = ϵᵢⱼ / T
+    m̄  = sqrt(mᵢ * mⱼ)
+    m1  = 1.0 - 1.0/m̄
+    m2  = m1 * (1.0 - 2.0/m̄)
+    result = 0.0
+    ηn = 1.0
+    for n in 0:4
+        a0, a1, a2 = corr_a[n+1]
+        b0, b1, b2 = corr_b[n+1]
+        result += (a0 + a1*m1 + a2*m2 + (b0 + b1*m1 + b2*m2)*ϵT) * ηn
+        ηn *= η
+    end
+    return result
+end
+
+"""
+DQ J₂ integral kernel: no min clamping, 4 terms only (DQ_consts has 4 entries).
+"""
+@inline function _J2_dq_kernel(mᵢ, mⱼ, ϵᵢⱼ, η, T, corr_a, corr_b)
+    ϵT = ϵᵢⱼ / T
+    m̄  = sqrt(mᵢ * mⱼ)
+    m1  = 1.0 - 1.0/m̄
+    m2  = m1 * (1.0 - 2.0/m̄)
+    result = 0.0
+    ηn = 1.0
+    for n in 0:3
+        a0, a1, a2 = corr_a[n+1]
+        b0, b1, b2 = corr_b[n+1]
+        result += (a0 + a1*m1 + a2*m2 + (b0 + b1*m1 + b2*m2)*ϵT) * ηn
+        ηn *= η
+    end
+    return result
+end
+
+"""
+QQ J₃ integral kernel: no min clamping, 5 terms, includes m2.
+"""
+@inline function _J3_qq_kernel(mᵢ, mⱼ, mₖ, η, corr_c)
+    m̄  = cbrt(mᵢ * mⱼ * mₖ)
+    m1  = 1.0 - 1.0/m̄
+    m2  = m1 * (1.0 - 2.0/m̄)
+    result = 0.0
+    ηn = 1.0
+    for n in 0:4
+        c0, c1, c2 = corr_c[n+1]
+        result += (c0 + c1*m1 + c2*m2) * ηn
+        ηn *= η
+    end
+    return result
+end
+
+"""
+DQ J₃ integral kernel: no min clamping, 4 terms, no m2 (DQ_consts.corr_c has only (c0,c1) per entry).
+"""
+@inline function _J3_dq_kernel(mᵢ, mⱼ, mₖ, η, corr_c)
+    m̄  = cbrt(mᵢ * mⱼ * mₖ)
+    m1  = 1.0 - 1.0/m̄
+    result = 0.0
+    ηn = 1.0
+    for n in 0:3
+        c0, c1 = corr_c[n+1]
+        result += (c0 + c1*m1) * ηn
+        ηn *= η
+    end
+    return result
 end
 
 function preallocate_params(system::DFTSystem{<:QPCPSAFTModel})

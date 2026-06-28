@@ -87,10 +87,10 @@ function preallocate_params(system::ElectrolyteDFTSystem)
     return merge(neutral_params, ion_params), nc
 end
 
-@inline function f_res(out, n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: ElectrolyteModel}
+@inline function f_res(::Type{M}, kk, out, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: ElectrolyteModel}
     MN = fieldtype(M, :neutralmodel)
     MI = fieldtype(M, :ionmodel)
-    f_res(out, n, params, T, kk, Val(NC), Val(ND), MN)
-    f_res(out, n, params, T, kk, Val(NC), Val(ND), MI)
+    f_res(MN, kk, out, n, params, T, Val(NC), Val(ND))
+    f_res(MI, kk, out, n, params, T, Val(NC), Val(ND))
     return nothing
 end

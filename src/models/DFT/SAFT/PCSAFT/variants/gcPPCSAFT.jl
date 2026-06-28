@@ -15,8 +15,8 @@ Route HomogcPCPSAFT kernel calls to the PCPSAFTModel implementation.
 The params NamedTuple is assembled from model.ppcmodel in preallocate_model,
 so the field layout and parameter names are identical to PCPSAFTModel.
 """
-@inline function f_res(out, n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: HomogcPCPSAFTModel}
-    return f_res(out, n, params, T, kk, Val{NC}(), Val{ND}(), PCPSAFTModel)
+@inline function f_res(::Type{M}, kk, out, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: HomogcPCPSAFTModel}
+    return f_res(PCPSAFTModel, kk, out, n, params, T, Val{NC}(), Val{ND}())
 end
 
 function preallocate_params(system::DFTSystem{<:HomogcPCPSAFTModel})

@@ -1,31 +1,6 @@
 using Clapeyron: SAFTgammaMieModel
 using Clapeyron: d_gc_av
 
-# Chain loop helpers: NCS / MNB come from NTuple type params so loop bounds are always
-# compile-time inside these functions, regardless of how autodiff_deferred specialises.
-
-@inline function _chain_bead_sum(sg_idx_s::NTuple{MNB, Int}, n, HSd, kk, field_idx, nb_s) where MNB
-    _pi = 3.141592653589793
-    acc = 0.0
-    @inbounds for j in 1:MNB        # MNB from WHERE clause → compile-time
-        if j <= nb_s                 # nb_s is runtime but MNB (bound) is compile-time
-            kg = _nti(sg_idx_s, j)
-            dg = HSd[kg]
-            acc += n[kk, field_idx, kg] * 3.0/(4.0*_pi*dg^3)
-        end
-    end
-    return acc
-end
-
-@inline function _chain_ρhc_s(sg_idx_s::NTuple{MNB, Int}, n, kk, nb_s) where MNB
-    acc = 0.0
-    @inbounds for j in 1:MNB        # MNB from WHERE clause → compile-time
-        j <= nb_s || continue
-        acc += n[kk, 1, _nti(sg_idx_s, j)]
-    end
-    return acc
-end
-
 function DFTSystem(model::SAFTgammaMieModel,structure::DFTStructure,options::DFTOptions)
     model = expand_model(model)
     species = get_species(model, structure)
@@ -162,41 +137,14 @@ end
 
 # ── Enzyme / KernelAbstractions kernel support ──────────────────────────────
 
-# Model-specific Wertheim Δ for SAFTgammaMie: VR Mie polynomial I(Tr, ρr).
-# Uses params.meff (= m.*S) for ρS and params.assoc_ispec/jspec + params.epsilon_species
-# (nc_spec × nc_spec VR Mie ε at species level) for the reduced temperature Tr.
-@inline function _assoc_delta(p, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v,
-                               ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: SAFTgammaMieModel}
-    p > n_pairs && return 0.0
-    _pi = 3.141592653589793
-    ρS = eps_v
-    @inbounds for k in 1:NC
-        ρS += n[kk, 3, k] * 6.0 / (_pi * params.HSd[k]^3) * params.meff[k]
-    end
-    σ3_x = 0.0
-    @inbounds for k in 1:NC
-        ρ̄k  = n[kk, 3, k] * 6.0 / (_pi * params.HSd[k]^3)
-        xSk = ρ̄k * params.meff[k] / ρS
-        σ3_x += xSk * xSk * params.sigma[k,k]^3
-        @inbounds for l in 1:(k-1)
-            ρ̄l  = n[kk, 3, l] * 6.0 / (_pi * params.HSd[l]^3)
-            xSl = ρ̄l * params.meff[l] / ρS
-            σ3_x += 2.0 * xSk * xSl * params.sigma[k,l]^3
-        end
-    end
-    ρr = ρS * σ3_x
-    is = _nti(params.assoc_ispec, p)
-    js = _nti(params.assoc_jspec, p)
-    Tr = T / (params.epsilon_species[is, js] + eps_v)
-    I_val = 0.0; ρrn = 1.0
-    for ni in 0:10
-        row = _nti(params.VRMie_c, ni + 1); Trm = 1.0
-        for mi in 0:10
-            I_val += _nti(row, mi + 1) * Trm * ρrn; Trm *= Tr
-        end
-        ρrn *= ρr
-    end
-    return expm1(params.assoc_eps[p] / T) * params.assoc_kap[p] * I_val
+
+@inline function f_res(::Type{M}, kk, out, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: SAFTgammaMieModel}
+    res_hs, = f_hs(n, params.meff, params.HSd, kk, Val(NC), Val(ND), Val(2))
+    res_disp  = f_disp(M, kk, n, params, T, Val(NC), Val(ND), Val(6+ND))
+    res_chain = f_chain(M, kk, n, params, T, Val(NC), Val(ND))
+    res_assoc = _assoc_or_zero(M, kk, n, params, T, Val(NC), Val(ND))
+    out[kk] = res_hs + res_chain + res_disp + res_assoc
+    return nothing
 end
 
 """
@@ -215,7 +163,7 @@ Field layout (same as SAFTVRMieModel):
 
 NC here is the total number of groups (sum of nbeads per component).
 """
-@inline function f_chain(n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: SAFTgammaMieModel}
+@inline function f_chain(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: SAFTgammaMieModel}
     _pi   = 3.141592653589793
     eps_v = 1e-15
 
@@ -261,14 +209,12 @@ NC here is the total number of groups (sum of nbeads per component).
         z_gc_i = n[kk, 1, i] / ρhc_gc_total
         x_Si_c = z_gc_i * meff[i] * m̄inv_gc
         di_c   = HSd[i]
-        σ3_xc += x_Si_c*x_Si_c*σ[i,i]^3
-        ζ_Xc  += kρS_c*x_Si_c*x_Si_c*(2.0*di_c)^3
-        @inbounds for j in 1:(i-1)
+        @inbounds for j in 1:NC
             z_gc_j = n[kk, 1, j] / ρhc_gc_total
             x_Sj_c = z_gc_j * meff[j] * m̄inv_gc
             dj_c   = HSd[j]
-            σ3_xc += 2.0*x_Si_c*x_Sj_c*σ[i,j]^3
-            ζ_Xc  += 2.0*kρS_c*x_Si_c*x_Sj_c*(di_c+dj_c)^3
+            σ3_xc += x_Si_c*x_Sj_c*σ[i,j]^3
+            ζ_Xc  += kρS_c*x_Si_c*x_Sj_c*(di_c+dj_c)^3
         end
     end
     ζstc = σ3_xc * ρS_c * _pi/6.0
@@ -328,14 +274,66 @@ NC here is the total number of groups (sum of nbeads per component).
     return -res_chain
 end
 
-@inline function f_res(out, n, params, T, kk,
-                       ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: SAFTgammaMieModel}
-    res_hs, = f_hs(n, params.meff, params.HSd, kk, Val(NC), Val(ND), Val(2))
-    res_disp  = f_disp(n, params, kk, T, Val(NC), Val(ND), Val(6+ND), M)
-    res_chain = f_chain(n, params, T, kk, Val(NC), Val(ND), M)
-    res_assoc = _assoc_or_zero(n, params, T, kk, Val(NC), Val(ND), M)
-    out[kk] = res_hs + res_chain + res_disp + res_assoc
-    return nothing
+# Chain loop helpers: NCS / MNB come from NTuple type params so loop bounds are always
+# compile-time inside these functions, regardless of how autodiff_deferred specialises.
+
+@inline function _chain_bead_sum(sg_idx_s::NTuple{MNB, Int}, n, HSd, kk, field_idx, nb_s) where MNB
+    _pi = 3.141592653589793
+    acc = 0.0
+    @inbounds for j in 1:MNB        # MNB from WHERE clause → compile-time
+        if j <= nb_s                 # nb_s is runtime but MNB (bound) is compile-time
+            kg = _nti(sg_idx_s, j)
+            dg = HSd[kg]
+            acc += n[kk, field_idx, kg] * 3.0/(4.0*_pi*dg^3)
+        end
+    end
+    return acc
+end
+
+@inline function _chain_ρhc_s(sg_idx_s::NTuple{MNB, Int}, n, kk, nb_s) where MNB
+    acc = 0.0
+    @inbounds for j in 1:MNB        # MNB from WHERE clause → compile-time
+        j <= nb_s || continue
+        acc += n[kk, 1, _nti(sg_idx_s, j)]
+    end
+    return acc
+end
+
+# Model-specific Wertheim Δ for SAFTgammaMie: VR Mie polynomial I(Tr, ρr).
+# Uses params.meff (= m.*S) for ρS and params.assoc_ispec/jspec + params.epsilon_species
+# (nc_spec × nc_spec VR Mie ε at species level) for the reduced temperature Tr.
+@inline function _assoc_delta(p, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v,
+                               ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: SAFTgammaMieModel}
+    p > n_pairs && return 0.0
+    _pi = 3.141592653589793
+    ρS = eps_v
+    @inbounds for k in 1:NC
+        ρS += n[kk, 3, k] * 6.0 / (_pi * params.HSd[k]^3) * params.meff[k]
+    end
+    σ3_x = 0.0
+    @inbounds for k in 1:NC
+        ρ̄k  = n[kk, 3, k] * 6.0 / (_pi * params.HSd[k]^3)
+        xSk = ρ̄k * params.meff[k] / ρS
+        σ3_x += xSk * xSk * params.sigma[k,k]^3
+        @inbounds for l in 1:(k-1)
+            ρ̄l  = n[kk, 3, l] * 6.0 / (_pi * params.HSd[l]^3)
+            xSl = ρ̄l * params.meff[l] / ρS
+            σ3_x += 2.0 * xSk * xSl * params.sigma[k,l]^3
+        end
+    end
+    ρr = ρS * σ3_x
+    is = _nti(params.assoc_ispec, p)
+    js = _nti(params.assoc_jspec, p)
+    Tr = T / (params.epsilon_species[is, js] + eps_v)
+    I_val = 0.0; ρrn = 1.0
+    for ni in 0:10
+        row = _nti(params.VRMie_c, ni + 1); Trm = 1.0
+        for mi in 0:10
+            I_val += _nti(row, mi + 1) * Trm * ρrn; Trm *= Tr
+        end
+        ρrn *= ρr
+    end
+    return expm1(params.assoc_eps[p] / T) * params.assoc_kap[p] * I_val
 end
 
 function preallocate_params(system::DFTSystem{<:SAFTgammaMieModel})

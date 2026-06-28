@@ -126,8 +126,8 @@ function pack_assoc_params_gc(model, HSd)
 end
 
 # Dispatch helper: zero-cost when model has no association (hasfield is compile-time constant)
-@inline _assoc_or_zero(n, params::P, T, kk, vNC, vND, M) where P =
-    hasfield(P, :assoc_eps) ? f_assoc(n, params, T, kk, vNC, vND, params.assoc_n_pairs, M) : 0.0
+@inline _assoc_or_zero(M, kk, n, params::P, T, vNC, vND) where P =
+    hasfield(P, :assoc_eps) ? f_assoc(M, kk, n, params, T, vNC, vND, params.assoc_n_pairs) : 0.0
 
 # ── GPU/Enzyme-compatible kernel helpers ────────────────────────────────────
 
@@ -202,7 +202,7 @@ The `::Val{NP}` general method (NP > 1 pairs) runs 50-iteration relaxed SS.
 
 `_assoc_delta` is dispatched on `::Type{M}` so each model can supply its own Δ formula.
 """
-@inline function f_assoc(n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Val{1}, ::Type{M}) where {NC, ND, M}
+@inline function f_assoc(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}, ::Val{1}) where {NC, ND, M}
     _pi   = 3.141592653589793
     eps_v = 1e-15
     F2    = 2
@@ -271,7 +271,7 @@ The `::Val{NP}` general method (NP > 1 pairs) runs 50-iteration relaxed SS.
            n0_jc * xi_jc * n_jb * (Base.log(abs(X_jb) + eps_v) - 0.5*X_jb + 0.5)
 end
 
-@inline function f_assoc(n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Val{NP}, ::Type{M}) where {NC, ND, NP, M}
+@inline function f_assoc(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}, ::Val{NP}) where {NC, ND, NP, M}
     _pi   = 3.141592653589793
     eps_v = 1e-15
     F2    = 2

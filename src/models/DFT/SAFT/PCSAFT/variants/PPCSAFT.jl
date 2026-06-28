@@ -25,41 +25,34 @@ const DD_consts = (
 
 # ── Enzyme / KernelAbstractions kernel support ──────────────────────────────
 
-@inline function _J2_kernel(mᵢ, mⱼ, ϵᵢⱼ, η, T, corr_a, corr_b)
-    ϵT = ϵᵢⱼ / T
-    m̄  = min(sqrt(mᵢ * mⱼ), 2.0)
-    m1  = 1.0 - 1.0/m̄
-    m2  = m1 * (1.0 - 2.0/m̄)
-    result = 0.0
-    ηn = 1.0
-    for n in 0:4
-        a0, a1, a2 = corr_a[n+1]
-        b0, b1, b2 = corr_b[n+1]
-        result += (a0 + a1*m1 + a2*m2 + (b0 + b1*m1 + b2*m2)*ϵT) * ηn
-        ηn *= η
-    end
-    return result
-end
+"""
+Pointwise residual free energy for PCP-SAFT: identical to PC-SAFT (HS + HC + disp) with
+an additional dipole–dipole polar term (A₂²/(A₂−A₃) Padé approximant).
 
-@inline function _J3_kernel(mᵢ, mⱼ, mₖ, η, corr_c)
-    m̄  = min(cbrt(mᵢ * mⱼ * mₖ), 2.0)
-    m1  = 1.0 - 1.0/m̄
-    m2  = m1 * (1.0 - 2.0/m̄)
-    result = 0.0
-    ηn = 1.0
-    for n in 0:4
-        c0, c1, c2 = corr_c[n+1]
-        result += (c0 + c1*m1 + c2*m2) * ηn
-        ηn *= η
-    end
-    return result
+Field layout (same as PCSAFTModel):
+  1        : ρ (unweighted)
+  2        : ∫ρdz  with 0.5*d → n₀, n₁, n₂
+  3        : ∫ρz²dz with 0.5*d → n₃
+  4..3+ND  : ∫ρzdz with 0.5*d → vector nᵥ
+  4+ND     : ∫ρz²dz with d    → ρ̄hc
+  5+ND     : ∫ρdz  with d    → λ
+  6+ND     : ∫ρz²dz with d*ψ → ρ̄z  (disp + polar)
+"""
+@inline function f_res(::Type{M}, kk, out, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: PCPSAFTModel}
+    res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(2))
+    res_hc  = f_hc(M, kk, n, params, T, Val(NC), Val(ND))
+    res_disp, m̄, ηd = f_disp(M, kk, n, params, T, Val(NC), Val(ND))
+    res_polar = f_polar(M, kk, n, params, T, m̄, ηd, Val(NC), Val(ND))
+    res_assoc = _assoc_or_zero(M, kk, n, params, T, Val(NC), Val(ND))
+    out[kk] = res_hs + res_hc + res_disp + res_polar + res_assoc
+    return nothing
 end
 
 """
 PCP-SAFT dipole–dipole polar term (Padé: A₂²/(A₂−A₃)) at grid point `kk`.
 Takes `m̄` and `ηd` from f_disp output.
 """
-@inline function f_polar(n, params, T, kk, m̄, ηd, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: PCPSAFTModel}
+@inline function f_polar(::Type{M}, kk, n, params, T, m̄, ηd, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: PCPSAFTModel}
     _pi   = 3.141592653589793
     eps_v = 1e-15
     pcp_m   = params.pcp_m
@@ -91,16 +84,14 @@ Takes `m̄` and `ηd` from f_disp output.
             if dip2_i == 0.0; continue; end
             ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
             xᵢ = ρ̄zi_i / ∑ρ̄_p
-            _J2_ii = _J2_kernel(pcp_m[i], pcp_m[i], pcp_ϵ[i,i], ηd, T, ca, cb)
-            _A₂ += xᵢ*xᵢ * dip2_i*dip2_i / (pcp_σ[i,i]*pcp_σ[i,i]*pcp_σ[i,i]) * _J2_ii
-            @inbounds for j in i+1:NC
+            @inbounds for j in 1:NC
                 dip2_j = dip2[j]
                 if dip2_j == 0.0; continue; end
                 ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
                 xⱼ = ρ̄zi_j / ∑ρ̄_p
                 σij3 = pcp_σ[i,j]*pcp_σ[i,j]*pcp_σ[i,j]
                 _J2_ij = _J2_kernel(pcp_m[i], pcp_m[j], pcp_ϵ[i,j], ηd, T, ca, cb)
-                _A₂ += 2.0 * xᵢ * xⱼ * dip2_i * dip2_j / σij3 * _J2_ij
+                _A₂ += xᵢ * xⱼ * dip2_i * dip2_j / σij3 * _J2_ij
             end
         end
         _A₂ *= -_pi * ∑ρ̄_p / (T*T)
@@ -112,29 +103,19 @@ Takes `m̄` and `ηd` from f_disp output.
                 if dip2_i == 0.0; continue; end
                 ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
                 xᵢ = ρ̄zi_i / ∑ρ̄_p
-                a3_i = xᵢ * dip2_i / pcp_σ[i,i]
-                _J3_iii = _J3_kernel(pcp_m[i], pcp_m[i], pcp_m[i], ηd, cc)
-                _A₃ += a3_i*a3_i*a3_i * _J3_iii
-                @inbounds for j in i+1:NC
+                @inbounds for j in 1:NC
                     dip2_j = dip2[j]
                     if dip2_j == 0.0; continue; end
                     ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
                     xⱼ = ρ̄zi_j / ∑ρ̄_p
-                    σij⁻¹  = 1.0 / pcp_σ[i,j]
-                    a3_iij = xᵢ * dip2_i * σij⁻¹
-                    a3_ijj = xⱼ * dip2_j * σij⁻¹
-                    a3_j   = xⱼ * dip2_j / pcp_σ[j,j]
-                    _J3_iij = _J3_kernel(pcp_m[i], pcp_m[i], pcp_m[j], ηd, cc)
-                    _J3_ijj = _J3_kernel(pcp_m[i], pcp_m[j], pcp_m[j], ηd, cc)
-                    _A₃ += 3.0 * a3_iij * a3_ijj * (a3_i*_J3_iij + a3_j*_J3_ijj)
-                    @inbounds for k in j+1:NC
+                    @inbounds for k in 1:NC
                         dip2_k = dip2[k]
                         if dip2_k == 0.0; continue; end
                         ρ̄zi_k = n[kk, idx_ρz, k] * factor / (params.HSd[k]*params.HSd[k]*params.HSd[k])
                         xₖ = ρ̄zi_k / ∑ρ̄_p
                         _J3_ijk = _J3_kernel(pcp_m[i], pcp_m[j], pcp_m[k], ηd, cc)
-                        _A₃ += 6.0 * xᵢ*xⱼ*xₖ * dip2_i*dip2_j*dip2_k *
-                                σij⁻¹ / (pcp_σ[i,k]*pcp_σ[j,k]) * _J3_ijk
+                        _A₃ += xᵢ*xⱼ*xₖ * dip2_i*dip2_j*dip2_k /
+                               (pcp_σ[i,j]*pcp_σ[i,k]*pcp_σ[j,k]) * _J3_ijk
                     end
                 end
             end
@@ -148,27 +129,34 @@ Takes `m̄` and `ηd` from f_disp output.
     return res_polar
 end
 
-"""
-Pointwise residual free energy for PCP-SAFT: identical to PC-SAFT (HS + HC + disp) with
-an additional dipole–dipole polar term (A₂²/(A₂−A₃) Padé approximant).
+@inline function _J2_kernel(mᵢ, mⱼ, ϵᵢⱼ, η, T, corr_a, corr_b)
+    ϵT = ϵᵢⱼ / T
+    m̄  = min(sqrt(mᵢ * mⱼ), 2.0)
+    m1  = 1.0 - 1.0/m̄
+    m2  = m1 * (1.0 - 2.0/m̄)
+    result = 0.0
+    ηn = 1.0
+    for n in 0:4
+        a0, a1, a2 = corr_a[n+1]
+        b0, b1, b2 = corr_b[n+1]
+        result += (a0 + a1*m1 + a2*m2 + (b0 + b1*m1 + b2*m2)*ϵT) * ηn
+        ηn *= η
+    end
+    return result
+end
 
-Field layout (same as PCSAFTModel):
-  1        : ρ (unweighted)
-  2        : ∫ρdz  with 0.5*d → n₀, n₁, n₂
-  3        : ∫ρz²dz with 0.5*d → n₃
-  4..3+ND  : ∫ρzdz with 0.5*d → vector nᵥ
-  4+ND     : ∫ρz²dz with d    → ρ̄hc
-  5+ND     : ∫ρdz  with d    → λ
-  6+ND     : ∫ρz²dz with d*ψ → ρ̄z  (disp + polar)
-"""
-@inline function f_res(out, n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: PCPSAFTModel}
-    res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(2))
-    res_hc  = f_hc(n, params, T, kk, Val(NC), Val(ND), M)
-    res_disp, m̄, ηd = f_disp(n, params, T, kk, Val(NC), Val(ND), M)
-    res_polar = f_polar(n, params, T, kk, m̄, ηd, Val(NC), Val(ND), M)
-    res_assoc = _assoc_or_zero(n, params, T, kk, Val(NC), Val(ND), M)
-    out[kk] = res_hs + res_hc + res_disp + res_polar + res_assoc
-    return nothing
+@inline function _J3_kernel(mᵢ, mⱼ, mₖ, η, corr_c)
+    m̄  = min(cbrt(mᵢ * mⱼ * mₖ), 2.0)
+    m1  = 1.0 - 1.0/m̄
+    m2  = m1 * (1.0 - 2.0/m̄)
+    result = 0.0
+    ηn = 1.0
+    for n in 0:4
+        c0, c1, c2 = corr_c[n+1]
+        result += (c0 + c1*m1 + c2*m2) * ηn
+        ηn *= η
+    end
+    return result
 end
 
 function preallocate_params(system::DFTSystem{<:PCPSAFTModel})

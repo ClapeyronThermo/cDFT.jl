@@ -73,7 +73,7 @@ end
 export length_scale
 
 # ── Enzyme / KernelAbstractions kernel support ──────────────────────────────
-# These constants and helpers are GPU-safe (no heap allocation, no Clapeyron calls).
+# These constants are GPU-safe (no heap allocation, no Clapeyron calls).
 
 const PCSAFT_CORR1 = (
     (0.9105631445, -0.3084016918, -0.0906148351),
@@ -94,25 +94,25 @@ const PCSAFT_CORR2 = (
     (-355.60235612,-165.20769346, -29.666905585)
 )
 
-@inline function I_lite(corr, m̄, η)
-    res = 0.0
-    m2 = (m̄ - 1.0) / m̄
-    m3 = m2 * (m̄ - 2.0) / m̄
-    c1 = corr[1]; res += (c1[1] + m2*c1[2] + m3*c1[3])
-    c2 = corr[2]; res += (c2[1] + m2*c2[2] + m3*c2[3]) * η
-    c3 = corr[3]; res += (c3[1] + m2*c3[2] + m3*c3[3]) * η * η
-    c4 = corr[4]; res += (c4[1] + m2*c4[2] + m3*c4[3]) * η * η * η
-    c5 = corr[5]; res += (c5[1] + m2*c5[2] + m3*c5[3]) * η * η * η * η
-    c6 = corr[6]; res += (c6[1] + m2*c6[2] + m3*c6[3]) * η * η * η * η * η
-    c7 = corr[7]; res += (c7[1] + m2*c7[2] + m3*c7[3]) * η * η * η * η * η * η
-    return res
+"""
+Pointwise residual free energy for PC-SAFT, written in Enzyme/KernelAbstractions-compatible style.
+`out[kk]` accumulates the scalar integrand at grid point `kk`.
+All model parameters are unpacked from `params` (a NamedTuple of device-adapted arrays).
+"""
+@inline function f_res(::Type{M}, kk, out, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: PCSAFTModel}
+    res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(2))
+    res_hc  = f_hc(M, kk, n, params, T, Val(NC), Val(ND))
+    res_disp, _, _ = f_disp(M, kk, n, params, T, Val(NC), Val(ND))
+    res_assoc = _assoc_or_zero(M, kk, n, params, T, Val(NC), Val(ND))
+    out[kk] = res_hs + res_hc + res_disp + res_assoc
+    return nothing
 end
 
 """
 PC-SAFT hard-chain contribution at grid point `kk`.
 Field layout assumed: field 1 = ρ (unweighted), field 4+ND = ρ̄hc, field 5+ND = λ.
 """
-@inline function f_hc(n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: PCSAFTModel}
+@inline function f_hc(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: PCSAFTModel}
     eps_v = 1e-15
     m   = params.m
     HSd = params.HSd
@@ -139,7 +139,7 @@ end
 PC-SAFT dispersion contribution at grid point `kk`. Field 6+ND is the dispersion density.
 Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the polar term.
 """
-@inline function f_disp(n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: PCSAFTModel}
+@inline function f_disp(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: PCSAFTModel}
     _pi    = 3.141592653589793
     eps_v  = 1e-15
     m      = params.m
@@ -163,16 +163,12 @@ Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the po
     m2ϵσ3_1=0.0; m2ϵσ3_2=0.0
     @inbounds for i in 1:NC
         ρzi = n[kk, idx_ρz, i] * factor / (HSd[i]*HSd[i]*HSd[i])
-        @inbounds for j in i:NC
+        @inbounds for j in 1:NC
             ρzj  = n[kk, idx_ρz, j] * factor / (HSd[j]*HSd[j]*HSd[j])
             cij  = ρzi * ρzj * m[i] * m[j] * sigma[i,j]*sigma[i,j]*sigma[i,j]
             eT   = epsilon[i,j] / (T + eps_v)
-            t1   = cij * eT;  t2 = cij * eT * eT
-            if i == j
-                m2ϵσ3_1 += t1;       m2ϵσ3_2 += t2
-            else
-                m2ϵσ3_1 += 2.0*t1;   m2ϵσ3_2 += 2.0*t2
-            end
+            m2ϵσ3_1 += cij * eT
+            m2ϵσ3_2 += cij * eT * eT
         end
     end
     ηd2    = ηd*ηd
@@ -188,18 +184,18 @@ Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the po
     return res_disp, m̄, ηd
 end
 
-"""
-Pointwise residual free energy for PC-SAFT, written in Enzyme/KernelAbstractions-compatible style.
-`out[kk]` accumulates the scalar integrand at grid point `kk`.
-All model parameters are unpacked from `params` (a NamedTuple of device-adapted arrays).
-"""
-@inline function f_res(out, n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: PCSAFTModel}
-    res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(2))
-    res_hc  = f_hc(n, params, T, kk, Val(NC), Val(ND), M)
-    res_disp, _, _ = f_disp(n, params, T, kk, Val(NC), Val(ND), M)
-    res_assoc = _assoc_or_zero(n, params, T, kk, Val(NC), Val(ND), M)
-    out[kk] = res_hs + res_hc + res_disp + res_assoc
-    return nothing
+@inline function I_lite(corr, m̄, η)
+    res = 0.0
+    m2 = (m̄ - 1.0) / m̄
+    m3 = m2 * (m̄ - 2.0) / m̄
+    c1 = corr[1]; res += (c1[1] + m2*c1[2] + m3*c1[3])
+    c2 = corr[2]; res += (c2[1] + m2*c2[2] + m3*c2[3]) * η
+    c3 = corr[3]; res += (c3[1] + m2*c3[2] + m3*c3[3]) * η * η
+    c4 = corr[4]; res += (c4[1] + m2*c4[2] + m3*c4[3]) * η * η * η
+    c5 = corr[5]; res += (c5[1] + m2*c5[2] + m3*c5[3]) * η * η * η * η
+    c6 = corr[6]; res += (c6[1] + m2*c6[2] + m3*c6[3]) * η * η * η * η * η
+    c7 = corr[7]; res += (c7[1] + m2*c7[2] + m3*c7[3]) * η * η * η * η * η * η
+    return res
 end
 
 function preallocate_params(system::DFTSystem{<:PCSAFTModel})

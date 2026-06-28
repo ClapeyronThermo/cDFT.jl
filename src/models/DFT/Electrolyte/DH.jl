@@ -87,8 +87,8 @@ function preallocate_params(system::ElectrolyteDFTSystem, model::DHModel)
     )
 end
 
-@inline function f_res(out, n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: DHModel}
-    out[kk] += f_dh(n, params, T, kk, Val(NC), params.dh_nf_neutral)
+@inline function f_res(::Type{M}, kk, out, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: DHModel}
+    out[kk] += f_dh(M, kk, n, params, T, Val(NC), params.dh_nf_neutral)
     return nothing
 end
 
@@ -100,7 +100,7 @@ is at index `NF_NEUTRAL + 1`.  Neutral components (Z=0) contribute zero to
 `I` and `res` automatically via the Zᵢ² factor — no branching needed.
 `ε_r` is pre-computed at bulk density and stored in `params.dh_eps_r`.
 """
-@inline function f_dh(n, params, T, kk, ::Val{NC}, ::Val{NF_NEUTRAL}) where {NC, NF_NEUTRAL}
+@inline function f_dh(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{NF_NEUTRAL}) where {M, NC, NF_NEUTRAL}
     _pi   = 3.141592653589793
     eps_v = 1e-30
     F_dh  = NF_NEUTRAL + 1

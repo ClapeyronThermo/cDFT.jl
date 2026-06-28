@@ -32,54 +32,14 @@ end
 
 # ── Enzyme / KernelAbstractions kernel support ──────────────────────────────
 
-# GPU-safe inline helpers for COFFEE polar terms
-
-@inline function _J2_coffee_kernel(ϵij, η, T, b2, c2)
-    eT = ϵij / T
-    c0 = b2[1] + c2[1]*eT;  c1 = b2[2] + c2[2]*eT
-    c2v= b2[3] + c2[3]*eT;  c3 = b2[4] + c2[4]*eT
-    c4 = b2[5] + c2[5]*eT
-    return evalpoly(η, (c0, c1, c2v, c3, c4))
-end
-
-@inline function _J3_coffee_kernel(ϵij, η, T, b3, c3)
-    eT = ϵij / T
-    c0 = b3[1] + c3[1]*eT;  c1 = b3[2] + c3[2]*eT
-    c2v= b3[3] + c3[3]*eT;  c3v= b3[4] + c3[4]*eT
-    return evalpoly(η, (c0, c1, c2v, c3v))
-end
-
-@inline function _Iμμ_kernel(ρ̄, T̄, μ, a)
-    return a[1] + a[2]/T̄ + a[3]/(T̄*T̄) + ρ̄*(
-        a[4] + a[5]*μ + a[6]/T̄ + a[7]/(T̄*T̄) + a[8]*ρ̄ + a[9]*ρ̄*ρ̄ + a[10]*ρ̄*μ/T̄)
-end
-
-@inline function _∫odr_kernel(d, ξ1, ξ2, γ12)
-    if d == 0.0
-        s1 = sqrt(abs(1.0 - ξ1*ξ1));  s2 = sqrt(abs(1.0 - ξ2*ξ2))
-        cosΘ = 2.0*ξ1*ξ2 - s1*s2*cos(γ12)
-        return -cosΘ * 5.0/18.0
-    else
-        s1 = sqrt(abs(1.0 - ξ1*ξ1));  s2 = sqrt(abs(1.0 - ξ2*ξ2))
-        A12 = ξ1*ξ2 + s1*s2*cos(γ12)
-        a_  = 3.0*ξ1*ξ2 - A12
-        b_  = d*(ξ1 - ξ2)*(A12 - 3.0)
-        c_  = -d*d*(A12*A12 - 4.0*A12 + 3.0)
-        f_  = 2.0*d*(ξ1 - ξ2)
-        f2  = f_*f_;  f3 = f2*f_
-        g_  = -2.0*d*d*(A12 - 1.0)
-        g2  = g_*g_
-        inv_3f24g2 = 1.0 / (3.0*(f2 - 4.0*g_)*(f2 - 4.0*g_))
-        term1 = (1.0/((1.0+f_+g_)^1.5)) * (
-                2.0*c_*(2.0+f_)*(-8.0-8.0*f_+f2-12.0*g_)
-              + 2.0*b_*(3.0*f3+8.0*g2+2.0*f2*(6.0+g_)+4.0*f_*(2.0+3.0*g_))
-              - 2.0*a_*(3.0*f3+8.0*g_+4.0*f_*g_*(3.0+2.0*g_)+2.0*f2*(1.0+6.0*g_)))
-        term2 = (1.0/((9.0+6.0*f_+4.0*g_)^1.5)) * 4.0 * (
-              - 4.0*c_*(3.0+f_)*(-12.0*f_+f2-6.0*(3.0+2.0*g_))
-              - 2.0*b_*(9.0*f3+16.0*g2+18.0*f_*(3.0+2.0*g_)+f2*(54.0+4.0*g_))
-              + a_*(27.0*f3+108.0*g_+9.0*f2*(3.0+8.0*g_)+4.0*f_*g_*(27.0+8.0*g_)))
-        return -inv_3f24g2 * (term1 + term2)
-    end
+@inline function f_res(::Type{M}, kk, out, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: COFFEEModel}
+    res_hs, n₀, n₂, n₃₃, nv2_1, nv2_2, nv2_3 =
+        f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(1))
+    res_disp = f_disp(M, kk, n, params, T, Val(NC), Val(ND), Val(4+ND))
+    res_ff = f_ff(M, kk, n, params, T, Val(NC), Val(ND))
+    res_nf = f_nf(M, kk, n, params, T, n₀, n₂, n₃₃, nv2_1, nv2_2, nv2_3, Val(NC), Val(ND))
+    out[kk] = res_hs + res_disp + res_ff + res_nf
+    return nothing
 end
 
 """
@@ -94,7 +54,7 @@ Field layout (5 fields):
   3+ND     : ∫ρz²dz with ψ*d (ψ=1.3862) → far-field polar density
   4+ND     : ∫ρz²dz with ψ1*d → dispersion density (per-component ψ1)
 """
-@inline function f_ff(n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: COFFEEModel}
+@inline function f_ff(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: COFFEEModel}
     _pi   = 3.141592653589793
     eps_v = 1e-15
     HSd   = params.HSd
@@ -178,7 +138,24 @@ Field layout (5 fields):
     return res_polar
 end
 
-@inline function f_nf(n, params, T, kk, n₀, n₂, n₃₃, nv2_1, nv2_2, nv2_3, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: COFFEEModel}
+# GPU-safe inline helpers for COFFEE polar terms
+
+@inline function _J2_coffee_kernel(ϵij, η, T, b2, c2)
+    eT = ϵij / T
+    c0 = b2[1] + c2[1]*eT;  c1 = b2[2] + c2[2]*eT
+    c2v= b2[3] + c2[3]*eT;  c3 = b2[4] + c2[4]*eT
+    c4 = b2[5] + c2[5]*eT
+    return evalpoly(η, (c0, c1, c2v, c3, c4))
+end
+
+@inline function _J3_coffee_kernel(ϵij, η, T, b3, c3)
+    eT = ϵij / T
+    c0 = b3[1] + c3[1]*eT;  c1 = b3[2] + c3[2]*eT
+    c2v= b3[3] + c3[3]*eT;  c3v= b3[4] + c3[4]*eT
+    return evalpoly(η, (c0, c1, c2v, c3v))
+end
+
+@inline function f_nf(::Type{M}, kk, n, params, T, n₀, n₂, n₃₃, nv2_1, nv2_2, nv2_3, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: COFFEEModel}
     _pi   = 3.141592653589793
     eps_v = 1e-15
     HSd       = params.HSd
@@ -218,15 +195,37 @@ end
     return 19.0*_pi/12.0 * n₀ * ρ̄_nf * g_hs_nf * Base.log(4.0*_pi/(Q_nf + eps_v))
 end
 
-@inline function f_res(out, n, params, T, kk,
-                       ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: COFFEEModel}
-    res_hs, n₀, n₂, n₃₃, nv2_1, nv2_2, nv2_3 =
-        f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(1))
-    res_disp = f_disp(n, params, kk, T, Val(NC), Val(ND), Val(4+ND), M)
-    res_ff = f_ff(n, params, T, kk, Val(NC), Val(ND), M)
-    res_nf = f_nf(n, params, T, kk, n₀, n₂, n₃₃, nv2_1, nv2_2, nv2_3, Val(NC), Val(ND), M)
-    out[kk] = res_hs + res_disp + res_ff + res_nf
-    return nothing
+@inline function _Iμμ_kernel(ρ̄, T̄, μ, a)
+    return a[1] + a[2]/T̄ + a[3]/(T̄*T̄) + ρ̄*(
+        a[4] + a[5]*μ + a[6]/T̄ + a[7]/(T̄*T̄) + a[8]*ρ̄ + a[9]*ρ̄*ρ̄ + a[10]*ρ̄*μ/T̄)
+end
+
+@inline function _∫odr_kernel(d, ξ1, ξ2, γ12)
+    if d == 0.0
+        s1 = sqrt(abs(1.0 - ξ1*ξ1));  s2 = sqrt(abs(1.0 - ξ2*ξ2))
+        cosΘ = 2.0*ξ1*ξ2 - s1*s2*cos(γ12)
+        return -cosΘ * 5.0/18.0
+    else
+        s1 = sqrt(abs(1.0 - ξ1*ξ1));  s2 = sqrt(abs(1.0 - ξ2*ξ2))
+        A12 = ξ1*ξ2 + s1*s2*cos(γ12)
+        a_  = 3.0*ξ1*ξ2 - A12
+        b_  = d*(ξ1 - ξ2)*(A12 - 3.0)
+        c_  = -d*d*(A12*A12 - 4.0*A12 + 3.0)
+        f_  = 2.0*d*(ξ1 - ξ2)
+        f2  = f_*f_;  f3 = f2*f_
+        g_  = -2.0*d*d*(A12 - 1.0)
+        g2  = g_*g_
+        inv_3f24g2 = 1.0 / (3.0*(f2 - 4.0*g_)*(f2 - 4.0*g_))
+        term1 = (1.0/((1.0+f_+g_)^1.5)) * (
+                2.0*c_*(2.0+f_)*(-8.0-8.0*f_+f2-12.0*g_)
+              + 2.0*b_*(3.0*f3+8.0*g2+2.0*f2*(6.0+g_)+4.0*f_*(2.0+3.0*g_))
+              - 2.0*a_*(3.0*f3+8.0*g_+4.0*f_*g_*(3.0+2.0*g_)+2.0*f2*(1.0+6.0*g_)))
+        term2 = (1.0/((9.0+6.0*f_+4.0*g_)^1.5)) * 4.0 * (
+              - 4.0*c_*(3.0+f_)*(-12.0*f_+f2-6.0*(3.0+2.0*g_))
+              - 2.0*b_*(9.0*f3+16.0*g2+18.0*f_*(3.0+2.0*g_)+f2*(54.0+4.0*g_))
+              + a_*(27.0*f3+108.0*g_+9.0*f2*(3.0+8.0*g_)+4.0*f_*g_*(27.0+8.0*g_)))
+        return -inv_3f24g2 * (term1 + term2)
+    end
 end
 
 function preallocate_params(system::DFTSystem{<:COFFEEModel})

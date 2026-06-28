@@ -14,7 +14,7 @@ Pointwise residual free energy for DGT, written in Enzyme-compatible style.
 The bulk EoS term calls Clapeyron.a_res with the model stored in Const(params);
 the gradient correction is inlined arithmetic over the κ matrix.
 """
-@inline function f_res(out, n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: DGTSystem}
+@inline function f_res(::Type{M}, kk, out, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: DGTSystem}
     κ = params.kappa
 
     ∑ρ = zero(eltype(n))
