@@ -26,9 +26,11 @@ function _∫(f::Array{Float64},dz)
 end
 
 function convolve!(result, profile, kernel, P, iP, buf)
-    copyto!(buf, complex.(profile))
-    P * buf                            # in-place: buf is overwritten with FFT result
-    elmul!(buf,buf,kernel)
-    iP * buf              # inverse transform on contiguous buffer
-    copyto!(result, real.(buf))      # copy result back
+    if profile !== buf
+        buf .= complex.(profile)
+    end
+    P * buf
+    elmul!(buf, buf, kernel)
+    iP * buf
+    result .= real.(buf)
 end

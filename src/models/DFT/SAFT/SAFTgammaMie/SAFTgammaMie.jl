@@ -1,6 +1,31 @@
 using Clapeyron: SAFTgammaMieModel
 using Clapeyron: d_gc_av
 
+# Chain loop helpers: NCS / MNB come from NTuple type params so loop bounds are always
+# compile-time inside these functions, regardless of how autodiff_deferred specialises.
+
+@inline function _chain_bead_sum(sg_idx_s::NTuple{MNB, Int}, n, HSd, kk, field_idx, nb_s) where MNB
+    _pi = 3.141592653589793
+    acc = 0.0
+    @inbounds for j in 1:MNB        # MNB from WHERE clause → compile-time
+        if j <= nb_s                 # nb_s is runtime but MNB (bound) is compile-time
+            kg = _nti(sg_idx_s, j)
+            dg = HSd[kg]
+            acc += n[kk, field_idx, kg] * 3.0/(4.0*_pi*dg^3)
+        end
+    end
+    return acc
+end
+
+@inline function _chain_ρhc_s(sg_idx_s::NTuple{MNB, Int}, n, kk, nb_s) where MNB
+    acc = 0.0
+    @inbounds for j in 1:MNB        # MNB from WHERE clause → compile-time
+        j <= nb_s || continue
+        acc += n[kk, 1, _nti(sg_idx_s, j)]
+    end
+    return acc
+end
+
 function DFTSystem(model::SAFTgammaMieModel,structure::DFTStructure,options::DFTOptions)
     model = expand_model(model)
     species = get_species(model, structure)
@@ -210,18 +235,13 @@ NC here is the total number of groups (sum of nbeads per component).
     λa_s     = params.lambda_a_species_t
     nc_s     = length(nbeads_c)
 
-    ρS_c  = eps_v
     sg_idx = params.species_group_idx
+    ρS_c  = eps_v
     @inbounds for s in 1:nc_s
-        nb_s = _nti(nbeads_c, s)
-        ρ̄hc_s = 0.0
-        @inbounds for j in 1:nb_s
-            kg = sg_idx[s][j]
-            dg = HSd[kg]
-            ρ̄hc_s += n[kk, idx_ζ_c, kg] * 3.0/(4.0*_pi*dg^3)
-        end
-        ρ̄hc_s /= Float64(nb_s)
-        ρS_c += ρ̄hc_s * m_s[s]
+        nb_s     = _nti(nbeads_c, s)
+        sg_idx_s = _nti(sg_idx, s)      # NTuple{MNB,Int} — Const to Enzyme
+        ρ̄hc_s   = _chain_bead_sum(sg_idx_s, n, HSd, kk, idx_ζ_c, nb_s)
+        ρS_c    += (ρ̄hc_s / Float64(nb_s)) * m_s[s]
     end
     kρS_c = ρS_c * _pi/6.0/8.0
 
@@ -256,16 +276,14 @@ NC here is the total number of groups (sum of nbeads per component).
 
     res_chain = 0.0
     @inbounds for s in 1:nc_s
-        nb_s = _nti(nbeads_c, s)
-        ρhc_s = 0.0
-        @inbounds for j in 1:nb_s
-            kg = sg_idx[s][j]
-            ρhc_s += n[kk, 1, kg]
-        end
-        ρhc_s /= Float64(nb_s)
+        nb_s     = _nti(nbeads_c, s)
+        sg_idx_s = _nti(sg_idx, s)          # NTuple{MNB,Int} — Const to Enzyme
+        ρhc_s    = _chain_ρhc_s(sg_idx_s, n, kk, nb_s)
+        ρhc_s   /= Float64(nb_s)
 
         di_s = HSd_s[s]
-        λa_c = λa_s[s][s];  λr_c = λr_s[s][s]
+        λa_c = _nti(_nti(λa_s, s), s)       # use _nti to avoid jl_get_nth_field_checked on GPU
+        λr_c = _nti(_nti(λr_s, s), s)
         _Cc  = _Cλ_kernel(λa_c, λr_c)
         x0c  = σ_s[s,s] / di_s
         ϵiic = ϵ_s[s,s]

@@ -1,5 +1,23 @@
 using Clapeyron: HeterogcPCPSAFT, pcp_segment, pcp_sigma, pcp_epsilon, pcp_dipole2
 
+# Bond-loop helper: NB is a WHERE-clause type param so the loop bound is always
+# compile-time inside this function, regardless of how autodiff_deferred specialises.
+@inline function _f_hc_bonds(n, bond_k::NTuple{NB, Int32}, bond_l::NTuple{NB, Int32},
+                               HSd, kk, ζ₂, inv1ζ₃) where NB
+    eps_v = 1e-15
+    res_hc = 0.0
+    @inbounds for ib in 1:NB
+        k = _nti(bond_k, ib); l = _nti(bond_l, ib)
+        dk = HSd[k]; dl = HSd[l]
+        r_HSd = dk * dl / (dk + dl)
+        ζ₂_ov3 = ζ₂ * inv1ζ₃
+        yᵈᵈ = inv1ζ₃ + 3.0*r_HSd*ζ₂_ov3*inv1ζ₃ + 2.0*r_HSd^2*ζ₂_ov3^2*inv1ζ₃
+        ρhck = n[kk, 1, k]
+        res_hc -= ρhck * 0.5 * Base.log(abs(yᵈᵈ) + eps_v)
+    end
+    return res_hc
+end
+
 function DFTSystem(model::HeterogcPCPSAFT,structure::DFTStructure,options::DFTOptions)
     model = expand_model(model)
     species = get_species(model, structure)
@@ -132,17 +150,7 @@ NC = total number of groups (sum of nbeads per component).
     ζ₃ *= 0.125; ζ₂ *= 0.125
     inv1ζ₃ = 1.0 / (1.0 - ζ₃ + eps_v)
 
-    res_hc = 0.0
-    @inbounds for ib in 1:length(bond_k)
-        k = _nti(bond_k, ib); l = _nti(bond_l, ib)
-        dk = HSd[k]; dl = HSd[l]
-        r_HSd = dk * dl / (dk + dl)
-        ζ₂_ov3 = ζ₂ * inv1ζ₃
-        yᵈᵈ = inv1ζ₃ + 3.0*r_HSd*ζ₂_ov3*inv1ζ₃ + 2.0*r_HSd^2*ζ₂_ov3^2*inv1ζ₃
-        ρhck = n[kk, 1, k]
-        res_hc += -ρhck * 0.5 * Base.log(abs(yᵈᵈ) + eps_v)
-    end
-    return res_hc
+    return _f_hc_bonds(n, bond_k, bond_l, HSd, kk, ζ₂, inv1ζ₃)
 end
 
 @inline function f_disp(n, params, T, kk, ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: HeterogcPCPSAFT}

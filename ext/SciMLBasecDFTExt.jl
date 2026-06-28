@@ -15,7 +15,7 @@ module SciMLBasecDFTExt
         nd       = length(ngrid)
 
         map_grad =  2π .* k .* im
-        map_lapl = -(2π)^2 .* sum(k.^2, dims=nd+1)
+        map_lapl = dropdims(-(2π)^2 .* sum(k.^2, dims=nd+1), dims=nd+1)
 
         tmp      = KA.allocate(system.options.device, Float64, ngrid...)
         buf      = KA.allocate(system.options.device, ComplexF64, ngrid...)
@@ -27,7 +27,7 @@ module SciMLBasecDFTExt
         μ, cache_model, cache_external_field, cache_propagator = cDFT.preallocate(system, ρ)
 
         function ddft_rhs_log!(dη, η, params, t)
-            @. ρ = exp(clamp(η, -100, 50))
+            @. ρ = exp(clamp(η, -50, 30))
             # println(t, " ", minimum(ρ), " ", maximum(ρ))
             # println(t, " ", minimum(μ), " ", maximum(μ))
 
