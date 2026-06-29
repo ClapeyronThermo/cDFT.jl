@@ -55,8 +55,6 @@ Field layout (5 fields):
   4+ND     : ∫ρz²dz with ψ1*d → dispersion density (per-component ψ1)
 """
 @inline function f_ff(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: COFFEEModel}
-    _pi   = 3.141592653589793
-    eps_v = 1e-15
     HSd   = params.HSd
     m_seg = params.m
     pcp_ϵ = params.pcp_epsilon
@@ -67,14 +65,14 @@ Field layout (5 fields):
     cb2   = params.coffee_b2;  cc2 = params.coffee_c2
     cb3   = params.coffee_b3;  cc3 = params.coffee_c3
 
-    ∑ρ̄_ff = eps_v;  η_ff = 0.0
+    ∑ρ̄_ff = 0.0;  η_ff = 0.0
     @inbounds for i in 1:NC
         di    = HSd[i]
-        ρ̄i_ff = n[kk,idx_ff,i] * 3.0/(4.0*ψff^3*_pi*di*di*di)
+        ρ̄i_ff = n[kk,idx_ff,i] * 3.0/(4.0*ψff^3*π*di*di*di)
         ∑ρ̄_ff += ρ̄i_ff
         η_ff  += m_seg[i] * ρ̄i_ff * di*di*di
     end
-    η_ff *= _pi/6.0
+    η_ff *= π/6.0
 
     has_polar = false
     @inbounds for i in 1:NC
@@ -86,33 +84,33 @@ Field layout (5 fields):
         _A₂ = 0.0
         @inbounds for i in 1:NC
             d2i = dip2[i]; if d2i == 0.0; continue; end
-            ρ̄i = n[kk,idx_ff,i] * 3.0/(4.0*ψff^3*_pi*HSd[i]^3)
+            ρ̄i = n[kk,idx_ff,i] * 3.0/(4.0*ψff^3*π*HSd[i]^3)
             xi = ρ̄i / ∑ρ̄_ff
             J2ii = _J2_coffee_kernel(pcp_ϵ[i,i], η_ff, T, cb2, cc2)
             _A₂ += xi*xi * d2i*d2i / (pcp_σ[i,i]*pcp_σ[i,i]*pcp_σ[i,i]) * J2ii
             @inbounds for j in (i+1):NC
                 d2j = dip2[j]; if d2j == 0.0; continue; end
-                ρ̄j = n[kk,idx_ff,j] * 3.0/(4.0*ψff^3*_pi*HSd[j]^3)
+                ρ̄j = n[kk,idx_ff,j] * 3.0/(4.0*ψff^3*π*HSd[j]^3)
                 xj = ρ̄j / ∑ρ̄_ff
                 σij3 = pcp_σ[i,j]*pcp_σ[i,j]*pcp_σ[i,j]
                 J2ij = _J2_coffee_kernel(pcp_ϵ[i,j], η_ff, T, cb2, cc2)
                 _A₂ += 2.0*xi*xj * d2i*d2j / σij3 * J2ij
             end
         end
-        _A₂ *= -_pi * ∑ρ̄_ff / (T*T)
+        _A₂ *= -π * ∑ρ̄_ff / (T*T)
 
-        if abs(_A₂) > eps_v
+        if abs(_A₂) > 0.0
             _A₃ = 0.0
             @inbounds for i in 1:NC
                 d2i = dip2[i]; if d2i == 0.0; continue; end
-                ρ̄i = n[kk,idx_ff,i] * 3.0/(4.0*ψff^3*_pi*HSd[i]^3)
+                ρ̄i = n[kk,idx_ff,i] * 3.0/(4.0*ψff^3*π*HSd[i]^3)
                 xi  = ρ̄i / ∑ρ̄_ff
                 a3i = xi * d2i / pcp_σ[i,i]
                 J3iii = _J3_coffee_kernel(pcp_ϵ[i,i], η_ff, T, cb3, cc3)
                 _A₃ += a3i*a3i*a3i * J3iii
                 @inbounds for j in (i+1):NC
                     d2j = dip2[j]; if d2j == 0.0; continue; end
-                    ρ̄j = n[kk,idx_ff,j] * 3.0/(4.0*ψff^3*_pi*HSd[j]^3)
+                    ρ̄j = n[kk,idx_ff,j] * 3.0/(4.0*ψff^3*π*HSd[j]^3)
                     xj   = ρ̄j / ∑ρ̄_ff
                     σij⁻¹ = 1.0 / pcp_σ[i,j]
                     a3iij = xi*d2i*σij⁻¹;  a3ijj = xj*d2j*σij⁻¹
@@ -122,7 +120,7 @@ Field layout (5 fields):
                     _A₃ += 3.0*a3iij*a3ijj*(a3i*J3iij + a3j*J3ijj)
                     @inbounds for kk2 in (j+1):NC
                         d2k = dip2[kk2]; if d2k == 0.0; continue; end
-                        ρ̄k = n[kk,idx_ff,kk2] * 3.0/(4.0*ψff^3*_pi*HSd[kk2]^3)
+                        ρ̄k = n[kk,idx_ff,kk2] * 3.0/(4.0*ψff^3*π*HSd[kk2]^3)
                         xk  = ρ̄k / ∑ρ̄_ff
                         J3ijk = _J3_coffee_kernel(pcp_ϵ[i,j], η_ff, T, cb3, cc3)
                         _A₃ += 6.0*xi*xj*xk * d2i*d2j*d2k *
@@ -130,9 +128,9 @@ Field layout (5 fields):
                     end
                 end
             end
-            _A₃ *= -4.0*_pi*_pi/3.0 * ∑ρ̄_ff*∑ρ̄_ff / (T*T*T)
+            _A₃ *= -4.0*π*π/3.0 * ∑ρ̄_ff*∑ρ̄_ff / (T*T*T)
             denom_p = _A₂ - _A₃
-            res_polar = ∑ρ̄_ff * _A₂*_A₂ / (denom_p + eps_v)
+            res_polar = ∑ρ̄_ff * _A₂*_A₂ / denom_p
         end
     end
     return res_polar
@@ -156,23 +154,21 @@ end
 end
 
 @inline function f_nf(::Type{M}, kk, n, params, T, n₀, n₂, n₃₃, nv2_1, nv2_2, nv2_3, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: COFFEEModel}
-    _pi   = 3.141592653589793
-    eps_v = 1e-15
     HSd       = params.HSd
     nf_d      = params.nf_d
     nf_mu2    = params.nf_mu2
-    nf_mu     = sqrt(abs(nf_mu2) + eps_v)
+    nf_mu     = sqrt(abs(nf_mu2))
     nf_eps    = params.nf_epsilon
     nf_sigrat = params.nf_sigma_ratio
     corr_I    = params.coffee_corr_I
     xi_x      = params.xi_x;  xi_w = params.xi_w
     gamma_x   = params.gamma_x;  gamma_w = params.gamma_w
 
-    ρ̄_nf   = n₃₃ * 6.0/_pi * nf_sigrat
-    T̄_nf   = T / (nf_eps + eps_v)
+    ρ̄_nf   = n₃₃ * 6.0/π * nf_sigrat
+    T̄_nf   = T / nf_eps
     Iμμval = _Iμμ_kernel(ρ̄_nf, T̄_nf, nf_mu, corr_I)
 
-    coeff = -24.0/19.0 * nf_mu2 / (T̄_nf + eps_v) * Iμμval
+    coeff = -24.0/19.0 * nf_mu2 / T̄_nf * Iμμval
     Q_nf = 0.0
     @inbounds for i in 1:25
         ξ1i = xi_x[i]; w1i = xi_w[i]
@@ -188,11 +184,11 @@ end
 
     nv2sq_nf = nv2_1*nv2_1 + nv2_2*nv2_2 + nv2_3*nv2_3
     di1  = HSd[1]
-    ξ_nf = 1.0 - nv2sq_nf / (n₂*n₂ + eps_v)
-    g_hs_nf = 1.0/(1.0-n₃₃+eps_v) + di1*ξ_nf*n₂/(4.0*(1.0-n₃₃+eps_v)^2) +
-              di1*di1/4.0*n₂*n₂*ξ_nf/(18.0*(1.0-n₃₃+eps_v)^3)
+    ξ_nf = 1.0 - nv2sq_nf / (n₂*n₂)
+    g_hs_nf = 1.0/(1.0-n₃₃) + di1*ξ_nf*n₂/(4.0*(1.0-n₃₃)^2) +
+              di1*di1/4.0*n₂*n₂*ξ_nf/(18.0*(1.0-n₃₃)^3)
 
-    return 19.0*_pi/12.0 * n₀ * ρ̄_nf * g_hs_nf * Base.log(4.0*_pi/(Q_nf + eps_v))
+    return 19.0*π/12.0 * n₀ * ρ̄_nf * g_hs_nf * Base.log(4.0*π/Q_nf)
 end
 
 @inline function _Iμμ_kernel(ρ̄, T̄, μ, a)

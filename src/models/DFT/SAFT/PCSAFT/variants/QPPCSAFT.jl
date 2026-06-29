@@ -71,8 +71,6 @@ end
 QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions.
 """
 @inline function f_polar(::Type{M}, kk, n, params, T, m̄, ηd, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: QPCPSAFTModel}
-    _pi   = 3.141592653589793
-    eps_v = 1e-15
     pcp_m = params.pcp_m
     pcp_ϵ = params.pcp_epsilon
     pcp_σ = params.pcp_sigma
@@ -84,8 +82,8 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
 
     ψ      = 1.3862
     idx_ρz = 6 + ND
-    factor = 3.0 / (4.0*ψ*ψ*ψ*_pi)
-    ∑ρ̄_p  = eps_v
+    factor = 3.0 / (4.0*ψ*ψ*ψ*π)
+    ∑ρ̄_p  = 0.0
     @inbounds for i in 1:NC
         ∑ρ̄_p += n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
     end
@@ -116,9 +114,9 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
                 _A₂_dd += xᵢ * xⱼ * dip2_i * dip2_j / σij3 * _J2_ij
             end
         end
-        _A₂_dd *= -_pi * ∑ρ̄_p / (T*T)
+        _A₂_dd *= -π * ∑ρ̄_p / (T*T)
 
-        if abs(_A₂_dd) > eps_v
+        if abs(_A₂_dd) > 0.0
             _A₃_dd = 0.0
             @inbounds for i in 1:NC
                 dip2_i = dip2[i]
@@ -141,9 +139,9 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
                     end
                 end
             end
-            _A₃_dd *= -4.0*_pi*_pi/3.0 * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
+            _A₃_dd *= -4.0*π*π/3.0 * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
             denom_dd = _A₂_dd - _A₃_dd
-            res_polar += ∑ρ̄_p * _A₂_dd*_A₂_dd / (denom_dd + eps_v)
+            res_polar += ∑ρ̄_p * _A₂_dd*_A₂_dd / denom_dd
         end
     end
 
@@ -166,9 +164,9 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
                 _A₂_qq += xᵢ * xⱼ * quad2_i * quad2_j / σij7 * _J2_ij
             end
         end
-        _A₂_qq *= -(9.0/16.0) * _pi * ∑ρ̄_p / (T*T)
+        _A₂_qq *= -(9.0/16.0) * π * ∑ρ̄_p / (T*T)
 
-        if abs(_A₂_qq) > eps_v
+        if abs(_A₂_qq) > 0.0
             _A₃_qq = 0.0
             @inbounds for i in 1:NC
                 quad2_i = quad2[i]
@@ -194,9 +192,9 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
                     end
                 end
             end
-            _A₃_qq *= (9.0*_pi*_pi/16.0) * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
+            _A₃_qq *= (9.0*π*π/16.0) * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
             denom_qq = _A₂_qq - _A₃_qq
-            res_polar += ∑ρ̄_p * _A₂_qq*_A₂_qq / (denom_qq + eps_v)
+            res_polar += ∑ρ̄_p * _A₂_qq*_A₂_qq / denom_qq
         end
     end
 
@@ -219,9 +217,9 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
                 _A₂_dq += xᵢ * xⱼ * dip2_i * quad2_j / σij5 * _J2_ij
             end
         end
-        _A₂_dq *= -(9.0/4.0) * _pi * ∑ρ̄_p / (T*T)
+        _A₂_dq *= -(9.0/4.0) * π * ∑ρ̄_p / (T*T)
 
-        if abs(_A₂_dq) > eps_v
+        if abs(_A₂_dq) > 0.0
             _A₃_dq = 0.0
             @inbounds for i in 1:NC
                 dip2_i = dip2[i]
@@ -251,7 +249,7 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
             end
             _A₃_dq *= -∑ρ̄_p*∑ρ̄_p / (T*T*T)
             denom_dq = _A₂_dq - _A₃_dq
-            res_polar += ∑ρ̄_p * _A₂_dq*_A₂_dq / (denom_dq + eps_v)
+            res_polar += ∑ρ̄_p * _A₂_dq*_A₂_dq / denom_dq
         end
     end
 

@@ -1,8 +1,9 @@
 using Clapeyron: SAFTgammaMieModel
 using Clapeyron: d_gc_av
 
-function DFTSystem(model::SAFTgammaMieModel,structure::DFTStructure,options::DFTOptions)
-    model = expand_model(model)
+function DFTSystem(model::SAFTgammaMieModel, structure::DFTStructure, options::DFTOptions;
+                   mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
+    model = expand_model(model, mol_structure)
     species = get_species(model, structure)
     fields = get_fields(model, species, structure, options.device)
     propagator = get_propagator(model, species, structure, options.device)
@@ -11,8 +12,9 @@ function DFTSystem(model::SAFTgammaMieModel,structure::DFTStructure,options::DFT
     return DFTSystem(model, species, structure, fields, nothing, propagator, options, chunksize)
 end
 
-function DFTSystem(model::SAFTgammaMieModel,structure::DFTStructure, external_field,options::DFTOptions)
-    model = expand_model(model)
+function DFTSystem(model::SAFTgammaMieModel, structure::DFTStructure, external_field, options::DFTOptions;
+                   mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
+    model = expand_model(model, mol_structure)
     species = get_species(model, structure)
     fields = get_fields(model, species, structure, options.device)
     propagator = get_propagator(model, species, structure, options.device)
@@ -88,12 +90,13 @@ end
 
 
 
-function expand_model(model::SAFTgammaMieModel) 
-    
+function expand_model(model::SAFTgammaMieModel,
+        mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
+
     nspecies = length(model)
 
     #Expand groups
-    grouparam,ngroups_k = expand_groups(model)
+    grouparam,ngroups_k = expand_groups(model, mol_structure)
     
     #Expand the sites 
     siteparams = expand_sites(model, grouparam, ngroups_k)
@@ -164,9 +167,6 @@ Field layout (same as SAFTVRMieModel):
 NC here is the total number of groups (sum of nbeads per component).
 """
 @inline function f_chain(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: SAFTgammaMieModel}
-    _pi   = 3.141592653589793
-    eps_v = 1e-15
-
     HSd    = params.HSd
     meff   = params.meff
     σ      = params.sigma
@@ -184,16 +184,16 @@ NC here is the total number of groups (sum of nbeads per component).
     nc_s     = length(nbeads_c)
 
     sg_idx = params.species_group_idx
-    ρS_c  = eps_v
+    ρS_c  = 0.0
     @inbounds for s in 1:nc_s
         nb_s     = _nti(nbeads_c, s)
         sg_idx_s = _nti(sg_idx, s)      # NTuple{MNB,Int} — Const to Enzyme
         ρ̄hc_s   = _chain_bead_sum(sg_idx_s, n, HSd, kk, idx_ζ_c, nb_s)
         ρS_c    += (ρ̄hc_s / Float64(nb_s)) * m_s[s]
     end
-    kρS_c = ρS_c * _pi/6.0/8.0
+    kρS_c = ρS_c * π/6.0/8.0
 
-    ρhc_gc_total = eps_v
+    ρhc_gc_total = 0.0
     @inbounds for kg in 1:NC
         ρhc_gc_total += n[kk, 1, kg]
     end
@@ -202,7 +202,7 @@ NC here is the total number of groups (sum of nbeads per component).
         z_gc_kg = n[kk, 1, kg] / ρhc_gc_total
         m̄_gc += z_gc_kg * meff[kg]
     end
-    m̄inv_gc = 1.0/(m̄_gc + eps_v)
+    m̄inv_gc = 1.0/m̄_gc
 
     ζ_Xc = 0.0;  σ3_xc = 0.0
     @inbounds for i in 1:NC
@@ -217,7 +217,7 @@ NC here is the total number of groups (sum of nbeads per component).
             ζ_Xc  += kρS_c*x_Si_c*x_Sj_c*(di_c+dj_c)^3
         end
     end
-    ζstc = σ3_xc * ρS_c * _pi/6.0
+    ζstc = σ3_xc * ρS_c * π/6.0
     _KHSc, _∂KHSc = _KHS_fdf_kernel(ρS_c, ζ_Xc)
 
     res_chain = 0.0
@@ -269,7 +269,7 @@ NC here is the total number of groups (sum of nbeads per component).
         gMiec = gHSc * exp(ϵiic/T * g1c/gHSc + (ϵiic/T)^2 * g2c/gHSc)
 
         ms = m_s[s]
-        res_chain += ρhc_s * Base.log(abs(gMiec) + eps_v) * (ms - 1.0)
+        res_chain += ρhc_s * Base.log(abs(gMiec)) * (ms - 1.0)
     end
     return -res_chain
 end
@@ -278,13 +278,12 @@ end
 # compile-time inside these functions, regardless of how autodiff_deferred specialises.
 
 @inline function _chain_bead_sum(sg_idx_s::NTuple{MNB, Int}, n, HSd, kk, field_idx, nb_s) where MNB
-    _pi = 3.141592653589793
     acc = 0.0
     @inbounds for j in 1:MNB        # MNB from WHERE clause → compile-time
         if j <= nb_s                 # nb_s is runtime but MNB (bound) is compile-time
             kg = _nti(sg_idx_s, j)
             dg = HSd[kg]
-            acc += n[kk, field_idx, kg] * 3.0/(4.0*_pi*dg^3)
+            acc += n[kk, field_idx, kg] * 3.0/(4.0*π*dg^3)
         end
     end
     return acc
@@ -302,21 +301,20 @@ end
 # Model-specific Wertheim Δ for SAFTgammaMie: VR Mie polynomial I(Tr, ρr).
 # Uses params.meff (= m.*S) for ρS and params.assoc_ispec/jspec + params.epsilon_species
 # (nc_spec × nc_spec VR Mie ε at species level) for the reduced temperature Tr.
-@inline function _assoc_delta(p, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v,
+@inline function _assoc_delta(p, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix,
                                ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: SAFTgammaMieModel}
     p > n_pairs && return 0.0
-    _pi = 3.141592653589793
-    ρS = eps_v
+    ρS = 0.0
     @inbounds for k in 1:NC
-        ρS += n[kk, 3, k] * 6.0 / (_pi * params.HSd[k]^3) * params.meff[k]
+        ρS += n[kk, 3, k] * 6.0 / (π * params.HSd[k]^3) * params.meff[k]
     end
     σ3_x = 0.0
     @inbounds for k in 1:NC
-        ρ̄k  = n[kk, 3, k] * 6.0 / (_pi * params.HSd[k]^3)
+        ρ̄k  = n[kk, 3, k] * 6.0 / (π * params.HSd[k]^3)
         xSk = ρ̄k * params.meff[k] / ρS
         σ3_x += xSk * xSk * params.sigma[k,k]^3
         @inbounds for l in 1:(k-1)
-            ρ̄l  = n[kk, 3, l] * 6.0 / (_pi * params.HSd[l]^3)
+            ρ̄l  = n[kk, 3, l] * 6.0 / (π * params.HSd[l]^3)
             xSl = ρ̄l * params.meff[l] / ρS
             σ3_x += 2.0 * xSk * xSl * params.sigma[k,l]^3
         end
@@ -324,7 +322,7 @@ end
     ρr = ρS * σ3_x
     is = _nti(params.assoc_ispec, p)
     js = _nti(params.assoc_jspec, p)
-    Tr = T / (params.epsilon_species[is, js] + eps_v)
+    Tr = T / params.epsilon_species[is, js]
     I_val = 0.0; ρrn = 1.0
     for ni in 0:10
         row = _nti(params.VRMie_c, ni + 1); Trm = 1.0

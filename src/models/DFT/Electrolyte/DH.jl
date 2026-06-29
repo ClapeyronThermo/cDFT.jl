@@ -101,8 +101,6 @@ is at index `NF_NEUTRAL + 1`.  Neutral components (Z=0) contribute zero to
 `ε_r` is pre-computed at bulk density and stored in `params.dh_eps_r`.
 """
 @inline function f_dh(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{NF_NEUTRAL}) where {M, NC, NF_NEUTRAL}
-    _pi   = 3.141592653589793
-    eps_v = 1e-30
     F_dh  = NF_NEUTRAL + 1
     ε_r   = params.dh_eps_r
 
@@ -110,24 +108,24 @@ is at index `NF_NEUTRAL + 1`.  Neutral components (Z=0) contribute zero to
     @inbounds for i in 1:NC
         Zi = _nti(params.dh_Z, i)
         wi = _nti(params.dh_width, i)
-        ρi = n[kk, F_dh, i] / (wi * 2 + eps_v) / N_A
+        ρi = n[kk, F_dh, i] / (wi * 2) / N_A
         I += ρi * Zi * Zi
     end
 
     s0 = e_c * e_c / (ϵ_0 * ε_r * k_B * T)
-    κ  = sqrt(s0 * N_A * I + eps_v)
+    κ  = sqrt(s0 * N_A * I)
 
     res = 0.0
     @inbounds for i in 1:NC
         Zi = _nti(params.dh_Z, i)
         wi = _nti(params.dh_width, i)
         σi = _nti(params.dh_sigma, i)
-        ρi = n[kk, F_dh, i] / (wi * 2 + eps_v) / N_A
+        ρi = n[kk, F_dh, i] / (wi * 2) / N_A
         χi = dh_term(σi * κ)
         res += ρi * Zi * Zi * χi
     end
 
-    s = e_c * e_c / (4 * _pi * ϵ_0 * ε_r * k_B * T)
+    s = e_c * e_c / (4 * π * ϵ_0 * ε_r * k_B * T)
     return -s * res * κ * N_A
 end
 

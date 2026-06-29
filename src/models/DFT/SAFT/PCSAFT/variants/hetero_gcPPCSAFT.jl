@@ -1,7 +1,8 @@
 using Clapeyron: HeterogcPCPSAFT, pcp_segment, pcp_sigma, pcp_epsilon, pcp_dipole2
 
-function DFTSystem(model::HeterogcPCPSAFT,structure::DFTStructure,options::DFTOptions)
-    model = expand_model(model)
+function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, options::DFTOptions;
+                   mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
+    model = expand_model(model, mol_structure)
     species = get_species(model, structure)
     fields = get_fields(model, species, structure, options.device)
     propagator = get_propagator(model, species, structure, options.device)
@@ -10,8 +11,9 @@ function DFTSystem(model::HeterogcPCPSAFT,structure::DFTStructure,options::DFTOp
     return DFTSystem(model, species, structure, fields, nothing, propagator, options, chunksize)
 end
 
-function DFTSystem(model::HeterogcPCPSAFT,structure::DFTStructure, external_fields,options::DFTOptions)
-    model = expand_model(model)
+function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, external_fields, options::DFTOptions;
+                   mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
+    model = expand_model(model, mol_structure)
     species = get_species(model, structure)
     fields = get_fields(model, species, structure, options.device)
     propagator = get_propagator(model, species, structure, options.device)
@@ -125,8 +127,6 @@ NC = total number of groups (sum of nbeads per component).
 end
 
 @inline function f_hc(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: HeterogcPCPSAFT}
-    _pi   = 3.141592653589793
-    eps_v = 1e-15
     HSd   = params.HSd
     m_seg = params.m
     bond_k  = params.bond_k
@@ -140,7 +140,7 @@ end
         ζ₂ += mi * ρ̄hci / di
     end
     ζ₃ *= 0.125; ζ₂ *= 0.125
-    inv1ζ₃ = 1.0 / (1.0 - ζ₃ + eps_v)
+    inv1ζ₃ = 1.0 / (1.0 - ζ₃)
 
     return _f_hc_bonds(n, bond_k, bond_l, HSd, kk, ζ₂, inv1ζ₃)
 end
@@ -149,7 +149,6 @@ end
 # compile-time inside this function, regardless of how autodiff_deferred specialises.
 @inline function _f_hc_bonds(n, bond_k::NTuple{NB, Int32}, bond_l::NTuple{NB, Int32},
                                HSd, kk, ζ₂, inv1ζ₃) where NB
-    eps_v = 1e-15
     res_hc = 0.0
     @inbounds for ib in 1:NB
         k = _nti(bond_k, ib); l = _nti(bond_l, ib)
@@ -158,14 +157,12 @@ end
         ζ₂_ov3 = ζ₂ * inv1ζ₃
         yᵈᵈ = inv1ζ₃ + 3.0*r_HSd*ζ₂_ov3*inv1ζ₃ + 2.0*r_HSd^2*ζ₂_ov3^2*inv1ζ₃
         ρhck = n[kk, 1, k]
-        res_hc -= ρhck * 0.5 * Base.log(abs(yᵈᵈ) + eps_v)
+        res_hc -= ρhck * 0.5 * Base.log(abs(yᵈᵈ))
     end
     return res_hc
 end
 
 @inline function f_disp(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: HeterogcPCPSAFT}
-    _pi   = 3.141592653589793
-    eps_v = 1e-15
     HSd              = params.HSd
     m_seg            = params.m
     σ                = params.sigma
@@ -174,8 +171,8 @@ end
 
     ψ       = 1.5357
     idx_ρz  = 5 + ND
-    factor  = 3.0 / (4.0*ψ*ψ*ψ*_pi)
-    ρ̄_tot   = eps_v; m̄_num = 0.0; η_sum = 0.0
+    factor  = 3.0 / (4.0*ψ*ψ*ψ*π)
+    ρ̄_tot   = 0.0; m̄_num = 0.0; η_sum = 0.0
     @inbounds for i in 1:NC
         di  = HSd[i]
         ρ̄i  = n[kk, idx_ρz, i] * factor / (di*di*di)
@@ -184,7 +181,7 @@ end
         ρ̄_tot  += ρ̄i / _nti(nbeads_for_group, i)
     end
     m̄  = m̄_num / ρ̄_tot
-    ηd = _pi/6.0 * η_sum
+    ηd = π/6.0 * η_sum
 
     m2ϵσ3_1 = 0.0; m2ϵσ3_2 = 0.0
     @inbounds for i in 1:NC
@@ -194,21 +191,21 @@ end
             dj   = HSd[j]
             ρ̄j   = n[kk, idx_ρz, j] * factor / (dj*dj*dj)
             cij  = ρ̄i * ρ̄j * m_seg[i] * m_seg[j] * σ[i,j]*σ[i,j]*σ[i,j]
-            eT   = ϵ[i,j] / (T + eps_v)
+            eT   = ϵ[i,j] / T
             m2ϵσ3_1 += cij * eT
             m2ϵσ3_2 += cij * eT * eT
         end
     end
     ηd2    = ηd*ηd
-    ηd4    = (1.0-ηd+eps_v)^4
-    inv1ηd = 1.0/(1.0-ηd+eps_v)
-    inv2ηd = 1.0/(2.0-ηd+eps_v)
+    ηd4    = (1.0-ηd)^4
+    inv1ηd = 1.0/(1.0-ηd)
+    inv2ηd = 1.0/(2.0-ηd)
     C₁     = 1.0 + m̄*(8.0*ηd-2.0*ηd2)/ηd4 +
               (1.0-m̄)*(20.0*ηd-27.0*ηd2+12.0*(ηd*ηd2)-2.0*(ηd2*ηd2)) *
               inv1ηd*inv1ηd*inv2ηd*inv2ηd
     I₁     = I_lite(PCSAFT_CORR1, m̄, ηd)
     I₂     = I_lite(PCSAFT_CORR2, m̄, ηd)
-    return -2.0*_pi*I₁*m2ϵσ3_1 - _pi*m̄*I₂*m2ϵσ3_2 / (C₁ + eps_v)
+    return -2.0*π*I₁*m2ϵσ3_1 - π*m̄*I₂*m2ϵσ3_2 / C₁
 end
 
 function preallocate_params(system::DFTSystem{<:HeterogcPCPSAFT})

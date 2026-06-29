@@ -80,9 +80,6 @@ end
 SAFT-VR Mie chain contribution (gMie contact value) at grid point `kk`.
 """
 @inline function f_chain(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: SAFTVRMieModel}
-    _pi   = 3.141592653589793
-    eps_v = 1e-15
-
     HSd     = params.HSd
     m_seg   = params.m
     σ       = params.sigma
@@ -94,33 +91,33 @@ SAFT-VR Mie chain contribution (gMie contact value) at grid point `kk`.
 
     idx_ζ = 4+ND;  idx_λ = 5+ND
 
-    ρS_c = eps_v
+    ρS_c = 0.0
     @inbounds for i in 1:NC
-        ρS_c += n[kk,idx_ζ,i] * 3.0/(4.0*_pi*HSd[i]^3) * m_seg[i]
+        ρS_c += n[kk,idx_ζ,i] * 3.0/(4.0*π*HSd[i]^3) * m_seg[i]
     end
-    kρS_c = ρS_c * _pi/6.0/8.0
+    kρS_c = ρS_c * π/6.0/8.0
 
     ζ_Xc = 0.0;  σ3_xc = 0.0
     @inbounds for i in 1:NC
         di   = HSd[i]
-        ρ̄hci = n[kk,idx_ζ,i] * 3.0/(4.0*_pi*di^3)
+        ρ̄hci = n[kk,idx_ζ,i] * 3.0/(4.0*π*di^3)
         x_Si = ρ̄hci * m_seg[i] / ρS_c
         @inbounds for j in 1:NC
             dj   = HSd[j]
-            ρ̄hcj = n[kk,idx_ζ,j] * 3.0/(4.0*_pi*dj^3)
+            ρ̄hcj = n[kk,idx_ζ,j] * 3.0/(4.0*π*dj^3)
             x_Sj = ρ̄hcj * m_seg[j] / ρS_c
             σ3_xc += x_Si*x_Sj*σ[i,j]^3
             ζ_Xc  += kρS_c*x_Si*x_Sj*(di+dj)^3
         end
     end
-    ζstc = σ3_xc * ρS_c * _pi/6.0
+    ζstc = σ3_xc * ρS_c * π/6.0
 
     _KHSc, _∂KHSc = _KHS_fdf_kernel(ρS_c, ζ_Xc)
 
     res_chain = 0.0
     @inbounds for i in 1:NC
         di   = HSd[i]
-        ρ̄hci = n[kk,idx_ζ,i] * 3.0/(4.0*_pi*di^3)
+        ρ̄hci = n[kk,idx_ζ,i] * 3.0/(4.0*π*di^3)
         x_Si = ρ̄hci * m_seg[i] / ρS_c
 
         λa = λa_mat[i][i];  λr = λr_mat[i][i]
@@ -165,7 +162,7 @@ SAFT-VR Mie chain contribution (gMie contact value) at grid point `kk`.
 
         ρhci  = n[kk,1,i]
         λfld  = n[kk,idx_λ,i] / (2.0*di)
-        res_chain += ρhci * Base.log(abs(gMie*λfld/(ρhci+eps_v))+eps_v) * (m_seg[i]-1.0)
+        res_chain += ρhci * Base.log(abs(gMie*λfld/ρhci)) * (m_seg[i]-1.0)
     end
     return -res_chain
 end
@@ -244,7 +241,7 @@ end
     ddenom = evalpoly(ζ_X, (4.0, 8.0, -12.0, 4.0))
     f    = ζX4 / denom
     ρdf  = -ζ_X*(4.0*(1.0-ζ_X)^3*denom + ζX4*ddenom) / (denom*denom)
-    return f, ρdf / (ρS + 1e-15)
+    return f, ρdf / ρS
 end
 
 @inline function _gHS_kernel(x_0, ζ_X)
@@ -306,49 +303,46 @@ Used by SAFTVRMieModel, SAFTgammaMieModel, COFFEEModel.
     psi_eff  = params.psi_eff
     A        = params.A
     phi      = params.phi
-    _pi   = 3.141592653589793
-    eps_v = 1e-15
-
-    ρS_d = eps_v
+    ρS_d = 0.0
     @inbounds for i in 1:NC
-        ρS_d += n[kk, IDX_ρz, i] * 3.0/(4.0*_pi*psi_eff[i]^3) * meff[i]
+        ρS_d += n[kk, IDX_ρz, i] * 3.0/(4.0*π*psi_eff[i]^3) * meff[i]
     end
-    kρS_d = ρS_d * _pi/6.0/8.0
+    kρS_d = ρS_d * π/6.0/8.0
 
     ζ_Xd=0.0;  σ3_xd=0.0
     @inbounds for i in 1:NC
         di   = HSd[i]
-        ρ̄zi  = n[kk, IDX_ρz, i] * 3.0/(4.0*_pi*psi_eff[i]^3)
+        ρ̄zi  = n[kk, IDX_ρz, i] * 3.0/(4.0*π*psi_eff[i]^3)
         x_Si = ρ̄zi * meff[i] / ρS_d
         @inbounds for j in 1:NC
             dj   = HSd[j]
-            ρ̄zj  = n[kk, IDX_ρz, j] * 3.0/(4.0*_pi*psi_eff[j]^3)
+            ρ̄zj  = n[kk, IDX_ρz, j] * 3.0/(4.0*π*psi_eff[j]^3)
             x_Sj = ρ̄zj * meff[j] / ρS_d
             σ3_xd += x_Si*x_Sj*sigma[i,j]^3
             ζ_Xd  += kρS_d*x_Si*x_Sj*(di+dj)^3
         end
     end
-    ζstd  = σ3_xd * ρS_d * _pi/6.0
+    ζstd  = σ3_xd * ρS_d * π/6.0
     ζst5d = ζstd^5;  ζst8d = ζstd^8
     KHSd  = _KHS_kernel(ζ_Xd)
 
     a₁=0.0;  a₂=0.0;  a₃=0.0
     @inbounds for i in 1:NC
         di   = HSd[i]
-        ρ̄zi  = n[kk, IDX_ρz, i] * 3.0/(4.0*_pi*psi_eff[i]^3)
+        ρ̄zi  = n[kk, IDX_ρz, i] * 3.0/(4.0*π*psi_eff[i]^3)
         x_Si = ρ̄zi * meff[i] / ρS_d
         λa=lambda_a[i][i]; λr=lambda_r[i][i]; σii=sigma[i,i]; ϵii=epsilon[i,i]
         _C=_Cλ_kernel(λa,λr);  x0=σii/di;  dij3=di^3
         aS1_a=_aS1_kernel(λa,     ζ_Xd,A); B_a=_B_kernel(λa,    x0,ζ_Xd)
         aS1_r=_aS1_kernel(λr,     ζ_Xd,A); B_r=_B_kernel(λr,    x0,ζ_Xd)
-        a1ij = 2.0*_pi*ϵii*dij3*_C*ρS_d*(x0^λa*(aS1_a+B_a)-x0^λr*(aS1_r+B_r))
+        a1ij = 2.0*π*ϵii*dij3*_C*ρS_d*(x0^λa*(aS1_a+B_a)-x0^λr*(aS1_r+B_r))
         aS1_2a=_aS1_kernel(2.0*λa, ζ_Xd,A); B_2a=_B_kernel(2.0*λa, x0,ζ_Xd)
         aS1_2r=_aS1_kernel(2.0*λr, ζ_Xd,A); B_2r=_B_kernel(2.0*λr, x0,ζ_Xd)
         aS1_ar=_aS1_kernel(λa+λr,  ζ_Xd,A); B_ar=_B_kernel(λa+λr,  x0,ζ_Xd)
         α=_C*(1.0/(λa-3.0)-1.0/(λr-3.0))
         f1,f2,f3,f4,f5,f6 = _f123456_kernel(α,phi)
         χ = f1*ζstd+f2*ζst5d+f3*ζst8d
-        a2ij = _pi*KHSd*(1.0+χ)*ρS_d*ϵii^2*dij3*_C^2*(
+        a2ij = π*KHSd*(1.0+χ)*ρS_d*ϵii^2*dij3*_C^2*(
                x0^(2.0*λa)*(aS1_2a+B_2a)
              - 2.0*x0^(λa+λr)*(aS1_ar+B_ar)
              + x0^(2.0*λr)*(aS1_2r+B_2r))
@@ -357,20 +351,20 @@ Used by SAFTVRMieModel, SAFTgammaMieModel, COFFEEModel.
         @inbounds for j in 1:NC
             if j != i
                 dj   = HSd[j]
-                ρ̄zj  = n[kk, IDX_ρz, j] * 3.0/(4.0*_pi*psi_eff[j]^3)
+                ρ̄zj  = n[kk, IDX_ρz, j] * 3.0/(4.0*π*psi_eff[j]^3)
                 x_Sj = ρ̄zj * meff[j] / ρS_d
                 λa2=lambda_a[i][j]; λr2=lambda_r[i][j]; σij=sigma[i,j]; ϵij=epsilon[i,j]
                 _C2=_Cλ_kernel(λa2,λr2); dij2=0.5*(di+dj); dij3_2=dij2^3; x0ij=σij/dij2
                 aS1_a2=_aS1_kernel(λa2,      ζ_Xd,A); B_a2=_B_kernel(λa2,      x0ij,ζ_Xd)
                 aS1_r2=_aS1_kernel(λr2,      ζ_Xd,A); B_r2=_B_kernel(λr2,      x0ij,ζ_Xd)
-                a1ij2 = 2.0*_pi*ϵij*dij3_2*_C2*ρS_d*(x0ij^λa2*(aS1_a2+B_a2)-x0ij^λr2*(aS1_r2+B_r2))
+                a1ij2 = 2.0*π*ϵij*dij3_2*_C2*ρS_d*(x0ij^λa2*(aS1_a2+B_a2)-x0ij^λr2*(aS1_r2+B_r2))
                 aS1_2a2=_aS1_kernel(2.0*λa2, ζ_Xd,A); B_2a2=_B_kernel(2.0*λa2, x0ij,ζ_Xd)
                 aS1_2r2=_aS1_kernel(2.0*λr2, ζ_Xd,A); B_2r2=_B_kernel(2.0*λr2, x0ij,ζ_Xd)
                 aS1_ar2=_aS1_kernel(λa2+λr2, ζ_Xd,A); B_ar2=_B_kernel(λa2+λr2, x0ij,ζ_Xd)
                 α2=_C2*(1.0/(λa2-3.0)-1.0/(λr2-3.0))
                 f1_2,f2_2,f3_2,f4_2,f5_2,f6_2 = _f123456_kernel(α2,phi)
                 χ2 = f1_2*ζstd+f2_2*ζst5d+f3_2*ζst8d
-                a2ij2 = _pi*KHSd*(1.0+χ2)*ρS_d*ϵij^2*dij3_2*_C2^2*(
+                a2ij2 = π*KHSd*(1.0+χ2)*ρS_d*ϵij^2*dij3_2*_C2^2*(
                         x0ij^(2.0*λa2)*(aS1_2a2+B_2a2)
                       - 2.0*x0ij^(λa2+λr2)*(aS1_ar2+B_ar2)
                       + x0ij^(2.0*λr2)*(aS1_2r2+B_2r2))
@@ -387,25 +381,24 @@ end
 # SAFTVRMie-specific association strength: Δ = expm1(ε_assoc/T) * κ * I(Tr, ρr)
 # where I is an 11×11 polynomial in (Tr=T/ε_Mie, ρr=ρS*σ³_x).
 # Overrides the default g_hs _assoc_delta via more specific M <: SAFTVRMieModel dispatch.
-@inline function _assoc_delta(p, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v,
+@inline function _assoc_delta(p, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix,
                                ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: SAFTVRMieModel}
     p > n_pairs && return 0.0
-    _pi = 3.141592653589793
 
     # Compute ρS from individual n₃ fields (field index 3 = F2+1)
-    ρS = eps_v
+    ρS = 0.0
     @inbounds for k in 1:NC
-        ρS += n[kk, 3, k] * 6.0 / (_pi * params.HSd[k]^3) * params.m[k]
+        ρS += n[kk, 3, k] * 6.0 / (π * params.HSd[k]^3) * params.m[k]
     end
 
     # σ³_x double loop: x_Sk = ρ̄k * m[k] / ρS
     σ3_x = 0.0
     @inbounds for k in 1:NC
-        ρ̄k  = n[kk, 3, k] * 6.0 / (_pi * params.HSd[k]^3)
+        ρ̄k  = n[kk, 3, k] * 6.0 / (π * params.HSd[k]^3)
         xSk = ρ̄k * params.m[k] / ρS
         σ3_x += xSk * xSk * params.sigma[k,k]^3
         @inbounds for l in 1:(k-1)
-            ρ̄l  = n[kk, 3, l] * 6.0 / (_pi * params.HSd[l]^3)
+            ρ̄l  = n[kk, 3, l] * 6.0 / (π * params.HSd[l]^3)
             xSl = ρ̄l * params.m[l] / ρS
             σ3_x += 2.0 * xSk * xSl * params.sigma[k,l]^3
         end
@@ -414,7 +407,7 @@ end
 
     ic = _nti(params.assoc_icomp, p)
     jc = _nti(params.assoc_jcomp, p)
-    Tr = T / (params.epsilon[ic, jc] + eps_v)
+    Tr = T / params.epsilon[ic, jc]
 
     # I(Tr, ρr): c stored as NTuple{11, NTuple{11, Float64}} (row = n-index, col = m-index)
     I_val = 0.0

@@ -53,8 +53,6 @@ PCP-SAFT dipole–dipole polar term (Padé: A₂²/(A₂−A₃)) at grid point 
 Takes `m̄` and `ηd` from f_disp output.
 """
 @inline function f_polar(::Type{M}, kk, n, params, T, m̄, ηd, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: PCPSAFTModel}
-    _pi   = 3.141592653589793
-    eps_v = 1e-15
     pcp_m   = params.pcp_m
     pcp_ϵ   = params.pcp_epsilon
     pcp_σ   = params.pcp_sigma
@@ -72,8 +70,8 @@ Takes `m̄` and `ηd` from f_disp output.
     if has_polar
         ψ       = 1.3862
         idx_ρz  = 6 + ND
-        factor  = 3.0 / (4.0*ψ*ψ*ψ*_pi)
-        ∑ρ̄_p = eps_v
+        factor  = 3.0 / (4.0*ψ*ψ*ψ*π)
+        ∑ρ̄_p = 0.0
         @inbounds for i in 1:NC
             ∑ρ̄_p += n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
         end
@@ -94,9 +92,9 @@ Takes `m̄` and `ηd` from f_disp output.
                 _A₂ += xᵢ * xⱼ * dip2_i * dip2_j / σij3 * _J2_ij
             end
         end
-        _A₂ *= -_pi * ∑ρ̄_p / (T*T)
+        _A₂ *= -π * ∑ρ̄_p / (T*T)
 
-        if abs(_A₂) > eps_v
+        if abs(_A₂) > 0.0
             _A₃ = 0.0
             @inbounds for i in 1:NC
                 dip2_i = dip2[i]
@@ -119,10 +117,10 @@ Takes `m̄` and `ηd` from f_disp output.
                     end
                 end
             end
-            _A₃ *= -4.0*_pi*_pi/3.0 * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
+            _A₃ *= -4.0*π*π/3.0 * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
 
             denom_p = _A₂ - _A₃
-            res_polar = ∑ρ̄_p * _A₂*_A₂ / (denom_p + eps_v)
+            res_polar = ∑ρ̄_p * _A₂*_A₂ / denom_p
         end
     end
 

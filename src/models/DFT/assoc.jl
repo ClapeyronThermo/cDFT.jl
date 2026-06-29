@@ -147,11 +147,11 @@ end
 # Used by PCSAFT, PCPSAFT, QPCPSAFT, HomogcPCPSAFT (all same Δ formula).
 # Model-specific overrides (e.g. SAFTVRMieModel) use a more specific M dispatch.
 # The n, kk, NC, ND, M arguments are unused here but required for a uniform signature.
-@inline function _assoc_delta(p, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v,
+@inline function _assoc_delta(p, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix,
                                ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M}
     p > n_pairs && return 0.0
     dij_p  = params.assoc_dij[p]
-    inv1n3 = 1.0 / (1.0 - n3_mix + eps_v)
+    inv1n3 = 1.0 / (1.0 - n3_mix)
     g_hs   = inv1n3 + 0.5*dij_p*xi_mix*n2_mix*inv1n3^2 +
              dij_p*dij_p*n2_mix*n2_mix*xi_mix*(inv1n3^3)/18.0
     return g_hs * params.assoc_sig3[p] * expm1(params.assoc_eps[p]/T) * params.assoc_kap[p]
@@ -161,7 +161,7 @@ end
 # Defined as @inline (not a closure) so Enzyme can differentiate each element
 # individually, avoiding the mixed-activity ntuple-closure issue.
 @inline function _assoc_Xstep(s, X::NTuple{20,Float64}, total, n0, xi, Δ_vals,
-                               params, n_pairs, ::Val{NC}, eps_v) where NC
+                               params, n_pairs, ::Val{NC}) where NC
     if s > total
         return _nti(X, s)
     end
@@ -188,7 +188,7 @@ end
                      _nti(X, ia_g) * _nti(Δ_vals, p)
         end
     end
-    return 1.0 / (denom + eps_v)
+    return 1.0 / denom
 end
 
 """
@@ -203,8 +203,6 @@ The `::Val{NP}` general method (NP > 1 pairs) runs 50-iteration relaxed SS.
 `_assoc_delta` is dispatched on `::Type{M}` so each model can supply its own Δ formula.
 """
 @inline function f_assoc(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}, ::Val{1}) where {NC, ND, M}
-    _pi   = 3.141592653589793
-    eps_v = 1e-15
     F2    = 2
     FV    = F2 + 2
 
@@ -214,48 +212,48 @@ The `::Val{NP}` general method (NP > 1 pairs) runs 50-iteration relaxed SS.
     nv2sq_mix = 0.0
     @inbounds for i in 1:NC
         nim = n[kk, F2, i] * params.m[i]
-        n2_mix += _pi * nim * params.HSd[i]
+        n2_mix += π * nim * params.HSd[i]
         n3_mix += n[kk, F2+1, i] * params.m[i]
     end
     if ND >= 1
         nv2d = 0.0
-        @inbounds for i in 1:NC; nv2d -= 2.0*_pi * n[kk, FV,   i] * params.m[i]; end
+        @inbounds for i in 1:NC; nv2d -= 2.0*π * n[kk, FV,   i] * params.m[i]; end
         nv2sq_mix += nv2d * nv2d
     end
     if ND >= 2
         nv2d = 0.0
-        @inbounds for i in 1:NC; nv2d -= 2.0*_pi * n[kk, FV+1, i] * params.m[i]; end
+        @inbounds for i in 1:NC; nv2d -= 2.0*π * n[kk, FV+1, i] * params.m[i]; end
         nv2sq_mix += nv2d * nv2d
     end
     if ND >= 3
         nv2d = 0.0
-        @inbounds for i in 1:NC; nv2d -= 2.0*_pi * n[kk, FV+2, i] * params.m[i]; end
+        @inbounds for i in 1:NC; nv2d -= 2.0*π * n[kk, FV+2, i] * params.m[i]; end
         nv2sq_mix += nv2d * nv2d
     end
-    xi_mix = 1.0 - nv2sq_mix / (n2_mix*n2_mix + eps_v)
+    xi_mix = 1.0 - nv2sq_mix / (n2_mix*n2_mix)
 
     # ── Analytical 1-pair solution ─────────────────────────────────────────
     ic  = params.assoc_icomp[1];  jc  = params.assoc_jcomp[1]
     ia  = params.assoc_isite[1];  jb  = params.assoc_jsite[1]
 
-    Δ_val = _assoc_delta(1, 1, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
+    Δ_val = _assoc_delta(1, 1, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
 
     # Per-component n₀ᵢ = ρᵢ_molecular / dᵢ (NO m factor — Wertheim uses molecular density)
-    n0_ic    = n[kk, F2, ic] / (params.HSd[ic] + eps_v)
-    n2_ic    = _pi * n[kk, F2, ic] * params.HSd[ic]
+    n0_ic    = n[kk, F2, ic] / params.HSd[ic]
+    n2_ic    = π * n[kk, F2, ic] * params.HSd[ic]
     nv2sq_ic = 0.0
-    if ND >= 1; nd = -2.0*_pi*n[kk, FV,   ic]; nv2sq_ic += nd*nd; end
-    if ND >= 2; nd = -2.0*_pi*n[kk, FV+1, ic]; nv2sq_ic += nd*nd; end
-    if ND >= 3; nd = -2.0*_pi*n[kk, FV+2, ic]; nv2sq_ic += nd*nd; end
-    xi_ic = 1.0 - nv2sq_ic / (n2_ic*n2_ic + eps_v)
+    if ND >= 1; nd = -2.0*π*n[kk, FV,   ic]; nv2sq_ic += nd*nd; end
+    if ND >= 2; nd = -2.0*π*n[kk, FV+1, ic]; nv2sq_ic += nd*nd; end
+    if ND >= 3; nd = -2.0*π*n[kk, FV+2, ic]; nv2sq_ic += nd*nd; end
+    xi_ic = 1.0 - nv2sq_ic / (n2_ic*n2_ic)
 
-    n0_jc    = n[kk, F2, jc] / (params.HSd[jc] + eps_v)
-    n2_jc    = _pi * n[kk, F2, jc] * params.HSd[jc]
+    n0_jc    = n[kk, F2, jc] / params.HSd[jc]
+    n2_jc    = π * n[kk, F2, jc] * params.HSd[jc]
     nv2sq_jc = 0.0
-    if ND >= 1; nd = -2.0*_pi*n[kk, FV,   jc]; nv2sq_jc += nd*nd; end
-    if ND >= 2; nd = -2.0*_pi*n[kk, FV+1, jc]; nv2sq_jc += nd*nd; end
-    if ND >= 3; nd = -2.0*_pi*n[kk, FV+2, jc]; nv2sq_jc += nd*nd; end
-    xi_jc = 1.0 - nv2sq_jc / (n2_jc*n2_jc + eps_v)
+    if ND >= 1; nd = -2.0*π*n[kk, FV,   jc]; nv2sq_jc += nd*nd; end
+    if ND >= 2; nd = -2.0*π*n[kk, FV+1, jc]; nv2sq_jc += nd*nd; end
+    if ND >= 3; nd = -2.0*π*n[kk, FV+2, jc]; nv2sq_jc += nd*nd; end
+    xi_jc = 1.0 - nv2sq_jc / (n2_jc*n2_jc)
 
     n_ia = _nti(params.n_sites_flat, _nti(params.n_sites_cumsum, ic) + ia)
     n_jb = _nti(params.n_sites_flat, _nti(params.n_sites_cumsum, jc) + jb)
@@ -264,16 +262,14 @@ The `::Val{NP}` general method (NP > 1 pairs) runs 50-iteration relaxed SS.
     kia = n_ia * n0_ic * xi_ic * Δ_val
     kjb = n_jb * n0_jc * xi_jc * Δ_val
     _b  = 1.0 - kia + kjb
-    X_ia = 2.0 / (_b + sqrt(_b*_b + 4.0*kia) + eps_v)
-    X_jb = 1.0 / (1.0 + kia * X_ia + eps_v)
+    X_ia = 2.0 / (_b + sqrt(_b*_b + 4.0*kia))
+    X_jb = 1.0 / (1.0 + kia * X_ia)
 
-    return n0_ic * xi_ic * n_ia * (Base.log(abs(X_ia) + eps_v) - 0.5*X_ia + 0.5) +
-           n0_jc * xi_jc * n_jb * (Base.log(abs(X_jb) + eps_v) - 0.5*X_jb + 0.5)
+    return n0_ic * xi_ic * n_ia * (Base.log(abs(X_ia)) - 0.5*X_ia + 0.5) +
+           n0_jc * xi_jc * n_jb * (Base.log(abs(X_jb)) - 0.5*X_jb + 0.5)
 end
 
 @inline function f_assoc(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}, ::Val{NP}) where {NC, ND, NP, M}
-    _pi   = 3.141592653589793
-    eps_v = 1e-15
     F2    = 2
     FV    = F2 + 2
 
@@ -283,62 +279,62 @@ end
     nv2sq_mix = 0.0
     @inbounds for i in 1:NC
         nim = n[kk, F2, i] * params.m[i]
-        n2_mix += _pi * nim * params.HSd[i]
+        n2_mix += π * nim * params.HSd[i]
         n3_mix += n[kk, F2+1, i] * params.m[i]
     end
     if ND >= 1
         nv2d = 0.0
-        @inbounds for i in 1:NC; nv2d -= 2.0*_pi * n[kk, FV,   i] * params.m[i]; end
+        @inbounds for i in 1:NC; nv2d -= 2.0*π * n[kk, FV,   i] * params.m[i]; end
         nv2sq_mix += nv2d * nv2d
     end
     if ND >= 2
         nv2d = 0.0
-        @inbounds for i in 1:NC; nv2d -= 2.0*_pi * n[kk, FV+1, i] * params.m[i]; end
+        @inbounds for i in 1:NC; nv2d -= 2.0*π * n[kk, FV+1, i] * params.m[i]; end
         nv2sq_mix += nv2d * nv2d
     end
     if ND >= 3
         nv2d = 0.0
-        @inbounds for i in 1:NC; nv2d -= 2.0*_pi * n[kk, FV+2, i] * params.m[i]; end
+        @inbounds for i in 1:NC; nv2d -= 2.0*π * n[kk, FV+2, i] * params.m[i]; end
         nv2sq_mix += nv2d * nv2d
     end
-    xi_mix = 1.0 - nv2sq_mix / (n2_mix*n2_mix + eps_v)
+    xi_mix = 1.0 - nv2sq_mix / (n2_mix*n2_mix)
 
     # ── General case: 50-iteration successive substitution ─────────────────
     n_pairs = NP
     total   = params.total_sites
 
     # Per-component n₀ and ξ
-    n0 = ntuple(i -> n[kk, F2, i] / (params.HSd[i] + eps_v), Val(NC))
+    n0 = ntuple(i -> n[kk, F2, i] / params.HSd[i], Val(NC))
     xi = ntuple(Val(NC)) do i
-        n2_i = _pi * n[kk, F2, i] * params.HSd[i]
+        n2_i = π * n[kk, F2, i] * params.HSd[i]
         sq   = 0.0
-        if ND >= 1; nd = -2.0*_pi*n[kk, FV,   i]; sq += nd*nd; end
-        if ND >= 2; nd = -2.0*_pi*n[kk, FV+1, i]; sq += nd*nd; end
-        if ND >= 3; nd = -2.0*_pi*n[kk, FV+2, i]; sq += nd*nd; end
-        1.0 - sq / (n2_i*n2_i + eps_v)
+        if ND >= 1; nd = -2.0*π*n[kk, FV,   i]; sq += nd*nd; end
+        if ND >= 2; nd = -2.0*π*n[kk, FV+1, i]; sq += nd*nd; end
+        if ND >= 3; nd = -2.0*π*n[kk, FV+2, i]; sq += nd*nd; end
+        1.0 - sq / (n2_i*n2_i)
     end
 
     # Δ for each pair via model-dispatched _assoc_delta (explicit scalar calls for Enzyme)
-    Δ1  = _assoc_delta(1,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ2  = _assoc_delta(2,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ3  = _assoc_delta(3,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ4  = _assoc_delta(4,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ5  = _assoc_delta(5,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ6  = _assoc_delta(6,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ7  = _assoc_delta(7,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ8  = _assoc_delta(8,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ9  = _assoc_delta(9,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ10 = _assoc_delta(10, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ11 = _assoc_delta(11, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ12 = _assoc_delta(12, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ13 = _assoc_delta(13, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ14 = _assoc_delta(14, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ15 = _assoc_delta(15, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ16 = _assoc_delta(16, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ17 = _assoc_delta(17, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ18 = _assoc_delta(18, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ19 = _assoc_delta(19, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
-    Δ20 = _assoc_delta(20, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, eps_v, Val(NC), Val(ND), M)
+    Δ1  = _assoc_delta(1,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ2  = _assoc_delta(2,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ3  = _assoc_delta(3,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ4  = _assoc_delta(4,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ5  = _assoc_delta(5,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ6  = _assoc_delta(6,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ7  = _assoc_delta(7,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ8  = _assoc_delta(8,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ9  = _assoc_delta(9,  n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ10 = _assoc_delta(10, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ11 = _assoc_delta(11, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ12 = _assoc_delta(12, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ13 = _assoc_delta(13, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ14 = _assoc_delta(14, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ15 = _assoc_delta(15, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ16 = _assoc_delta(16, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ17 = _assoc_delta(17, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ18 = _assoc_delta(18, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ19 = _assoc_delta(19, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
+    Δ20 = _assoc_delta(20, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix, Val(NC), Val(ND), M)
     Δ_vals = (Δ1, Δ2, Δ3, Δ4, Δ5, Δ6, Δ7, Δ8, Δ9, Δ10,
               Δ11, Δ12, Δ13, Δ14, Δ15, Δ16, Δ17, Δ18, Δ19, Δ20)
 
@@ -348,26 +344,26 @@ end
 
     # Relaxed fixed-point α=0.5: X ← (X + F(X))/2.
     for _ in 1:50
-        x1  = _assoc_Xstep(1,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x2  = _assoc_Xstep(2,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x3  = _assoc_Xstep(3,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x4  = _assoc_Xstep(4,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x5  = _assoc_Xstep(5,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x6  = _assoc_Xstep(6,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x7  = _assoc_Xstep(7,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x8  = _assoc_Xstep(8,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x9  = _assoc_Xstep(9,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x10 = _assoc_Xstep(10, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x11 = _assoc_Xstep(11, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x12 = _assoc_Xstep(12, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x13 = _assoc_Xstep(13, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x14 = _assoc_Xstep(14, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x15 = _assoc_Xstep(15, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x16 = _assoc_Xstep(16, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x17 = _assoc_Xstep(17, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x18 = _assoc_Xstep(18, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x19 = _assoc_Xstep(19, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
-        x20 = _assoc_Xstep(20, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC), eps_v)
+        x1  = _assoc_Xstep(1,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x2  = _assoc_Xstep(2,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x3  = _assoc_Xstep(3,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x4  = _assoc_Xstep(4,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x5  = _assoc_Xstep(5,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x6  = _assoc_Xstep(6,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x7  = _assoc_Xstep(7,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x8  = _assoc_Xstep(8,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x9  = _assoc_Xstep(9,  X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x10 = _assoc_Xstep(10, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x11 = _assoc_Xstep(11, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x12 = _assoc_Xstep(12, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x13 = _assoc_Xstep(13, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x14 = _assoc_Xstep(14, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x15 = _assoc_Xstep(15, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x16 = _assoc_Xstep(16, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x17 = _assoc_Xstep(17, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x18 = _assoc_Xstep(18, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x19 = _assoc_Xstep(19, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
+        x20 = _assoc_Xstep(20, X, total, n0, xi, Δ_vals, params, n_pairs, Val(NC))
         X = (0.5*(X[1]+x1),  0.5*(X[2]+x2),  0.5*(X[3]+x3),  0.5*(X[4]+x4),
              0.5*(X[5]+x5),  0.5*(X[6]+x6),  0.5*(X[7]+x7),  0.5*(X[8]+x8),
              0.5*(X[9]+x9),  0.5*(X[10]+x10), 0.5*(X[11]+x11), 0.5*(X[12]+x12),
@@ -387,7 +383,7 @@ end
             n_ia_val = _nti(params.n_sites_flat, s)
             X_val    = _nti(X, s)
             res += n0i * xii * n_ia_val *
-                   (Base.log(abs(X_val) + eps_v) - 0.5*X_val + 0.5)
+                   (Base.log(abs(X_val)) - 0.5*X_val + 0.5)
         end
     end
 

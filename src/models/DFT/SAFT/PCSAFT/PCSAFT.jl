@@ -113,7 +113,6 @@ PC-SAFT hard-chain contribution at grid point `kk`.
 Field layout assumed: field 1 = ρ (unweighted), field 4+ND = ρ̄hc, field 5+ND = λ.
 """
 @inline function f_hc(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: PCSAFTModel}
-    eps_v = 1e-15
     m   = params.m
     HSd = params.HSd
     idx_ζ = 4 + ND;  idx_λ = 5 + ND
@@ -123,14 +122,14 @@ Field layout assumed: field 1 = ρ (unweighted), field 4+ND = ρ̄hc, field 5+ND
         ζ₃ += mi * ρ̄hci;  ζ₂ += mi * ρ̄hci / di
     end
     ζ₃ *= 0.125;  ζ₂ *= 0.125
-    inv1ζ₃ = 1.0/(1.0-ζ₃+eps_v)
+    inv1ζ₃ = 1.0/(1.0-ζ₃)
     res_hc = 0.0
     @inbounds for i in 1:NC
         ρi  = n[kk, 1, i]
         λ   = n[kk, idx_λ, i] / (2.0*HSd[i])
         ydd = inv1ζ₃ + 1.5*HSd[i]*ζ₂*inv1ζ₃*inv1ζ₃ +
               0.5*HSd[i]*HSd[i]*ζ₂*ζ₂*inv1ζ₃*inv1ζ₃*inv1ζ₃
-        res_hc += -ρi * (m[i]-1.0) * Base.log(abs(ydd*λ/(ρi+eps_v))+eps_v)
+        res_hc += -ρi * (m[i]-1.0) * Base.log(abs(ydd*λ/ρi))
     end
     return res_hc
 end
@@ -140,17 +139,15 @@ PC-SAFT dispersion contribution at grid point `kk`. Field 6+ND is the dispersion
 Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the polar term.
 """
 @inline function f_disp(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: PCSAFTModel}
-    _pi    = 3.141592653589793
-    eps_v  = 1e-15
     m      = params.m
     HSd    = params.HSd
     sigma  = params.sigma
     epsilon = params.epsilon
     ψ      = 1.3862
     idx_ρz = 6 + ND
-    factor = 3.0 / (4.0*ψ*ψ*ψ*_pi)
+    factor = 3.0 / (4.0*ψ*ψ*ψ*π)
 
-    ρ̄z_sum=eps_v; m̄_top=0.0; η_sum=0.0
+    ρ̄z_sum=0.0; m̄_top=0.0; η_sum=0.0
     @inbounds for i in 1:NC
         ρ̄zi = n[kk, idx_ρz, i] * factor / (HSd[i]*HSd[i]*HSd[i])
         ρ̄z_sum += ρ̄zi
@@ -158,7 +155,7 @@ Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the po
         η_sum  += m[i] * ρ̄zi * HSd[i]*HSd[i]*HSd[i]
     end
     m̄  = m̄_top / ρ̄z_sum
-    ηd = _pi/6.0 * η_sum
+    ηd = π/6.0 * η_sum
 
     m2ϵσ3_1=0.0; m2ϵσ3_2=0.0
     @inbounds for i in 1:NC
@@ -166,21 +163,21 @@ Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the po
         @inbounds for j in 1:NC
             ρzj  = n[kk, idx_ρz, j] * factor / (HSd[j]*HSd[j]*HSd[j])
             cij  = ρzi * ρzj * m[i] * m[j] * sigma[i,j]*sigma[i,j]*sigma[i,j]
-            eT   = epsilon[i,j] / (T + eps_v)
+            eT   = epsilon[i,j] / T
             m2ϵσ3_1 += cij * eT
             m2ϵσ3_2 += cij * eT * eT
         end
     end
     ηd2    = ηd*ηd
-    ηd4    = (1.0-ηd+eps_v)^4
-    inv1ηd = 1.0/(1.0-ηd+eps_v)
-    inv2ηd = 1.0/(2.0-ηd+eps_v)
+    ηd4    = (1.0-ηd)^4
+    inv1ηd = 1.0/(1.0-ηd)
+    inv2ηd = 1.0/(2.0-ηd)
     C₁     = 1.0 + m̄*(8.0*ηd-2.0*ηd2)/ηd4 +
               (1.0-m̄)*(20.0*ηd-27.0*ηd2+12.0*(ηd*ηd2)-2.0*(ηd2*ηd2)) *
               inv1ηd*inv1ηd*inv2ηd*inv2ηd
     I₁     = I_lite(PCSAFT_CORR1, m̄, ηd)
     I₂     = I_lite(PCSAFT_CORR2, m̄, ηd)
-    res_disp = -2.0*_pi*I₁*m2ϵσ3_1 - _pi*m̄*I₂*m2ϵσ3_2 / (C₁+eps_v)
+    res_disp = -2.0*π*I₁*m2ϵσ3_1 - π*m̄*I₂*m2ϵσ3_2 / C₁
     return res_disp, m̄, ηd
 end
 

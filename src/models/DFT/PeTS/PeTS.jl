@@ -70,30 +70,27 @@ end
 PeTS Barker–Henderson perturbation contribution at grid point `kk`.
 """
 @inline function f_pert(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: PeTSModel}
-    _pi   = 3.141592653589793
-    eps_v = 1e-15
-
     HSd = params.HSd
     m   = params.m
     σ   = params.sigma
     ϵ   = params.epsilon
 
     ψ     = 1.21
-    T̄     = T / (ϵ[1] + eps_v)
+    T̄     = T / ϵ[1]
     idx_ρ̄ = 3 + ND
     ρ̃     = 0.0; η_sum = 0.0; ∑ρ̄ = 0.0
     @inbounds for i in 1:NC
-        ρ̄zi  = n[kk, idx_ρ̄, i] * 3.0 / (4.0*ψ*ψ*ψ*HSd[i]*HSd[i]*HSd[i]*_pi)
+        ρ̄zi  = n[kk, idx_ρ̄, i] * 3.0 / (4.0*ψ*ψ*ψ*HSd[i]*HSd[i]*HSd[i]*π)
         ρ̃    += ρ̄zi * m[i] * σ[i]*σ[i]*σ[i]
         η_sum += ρ̄zi * m[i] * HSd[i]*HSd[i]*HSd[i]
         ∑ρ̄   += ρ̄zi
     end
-    η    = _pi / 6.0 * η_sum
+    η    = π / 6.0 * η_sum
     I1   = evalpoly(η, params.PeTS_A)
     I2   = evalpoly(η, params.PeTS_B)
-    ã1   = -2.0*_pi*ρ̃*I1 / T̄
-    inv_g = 1.0 / (1.0 + 2.0*η*(4.0 - η) / ((1.0 - η + eps_v)^4) + eps_v)
-    ã2   = -_pi*ρ̃*I2*inv_g / (T̄*T̄)
+    ã1   = -2.0*π*ρ̃*I1 / T̄
+    inv_g = 1.0 / (1.0 + 2.0*η*(4.0 - η) / (1.0 - η)^4)
+    ã2   = -π*ρ̃*I2*inv_g / (T̄*T̄)
     return (ã1 + ã2) * ∑ρ̄
 end
 
