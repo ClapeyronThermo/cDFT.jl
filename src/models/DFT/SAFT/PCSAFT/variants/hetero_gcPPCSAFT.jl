@@ -118,9 +118,9 @@ NC = total number of groups (sum of nbeads per component).
                        ::Val{NC}, ::Val{ND}) where {NC, ND, M <: HeterogcPCPSAFT}
     res_hs, = f_hs(n, params.m, params.HSd, kk, Val(NC), Val(ND), Val(2))
     res_hc    = f_hc(M, kk, n, params, T, Val(NC), Val(ND))
-    # res_disp  = f_disp(M, kk, n, params, T, Val(NC), Val(ND))
+    res_disp  = f_disp(M, kk, n, params, T, Val(NC), Val(ND))
     res_assoc = _assoc_or_zero(M, kk, n, params, T, Val(NC), Val(ND))
-    out[kk] = res_hs + res_hc + res_assoc
+    out[kk] = res_hs + res_disp + res_hc + res_assoc
     return nothing
 end
 
