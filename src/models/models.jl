@@ -11,7 +11,7 @@ include("DGT/dgt.jl")
     F_res(system::DFTSystem, ρ)
 
 Residual free energy for DFT systems via the Enzyme/KA kernel path.
-Runs the same δf_kernel! used by δFδρ_res! and integrates the primal f_val.
+Runs the same δf_rev_kernel!/δf_fwd_kernel! used by δFδρ_res! and integrates the primal f_val.
 """
 function F_res(system::Union{DFTSystem, DGTSystem}, ρ)
     δfδρ_res, cache_model, _, _ = preallocate(system, ρ)
@@ -52,32 +52,47 @@ end
 
 """
     δFδρ_res!(system, ρ, δfδρ_res, n, δf, fft_buf, in_buf, out_buf, P, iP,
-              params, f_val, δf_val, nc, nd)
+              params, f_val, δf_val, nc, nd[, fwd_cache])
 
 Enzyme/KernelAbstractions-based functional derivative evaluation. Runs on CPU or GPU
-depending on `system.options.device`.
+depending on `system.options.device`. When `system.options.ad_mode === :forward`,
+`fwd_cache` must be the `(dn_seeds, df_outs, Val(BATCH))` tuple from `preallocate_model`.
 """
 function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
                    n, δf, fft_buf, in_buf, out_buf, P, iP,
-                   params, f_val, δf_val, nc, nd)
+                   params, f_val, δf_val, nc, nd, fwd_cache = nothing)
     backend = system.options.device
     ngrid   = system.structure.ngrid
     NF      = size(n, ndims(n)-1)
     NB      = size(n, ndims(n))
     T       = system.structure.conditions[2]
+    M       = _kernel_type(system)
 
     evaluate_field!(system, ρ, fft_buf, in_buf, out_buf, P, iP)
     synchronize(backend)
     copyto!(n, fft_buf)
 
-    fill!(δf_val, 1.0)
-    fill!(δf, 0.0)
-
-    kernel = δf_kernel!(backend)
-    kernel(δf, n, f_val, δf_val, params, Float64(T),
-           Val(NF), Val(NB), Val(nc), Val(nd), _kernel_type(system),
-           ndrange = ngrid)
-    synchronize(backend)
+    if system.options.ad_mode === :forward
+        dn_seeds, df_outs, BATCH_val = fwd_cache
+        fill!(δf, 0.0)
+        kernel_fwd_batch = δf_fwd_batch_kernel!(backend)
+        kernel_fwd_batch(df_outs, n, f_val, dn_seeds, params, Float64(T),
+                         Val(NF), Val(NB), Val(nc), Val(nd), BATCH_val, M,
+                         ndrange = ngrid)
+        synchronize(backend)
+        for f_idx in 1:NF, c_idx in 1:nc
+            k = (f_idx - 1) * nc + c_idx
+            selectdim(selectdim(δf, nd+1, f_idx), nd+1, c_idx) .= df_outs[k]
+        end
+    else  # :reverse (default)
+        fill!(δf_val, 1.0)
+        fill!(δf, 0.0)
+        kernel_rev = δf_rev_kernel!(backend)
+        kernel_rev(δf, n, f_val, δf_val, params, Float64(T),
+                   Val(NF), Val(NB), Val(nc), Val(nd), M,
+                   ndrange = ngrid)
+        synchronize(backend)
+    end
 
     copyto!(fft_buf, δf)
     integrate_field!(system, fft_buf, δfδρ_res, in_buf, P, iP)
@@ -132,7 +147,23 @@ function preallocate_model(system::DFTSystem, ρ)
 
     params, nc = preallocate_params(system)
 
-    return n, δf, fft_buf, in_buf, out_buf, plan, iplan, params, f_val, δf_val, nc, nd
+    if system.options.ad_mode === :forward
+        batch = nf * nc
+        dn_seeds = ntuple(Val(batch)) do k
+            f_idx = (k - 1) ÷ nc + 1
+            c_idx = (k - 1) % nc + 1
+            seed = allocate(backend, Float64, ngrid..., nf, nc)
+            fill!(seed, 0.0)
+            fill!(selectdim(selectdim(seed, nd+1, f_idx), nd+1, c_idx), 1.0)
+            seed
+        end
+        df_outs   = ntuple(_ -> allocate(backend, Float64, ngrid...), Val(batch))
+        fwd_cache = (dn_seeds, df_outs, Val(batch))
+    else
+        fwd_cache = nothing
+    end
+
+    return n, δf, fft_buf, in_buf, out_buf, plan, iplan, params, f_val, δf_val, nc, nd, fwd_cache
 end
 
 function preallocate_model(system::ElectrolyteDFTSystem, ρ)
@@ -163,7 +194,10 @@ function preallocate_model(system::ElectrolyteDFTSystem, ρ)
 
     params, nc = preallocate_params(system)
 
-    return n, δf, fft_buf, in_buf, out_buf, plan, iplan, params, f_val, δf_val, nc, nd
+    # Electrolyte uses its own f_res path; forward-mode batch not yet supported
+    fwd_cache = nothing
+
+    return n, δf, fft_buf, in_buf, out_buf, plan, iplan, params, f_val, δf_val, nc, nd, fwd_cache
 end
 
 function length_scales(model::EoSModel)
@@ -179,13 +213,13 @@ function length_scales(model::EoSModel)
 end
 
 """
-    δf_kernel!(backend)
+    δf_rev_kernel!(backend)
 
 KernelAbstractions kernel that applies Enzyme reverse-mode AD to `f_res` at each grid point.
 Dispatches to the correct `f_res` implementation via `::Type{M}`.
 Runs identically on CPU and GPU; the backend is selected at call time.
 """
-@kernel function δf_kernel!(
+@kernel function δf_rev_kernel!(
     δf, n, f_val, δf_val, params,
     T, ::Val{NF}, ::Val{NB}, ::Val{NC}, ::Val{ND}, ::Type{M}
 ) where {NF, NB, NC, ND, M}
@@ -195,6 +229,50 @@ Runs identically on CPU and GPU; the backend is selected at call time.
         Const(M), Const(kk),
         Duplicated(f_val, δf_val),
         Duplicated(n, δf),
+        Const(params), Const(Float64(T)), Const(Val(NC)), Const(Val(ND))
+    )
+end
+
+"""
+    δf_fwd_kernel!(backend)
+
+KernelAbstractions kernel that applies Enzyme forward-mode AD to `f_res` at each grid point.
+Called once per (field, component) direction; `dn` carries the unit-vector seed.
+`δf_val[kk]` receives the directional derivative ∂f_res/∂n[kk, f, c].
+Uses no per-thread intermediate storage, avoiding GPU stack overflow for large NC.
+"""
+@kernel function δf_fwd_kernel!(
+    δf_val, n, f_val, dn, params,
+    T, ::Val{NF}, ::Val{NB}, ::Val{NC}, ::Val{ND}, ::Type{M}
+) where {NF, NB, NC, ND, M}
+    kk = @index(Global, Cartesian)
+    Enzyme.autodiff_deferred(
+        Enzyme.set_runtime_activity(Forward), Const(f_res), Const,
+        Const(M), Const(kk),
+        Duplicated(f_val, δf_val),
+        Duplicated(n, dn),
+        Const(params), Const(Float64(T)), Const(Val(NC)), Const(Val(ND))
+    )
+end
+
+"""
+    δf_fwd_batch_kernel!(backend)
+
+Batch forward-mode kernel: computes all NF×NC directional derivatives of `f_res`
+in a single Enzyme call using `BatchDuplicated`. Each of the BATCH seeds in `dn_tuple`
+has 1.0 at one specific (field, component) position; the corresponding `df_tuple[k][kk]`
+receives ∂f_res(n[kk,:])/∂n[kk, f_k, c_k].
+"""
+@kernel function δf_fwd_batch_kernel!(
+    df_tuple, n, f_val, dn_tuple, params,
+    T, ::Val{NF}, ::Val{NB}, ::Val{NC}, ::Val{ND}, ::Val{BATCH}, ::Type{M}
+) where {NF, NB, NC, ND, BATCH, M}
+    kk = @index(Global, Cartesian)
+    Enzyme.autodiff_deferred(
+        Enzyme.set_runtime_activity(Forward), Const(f_res), Const,
+        Const(M), Const(kk),
+        BatchDuplicated(f_val, df_tuple),
+        BatchDuplicated(n,     dn_tuple),
         Const(params), Const(Float64(T)), Const(Val(NC)), Const(Val(ND))
     )
 end

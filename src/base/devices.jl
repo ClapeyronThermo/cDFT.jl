@@ -17,15 +17,15 @@ julia> options = DFTOptions(CPU(4, [0,1,12,13]))
 """
 struct DFTOptions{D}
     device::D
+    ad_mode::Symbol   # :reverse (default) or :forward
+
+    function DFTOptions(device::D, ad_mode::Symbol = :reverse) where D
+        return new{D}(device, ad_mode)
+    end
 end
 
-# function DFTOptions(device::Backend)
-#     return DFTOptions(device)
-# end
-
-function DFTOptions()
-    return DFTOptions(CPU(; static=true))
-end
+DFTOptions() = DFTOptions(CPU(; static=true))
+DFTOptions(device::Backend; ad_mode::Symbol = :reverse) = DFTOptions(device, ad_mode)
 
 function preallocate(system, ρ)
     backend = system.options.device
