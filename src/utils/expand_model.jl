@@ -1,10 +1,12 @@
-function expand_model(model::MODEL) where MODEL <: EoSModel
+function expand_model(model::MODEL,
+        mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}()
+        ) where MODEL <: EoSModel
     if !Clapeyron.has_groups(model)
         return model
     end
 
     # Expand the groups
-    grouparam,ngroups_k = expand_groups(model)
+    grouparam,ngroups_k = expand_groups(model, mol_structure)
 
     # Expand the sites
     siteparams = expand_sites(model,grouparam,ngroups_k)
@@ -21,7 +23,8 @@ function expand_model(model::MODEL) where MODEL <: EoSModel
                                 model.references)
 end
 
-function expand_groups(model)
+function expand_groups(model,
+        mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
     nspecies = length(model)
 
     # Expand the groups
@@ -57,7 +60,11 @@ function expand_groups(model)
     for i in 1:nspecies
         _n_intergroups = zeros(Int64,ngroups,ngroups)
         if length(n_groups[i]) > 1
-            _, group_names, bondmat = cDFT.get_connectivity(model,model.components[i])
+            if haskey(mol_structure, model.components[i])
+                _, group_names, bondmat = get_connectivity(model, mol_structure[model.components[i]])
+            else
+                _, group_names, bondmat = get_connectivity(model, model.components[i])
+            end
             _groups = getindex.(split.(groups[i],"_"),1)
             ngroup_types_i = length(model.groups.groups[i])
             for k in 1:ngroup_types_i

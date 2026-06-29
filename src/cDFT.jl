@@ -12,7 +12,6 @@ using Clapeyron: issite, compute_index, complement_index, indices, diagvalues
 import Clapeyron.Solvers
 import Clapeyron: ElectrolyteModel
 using Clapeyron: SingleComp, PeTSModel, epsilon_LorentzBerthelot!
-using GCIdentifier, ChemicalIdentifiers
 using StaticArrays
 # using SIAMFANLEquations
 using KernelAbstractions, Adapt, Enzyme
@@ -43,5 +42,7 @@ include("methods/converge.jl")
 include("methods/surface_tension.jl")
 include("methods/interfacial_tension.jl")
 include("methods/adsorption.jl")
+
+export MolStructure, SMILESStructure, CustomStructure, smiles, custom_structure
 
 end
