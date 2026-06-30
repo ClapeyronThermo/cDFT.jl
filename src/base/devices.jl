@@ -19,13 +19,13 @@ struct DFTOptions{D}
     device::D
     ad_mode::Symbol   # :reverse (default) or :forward
 
-    function DFTOptions(device::D, ad_mode::Symbol = :reverse) where D
+    function DFTOptions(device::D, ad_mode::Symbol = :forward) where D
         return new{D}(device, ad_mode)
     end
 end
 
 DFTOptions() = DFTOptions(CPU(; static=true))
-DFTOptions(device::Backend; ad_mode::Symbol = :reverse) = DFTOptions(device, ad_mode)
+DFTOptions(device::Backend; ad_mode::Symbol = :forward) = DFTOptions(device, ad_mode)
 
 function preallocate(system, ρ)
     backend = system.options.device
