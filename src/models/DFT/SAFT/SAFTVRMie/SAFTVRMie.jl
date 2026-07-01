@@ -453,31 +453,44 @@ function preallocate_params(system::DFTSystem{<:SAFTVRMieModel})
          n_sites_flat_v, n_sites_cumsum_v, total_sites
         ) = pack_assoc_params(model, system.species.size)
 
-        nc_model = length(model)
-        assoc_icomp_t    = ntuple(p -> p <= nn           ? assoc_icomp_v[p]    : 0, Val(20))
-        assoc_jcomp_t    = ntuple(p -> p <= nn           ? assoc_jcomp_v[p]    : 0, Val(20))
-        assoc_isite_t    = ntuple(p -> p <= nn           ? assoc_isite_v[p]    : 0, Val(20))
-        assoc_jsite_t    = ntuple(p -> p <= nn           ? assoc_jsite_v[p]    : 0, Val(20))
-        n_sites_flat_t   = ntuple(j -> j <= total_sites  ? n_sites_flat_v[j]   : 0, Val(20))
-        n_sites_cumsum_t = ntuple(i -> i <= nc_model + 1 ? n_sites_cumsum_v[i] : 0, Val(11))
+        nc_model         = length(model)
+        ia_global_v      = [n_sites_cumsum_v[assoc_icomp_v[p]] + assoc_isite_v[p] for p in 1:nn]
+        jb_global_v      = [n_sites_cumsum_v[assoc_jcomp_v[p]] + assoc_jsite_v[p] for p in 1:nn]
+        n_ia_v           = [n_sites_flat_v[ia_global_v[p]] for p in 1:nn]
+        n_jb_v           = [n_sites_flat_v[jb_global_v[p]] for p in 1:nn]
+        assoc_icomp_t    = ntuple(p -> assoc_icomp_v[p],    Val(nn))
+        assoc_jcomp_t    = ntuple(p -> assoc_jcomp_v[p],    Val(nn))
+        assoc_isite_t    = ntuple(p -> assoc_isite_v[p],    Val(nn))
+        assoc_jsite_t    = ntuple(p -> assoc_jsite_v[p],    Val(nn))
+        assoc_ia_global_t = ntuple(p -> ia_global_v[p],     Val(nn))
+        assoc_jb_global_t = ntuple(p -> jb_global_v[p],     Val(nn))
+        assoc_n_ia_t      = ntuple(p -> n_ia_v[p],          Val(nn))
+        assoc_n_jb_t      = ntuple(p -> n_jb_v[p],          Val(nn))
+        n_sites_flat_t   = ntuple(j -> n_sites_flat_v[j],   Val(total_sites))
+        n_sites_cumsum_t = ntuple(i -> n_sites_cumsum_v[i], Val(nc_model + 1))
 
         # Pack I(Tr,ρr) polynomial as NTuple{11,NTuple{11,Float64}}: row=n-index, col=m-index
         c_mat   = SAFTVRMieconsts.c
         VRMie_c = ntuple(ni -> ntuple(mi -> c_mat[ni, mi], 11), 11)
 
         assoc = (;
-            has_assoc      = true,
-            assoc_n_pairs  = Val(nn),
-            assoc_icomp    = assoc_icomp_t,
-            assoc_jcomp    = assoc_jcomp_t,
-            assoc_isite    = assoc_isite_t,
-            assoc_jsite    = assoc_jsite_t,
-            assoc_eps      = Adapt.adapt(backend, assoc_eps_v),
-            assoc_kap      = Adapt.adapt(backend, assoc_kap_v),
-            assoc_sig3     = Adapt.adapt(backend, assoc_sig3_v),
-            assoc_dij      = Adapt.adapt(backend, assoc_dij_v),
-            n_sites_flat   = n_sites_flat_t,
-            n_sites_cumsum = n_sites_cumsum_t,
+            has_assoc       = true,
+            assoc_n_pairs   = Val(nn),
+            assoc_n_sites   = Val(total_sites),
+            assoc_icomp     = assoc_icomp_t,
+            assoc_jcomp     = assoc_jcomp_t,
+            assoc_isite     = assoc_isite_t,
+            assoc_jsite     = assoc_jsite_t,
+            assoc_ia_global = assoc_ia_global_t,
+            assoc_jb_global = assoc_jb_global_t,
+            assoc_n_ia      = assoc_n_ia_t,
+            assoc_n_jb      = assoc_n_jb_t,
+            assoc_eps       = Adapt.adapt(backend, assoc_eps_v),
+            assoc_kap       = Adapt.adapt(backend, assoc_kap_v),
+            assoc_sig3      = Adapt.adapt(backend, assoc_sig3_v),
+            assoc_dij       = Adapt.adapt(backend, assoc_dij_v),
+            n_sites_flat    = n_sites_flat_t,
+            n_sites_cumsum  = n_sites_cumsum_t,
             total_sites,
             VRMie_c,
         )
