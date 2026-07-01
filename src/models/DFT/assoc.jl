@@ -1,4 +1,5 @@
 import Clapeyron: getsites
+import Enzyme.EnzymeRules
 
 # ── GPU/Enzyme-compatible association support ───────────────────────────────
 
@@ -374,6 +375,287 @@ end
     end
 end
 
+# ── Wertheim fixed-point solver (IFT rule registered below) ─────────────────
+#
+# Extracted from f_assoc so that EnzymeRules.forward can intercept the
+# gradient of X* w.r.t. (n0, xi, Δ_vals) via the Implicit Function Theorem.
+# Enzyme differentiates _assoc_n0/_assoc_xi/_assoc_delta_vals → (n0,xi,Δ)
+# normally; the IFT rule fires here and replaces the iteration-based gradient
+# with a single solve: δX = -J⁻¹ · (∂F/∂n0·δn0 + ∂F/∂xi·δxi + ∂F/∂Δ·δΔ).
+@inline function _assoc_solve(n0::NTuple{NC,Float64}, xi::NTuple{NC,Float64},
+                               Δ_vals::NTuple{NP,Float64}, params,
+                               ::Val{NS}) where {NC, NP, NS}
+    X = _assoc_X0(Val(NS))
+    for _ in 1:5*NS; X = _assoc_SS_step(X, n0, xi, Δ_vals, params); end
+    for _ in 1:5*NS; X = _assoc_newton_step(X, n0, xi, Δ_vals, params); end
+    X
+end
+
+# ── @generated IFT tangent: δX = -J⁻¹ · δF ─────────────────────────────────
+#
+# Computes the IFT directional derivative of X* w.r.t. perturbations
+# (δn0, δxi, δΔ) of the solver inputs.  Entirely flat scalar code (GPU-safe).
+#
+# J_{st}   = ∂F_s/∂X_t at the fixed point X* (same Jacobian as Newton step).
+# δF_s     = X*_s · (∂C_s/∂n0·δn0 + ∂C_s/∂xi·δxi + ∂C_s/∂Δ·δΔ) — analytical.
+# Solve    : J · δX = -δF  via Gaussian elimination (no pivoting, J diag-dom).
+@generated function _assoc_ift_tangent(
+        X_star::NTuple{NS,Float64},
+        n0::NTuple{NC,Float64},  xi::NTuple{NC,Float64},  Δ_vals::NTuple{NP,Float64},
+        dn0::NTuple{NC,Float64}, dxi::NTuple{NC,Float64}, dΔ::NTuple{NP,Float64},
+        params) where {NS, NC, NP}
+    stmts = Expr[]
+    cnt = Ref(0)
+    new_sym() = (cnt[] += 1; Symbol("_ift_$(cnt[])"))
+
+    # Step A: C_s (denominator sum) for the Jacobian diagonal 1+C_s
+    C_syms = [new_sym() for _ in 1:NS]
+    for s in 1:NS
+        parts = Expr[]
+        for p in 1:NP
+            push!(parts, :(ifelse(params.assoc_ia_global[$p] == $s,
+                params.assoc_n_jb[$p] *
+                _nti(n0, params.assoc_jcomp[$p]) * _nti(xi, params.assoc_jcomp[$p]) *
+                Δ_vals[$p] * _nti(X_star, params.assoc_jb_global[$p]), 0.0)))
+            push!(parts, :(ifelse(params.assoc_jb_global[$p] == $s,
+                params.assoc_n_ia[$p] *
+                _nti(n0, params.assoc_icomp[$p]) * _nti(xi, params.assoc_icomp[$p]) *
+                Δ_vals[$p] * _nti(X_star, params.assoc_ia_global[$p]), 0.0)))
+        end
+        push!(stmts, :($(C_syms[s]) = $(reduce((a,b)->:($a+$b), parts))))
+    end
+
+    # Step B: Jacobian J_{st} = (1+C_s)·δ_{st} + X*_s · ∂C_s/∂X_t
+    J_sym = [new_sym() for s in 1:NS, t in 1:NS]
+    for s in 1:NS, t in 1:NS
+        k_parts = Expr[]
+        for p in 1:NP
+            push!(k_parts, :(ifelse(params.assoc_ia_global[$p] == $s,
+                ifelse(params.assoc_jb_global[$p] == $t,
+                    params.assoc_n_jb[$p] *
+                    _nti(n0, params.assoc_jcomp[$p]) * _nti(xi, params.assoc_jcomp[$p]) *
+                    Δ_vals[$p], 0.0), 0.0)))
+            push!(k_parts, :(ifelse(params.assoc_jb_global[$p] == $s,
+                ifelse(params.assoc_ia_global[$p] == $t,
+                    params.assoc_n_ia[$p] *
+                    _nti(n0, params.assoc_icomp[$p]) * _nti(xi, params.assoc_icomp[$p]) *
+                    Δ_vals[$p], 0.0), 0.0)))
+        end
+        K_st = reduce((a,b)->:($a+$b), k_parts)
+        diag = s == t ? :(1.0 + $(C_syms[s])) : :(0.0)
+        push!(stmts, :($(J_sym[s,t]) = $diag + X_star[$s] * $K_st))
+    end
+
+    # Step C: IFT residual δF_s = X*_s · δC_s
+    # δC_s = Σ_p [ia[p]==s: n_jb·X*[jb]·(δn0[jc]·xi[jc] + n0[jc]·δxi[jc])·Δ + n_jb·n0[jc]·xi[jc]·X*[jb]·δΔ]
+    #             [jb[p]==s: symmetric with ia↔jb, icomp↔jcomp]
+    dF_syms = [new_sym() for _ in 1:NS]
+    for s in 1:NS
+        parts = Expr[]
+        for p in 1:NP
+            push!(parts, :(ifelse(params.assoc_ia_global[$p] == $s,
+                params.assoc_n_jb[$p] * _nti(X_star, params.assoc_jb_global[$p]) *
+                (_nti(dn0, params.assoc_jcomp[$p]) * _nti(xi,  params.assoc_jcomp[$p]) * Δ_vals[$p]
+               + _nti(n0,  params.assoc_jcomp[$p]) * _nti(dxi, params.assoc_jcomp[$p]) * Δ_vals[$p]
+               + _nti(n0,  params.assoc_jcomp[$p]) * _nti(xi,  params.assoc_jcomp[$p]) * dΔ[$p]),
+                0.0)))
+            push!(parts, :(ifelse(params.assoc_jb_global[$p] == $s,
+                params.assoc_n_ia[$p] * _nti(X_star, params.assoc_ia_global[$p]) *
+                (_nti(dn0, params.assoc_icomp[$p]) * _nti(xi,  params.assoc_icomp[$p]) * Δ_vals[$p]
+               + _nti(n0,  params.assoc_icomp[$p]) * _nti(dxi, params.assoc_icomp[$p]) * Δ_vals[$p]
+               + _nti(n0,  params.assoc_icomp[$p]) * _nti(xi,  params.assoc_icomp[$p]) * dΔ[$p]),
+                0.0)))
+        end
+        dC = reduce((a,b)->:($a+$b), parts)
+        push!(stmts, :($(dF_syms[s]) = X_star[$s] * $dC))
+    end
+
+    # Step D: Gaussian elimination on augmented matrix [J | -δF]
+    # Initialise RHS as -δF so back-substitution directly gives δX = -J⁻¹δF.
+    J_aug = Matrix{Symbol}(undef, NS, NS + 1)
+    for s in 1:NS
+        for t in 1:NS; J_aug[s,t] = J_sym[s,t]; end
+        neg_dF = new_sym()
+        push!(stmts, :($neg_dF = -($(dF_syms[s]))))
+        J_aug[s, NS+1] = neg_dF
+    end
+    for k in 1:NS
+        for i in k+1:NS
+            f = new_sym()
+            push!(stmts, :($f = $(J_aug[i,k]) / $(J_aug[k,k])))
+            for j in k+1:NS+1
+                t = new_sym()
+                push!(stmts, :($t = $(J_aug[i,j]) - $f * $(J_aug[k,j])))
+                J_aug[i,j] = t
+            end
+        end
+    end
+
+    # Step E: back substitution → δX
+    δX = Vector{Symbol}(undef, NS)
+    for k in NS:-1:1
+        rhs = J_aug[k, NS+1]
+        for j in k+1:NS
+            t = new_sym()
+            push!(stmts, :($t = $rhs - $(J_aug[k,j]) * $(δX[j])))
+            rhs = t
+        end
+        δX[k] = new_sym()
+        push!(stmts, :($(δX[k]) = $rhs / $(J_aug[k,k])))
+    end
+
+    return quote
+        $(stmts...)
+        tuple($(δX...))
+    end
+end
+
+# Reverse-mode IFT: given cotangent seed = ∂L/∂X*, compute ∂L/∂(n0,xi,Δ).
+# Solve J^T·λ = seed (note transpose — J is NOT symmetric), then:
+#   ∂L/∂θ_k = -∑_s λ_s · ∂F_s/∂θ_k
+@generated function _assoc_ift_cotangents(
+        X_star::NTuple{NS,Float64},
+        n0::NTuple{NC,Float64}, xi::NTuple{NC,Float64}, Δ_vals::NTuple{NP,Float64},
+        seed::NTuple{NS,Float64},
+        params) where {NS, NC, NP}
+    stmts = Expr[]
+    cnt = Ref(0)
+    new_sym() = (cnt[] += 1; Symbol("_ct_$(cnt[])"))
+
+    # Step A: C_s (same as _assoc_ift_tangent — diagonal of J)
+    C_syms = [new_sym() for _ in 1:NS]
+    for s in 1:NS
+        parts = Expr[]
+        for p in 1:NP
+            push!(parts, :(ifelse(params.assoc_ia_global[$p] == $s,
+                params.assoc_n_jb[$p] *
+                _nti(n0, params.assoc_jcomp[$p]) * _nti(xi, params.assoc_jcomp[$p]) *
+                Δ_vals[$p] * _nti(X_star, params.assoc_jb_global[$p]), 0.0)))
+            push!(parts, :(ifelse(params.assoc_jb_global[$p] == $s,
+                params.assoc_n_ia[$p] *
+                _nti(n0, params.assoc_icomp[$p]) * _nti(xi, params.assoc_icomp[$p]) *
+                Δ_vals[$p] * _nti(X_star, params.assoc_ia_global[$p]), 0.0)))
+        end
+        push!(stmts, :($(C_syms[s]) = $(reduce((a,b)->:($a+$b), parts))))
+    end
+
+    # Step B: all NS² J_{s,t} entries (same as _assoc_ift_tangent)
+    J_sym = [new_sym() for s in 1:NS, t in 1:NS]
+    for s in 1:NS, t in 1:NS
+        k_parts = Expr[]
+        for p in 1:NP
+            push!(k_parts, :(ifelse(params.assoc_ia_global[$p] == $s,
+                ifelse(params.assoc_jb_global[$p] == $t,
+                    params.assoc_n_jb[$p] *
+                    _nti(n0, params.assoc_jcomp[$p]) * _nti(xi, params.assoc_jcomp[$p]) *
+                    Δ_vals[$p], 0.0), 0.0)))
+            push!(k_parts, :(ifelse(params.assoc_jb_global[$p] == $s,
+                ifelse(params.assoc_ia_global[$p] == $t,
+                    params.assoc_n_ia[$p] *
+                    _nti(n0, params.assoc_icomp[$p]) * _nti(xi, params.assoc_icomp[$p]) *
+                    Δ_vals[$p], 0.0), 0.0)))
+        end
+        K_st = reduce((a,b)->:($a+$b), k_parts)
+        diag = s == t ? :(1.0 + $(C_syms[s])) : :(0.0)
+        push!(stmts, :($(J_sym[s,t]) = $diag + X_star[$s] * $K_st))
+    end
+
+    # Step C: Gaussian elimination on [J^T | seed]
+    # J^T[t,s] = J[s,t] → augmented row t is [J[1,t], J[2,t], ..., J[NS,t] | seed[t]]
+    J_aug = Matrix{Symbol}(undef, NS, NS + 1)
+    for t in 1:NS
+        for s in 1:NS; J_aug[t,s] = J_sym[s,t]; end
+        seed_t = new_sym()
+        push!(stmts, :($seed_t = seed[$t]))
+        J_aug[t, NS+1] = seed_t
+    end
+    for k in 1:NS
+        for i in k+1:NS
+            f = new_sym()
+            push!(stmts, :($f = $(J_aug[i,k]) / $(J_aug[k,k])))
+            for j in k+1:NS+1
+                t = new_sym()
+                push!(stmts, :($t = $(J_aug[i,j]) - $f * $(J_aug[k,j])))
+                J_aug[i,j] = t
+            end
+        end
+    end
+
+    # Step D: back-substitution → λ (adjoint variable)
+    λ = Vector{Symbol}(undef, NS)
+    for k in NS:-1:1
+        rhs = J_aug[k, NS+1]
+        for j in k+1:NS
+            tmp = new_sym()
+            push!(stmts, :($tmp = $rhs - $(J_aug[k,j]) * $(λ[j])))
+            rhs = tmp
+        end
+        λ[k] = new_sym()
+        push!(stmts, :($(λ[k]) = $rhs / $(J_aug[k,k])))
+    end
+
+    # Step E: dn0_i = -∑_{p,s} [ia[p]==s && jcomp[p]==i] n_jb·xi[jc]·Δ[p]·X*[jb]·λ[s]·X*[s]
+    #                         + [jb[p]==s && icomp[p]==i] n_ia·xi[ic]·Δ[p]·X*[ia]·λ[s]·X*[s]
+    dn0_syms = [new_sym() for _ in 1:NC]
+    for i in 1:NC
+        parts = Expr[]
+        for p in 1:NP, s in 1:NS
+            push!(parts, :(ifelse(params.assoc_ia_global[$p] == $s,
+                ifelse(params.assoc_jcomp[$p] == $i,
+                    params.assoc_n_jb[$p] * _nti(xi, params.assoc_jcomp[$p]) *
+                    Δ_vals[$p] * _nti(X_star, params.assoc_jb_global[$p]) *
+                    $(λ[s]) * X_star[$s], 0.0), 0.0)))
+            push!(parts, :(ifelse(params.assoc_jb_global[$p] == $s,
+                ifelse(params.assoc_icomp[$p] == $i,
+                    params.assoc_n_ia[$p] * _nti(xi, params.assoc_icomp[$p]) *
+                    Δ_vals[$p] * _nti(X_star, params.assoc_ia_global[$p]) *
+                    $(λ[s]) * X_star[$s], 0.0), 0.0)))
+        end
+        push!(stmts, :($(dn0_syms[i]) = -($(reduce((a,b)->:($a+$b), parts)))))
+    end
+
+    # Step F: dxi_i — same structure, n0↔xi
+    dxi_syms = [new_sym() for _ in 1:NC]
+    for i in 1:NC
+        parts = Expr[]
+        for p in 1:NP, s in 1:NS
+            push!(parts, :(ifelse(params.assoc_ia_global[$p] == $s,
+                ifelse(params.assoc_jcomp[$p] == $i,
+                    params.assoc_n_jb[$p] * _nti(n0, params.assoc_jcomp[$p]) *
+                    Δ_vals[$p] * _nti(X_star, params.assoc_jb_global[$p]) *
+                    $(λ[s]) * X_star[$s], 0.0), 0.0)))
+            push!(parts, :(ifelse(params.assoc_jb_global[$p] == $s,
+                ifelse(params.assoc_icomp[$p] == $i,
+                    params.assoc_n_ia[$p] * _nti(n0, params.assoc_icomp[$p]) *
+                    Δ_vals[$p] * _nti(X_star, params.assoc_ia_global[$p]) *
+                    $(λ[s]) * X_star[$s], 0.0), 0.0)))
+        end
+        push!(stmts, :($(dxi_syms[i]) = -($(reduce((a,b)->:($a+$b), parts)))))
+    end
+
+    # Step G: dΔ_p — sum over s for each pair p
+    dΔ_syms = [new_sym() for _ in 1:NP]
+    for p in 1:NP
+        parts = Expr[]
+        for s in 1:NS
+            push!(parts, :(ifelse(params.assoc_ia_global[$p] == $s,
+                params.assoc_n_jb[$p] * _nti(n0, params.assoc_jcomp[$p]) *
+                _nti(xi, params.assoc_jcomp[$p]) *
+                _nti(X_star, params.assoc_jb_global[$p]) * $(λ[s]) * X_star[$s], 0.0)))
+            push!(parts, :(ifelse(params.assoc_jb_global[$p] == $s,
+                params.assoc_n_ia[$p] * _nti(n0, params.assoc_icomp[$p]) *
+                _nti(xi, params.assoc_icomp[$p]) *
+                _nti(X_star, params.assoc_ia_global[$p]) * $(λ[s]) * X_star[$s], 0.0)))
+        end
+        push!(stmts, :($(dΔ_syms[p]) = -($(reduce((a,b)->:($a+$b), parts)))))
+    end
+
+    return quote
+        $(stmts...)
+        (tuple($(dn0_syms...)), tuple($(dxi_syms...)), tuple($(dΔ_syms...)))
+    end
+end
+
 """
 Wertheim association free energy density at grid point `kk`.
 
@@ -458,8 +740,6 @@ end
 
 @inline function f_assoc(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND},
                           ::Val{NP}, ::Val{NS}) where {NC, ND, NP, NS, M}
-    it_ss     = 5 * NS   # compile-time constants (NS is a type parameter)
-    it_newton = 5 * NS
     F2 = 2; FV = 4
 
     # Mixture FMT densities (straight-line loops, no closures)
@@ -493,14 +773,8 @@ end
     Δ_vals = _assoc_delta_vals(n, params, T, kk, n3_mix, n2_mix, xi_mix,
                                 Val(NC), Val(ND), Val(NP), M)
 
-    # 5*NS relaxed SS warm-up (gets X into convergence basin) + 5*NS Newton
-    X = _assoc_X0(Val(NS))
-    for _ in 1:it_ss
-        X = _assoc_SS_step(X, n0, xi, Δ_vals, params)
-    end
-    for _ in 1:it_newton
-        X = _assoc_newton_step(X, n0, xi, Δ_vals, params)
-    end
+    # _assoc_solve runs 5*NS SS + 5*NS Newton; IFT EnzymeRule provides exact gradient.
+    X = _assoc_solve(n0, xi, Δ_vals, params, Val(NS))
 
     # Accumulate f_assoc = Σᵢ Σₐ n₀ᵢ ξᵢ nᵢₐ (ln Xᵢₐ - Xᵢₐ/2 + 1/2)
     # Regular for-loops + _nti: no closures, GPU-safe
@@ -518,4 +792,92 @@ end
         end
     end
     res
+end
+
+# ── Enzyme IFT rules for _assoc_solve ─────────────────────────────────────────
+#
+# These replace iteration-based gradient propagation through SS+Newton with the
+# exact IFT derivative δX = -J⁻¹·(∂F/∂n0·δn0 + ∂F/∂xi·δxi + ∂F/∂Δ·δΔ).
+# Both params and vNS are always Const in kernel calls; only n0/xi/Δ_vals carry
+# tangents (derived from the single active input n).
+
+# Single forward mode (Width=1) — used by δf_fwd_kernel!
+function EnzymeRules.forward(
+    config::EnzymeRules.FwdConfig,
+    func::EnzymeRules.Const{typeof(_assoc_solve)},
+    ::Type{<:Duplicated},
+    n0::Union{EnzymeRules.Const, Duplicated},
+    xi::Union{EnzymeRules.Const, Duplicated},
+    Δ_vals::Union{EnzymeRules.Const, Duplicated},
+    params::EnzymeRules.Const,
+    vNS::EnzymeRules.Const)
+    X_star = _assoc_solve(n0.val, xi.val, Δ_vals.val, params.val, vNS.val)
+    dn0  = n0     isa EnzymeRules.Const ? map(zero, n0.val)     : n0.dval
+    dxi  = xi     isa EnzymeRules.Const ? map(zero, xi.val)     : xi.dval
+    dΔ   = Δ_vals isa EnzymeRules.Const ? map(zero, Δ_vals.val) : Δ_vals.dval
+    δX = _assoc_ift_tangent(X_star, n0.val, xi.val, Δ_vals.val, dn0, dxi, dΔ, params.val)
+    Duplicated(X_star, δX)
+end
+
+# Batch forward mode (Width=W) — used by δf_fwd_batch_kernel! (default ad_mode)
+function EnzymeRules.forward(
+    config::EnzymeRules.FwdConfigWidth{W},
+    func::EnzymeRules.Const{typeof(_assoc_solve)},
+    ::Type{<:BatchDuplicated},
+    n0::Union{EnzymeRules.Const, BatchDuplicated},
+    xi::Union{EnzymeRules.Const, BatchDuplicated},
+    Δ_vals::Union{EnzymeRules.Const, BatchDuplicated},
+    params::EnzymeRules.Const,
+    vNS::EnzymeRules.Const) where W
+    X_star     = _assoc_solve(n0.val, xi.val, Δ_vals.val, params.val, vNS.val)
+    dn0_batch  = n0     isa EnzymeRules.Const ? ntuple(_ -> map(zero, n0.val),     Val(W)) : n0.dval
+    dxi_batch  = xi     isa EnzymeRules.Const ? ntuple(_ -> map(zero, xi.val),     Val(W)) : xi.dval
+    dΔ_batch   = Δ_vals isa EnzymeRules.Const ? ntuple(_ -> map(zero, Δ_vals.val), Val(W)) : Δ_vals.dval
+    δX_tuple = ntuple(Val(W)) do k
+        _assoc_ift_tangent(X_star, n0.val, xi.val, Δ_vals.val,
+                           dn0_batch[k], dxi_batch[k], dΔ_batch[k], params.val)
+    end
+    BatchDuplicated(X_star, δX_tuple)
+end
+
+# Reverse mode — augmented_primal stores X* on tape; reverse applies IFT cotangents.
+# NTuple is immutable → Enzyme uses Active (not Duplicated) for n0/xi/Δ_vals/return.
+# Cotangents are returned from reverse (Active convention), not accumulated into .dval.
+
+function EnzymeRules.augmented_primal(
+    config::EnzymeRules.RevConfig,
+    func::EnzymeRules.Const{typeof(_assoc_solve)},
+    ::Type{RT},
+    n0::Union{EnzymeRules.Const, Active},
+    xi::Union{EnzymeRules.Const, Active},
+    Δ_vals::Union{EnzymeRules.Const, Active},
+    params::EnzymeRules.Const,
+    vNS::EnzymeRules.Const) where RT
+    X_star = _assoc_solve(n0.val, xi.val, Δ_vals.val, params.val, vNS.val)
+    primal = EnzymeRules.needs_primal(config) ? X_star : nothing
+    # NTuple return is immutable → no shadow needed
+    EnzymeRules.AugmentedReturn(primal, nothing, X_star)
+end
+
+function EnzymeRules.reverse(
+    config::EnzymeRules.RevConfig,
+    func::EnzymeRules.Const{typeof(_assoc_solve)},
+    dret::Active,
+    tape,
+    n0::Union{EnzymeRules.Const, Active},
+    xi::Union{EnzymeRules.Const, Active},
+    Δ_vals::Union{EnzymeRules.Const, Active},
+    params::EnzymeRules.Const,
+    vNS::EnzymeRules.Const)
+    X_star = tape
+    seed   = dret.val
+    dn0_c, dxi_c, dΔ_c = _assoc_ift_cotangents(
+        X_star, n0.val, xi.val, Δ_vals.val, seed, params.val)
+    return (
+        n0     isa EnzymeRules.Const ? nothing : dn0_c,
+        xi     isa EnzymeRules.Const ? nothing : dxi_c,
+        Δ_vals isa EnzymeRules.Const ? nothing : dΔ_c,
+        nothing,
+        nothing,
+    )
 end
