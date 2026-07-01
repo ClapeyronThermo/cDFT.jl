@@ -1,9 +1,9 @@
-function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTStructure,device::Backend)
+function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTStructure,device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     ngrid = structure.ngrid
     nbeads = sum(species.nbeads)
     nd = dimension(structure)
-    Ω = allocate(device,ComplexF64,ngrid...,nbeads,nbeads)
-    ω = structure_ω(structure, device)
+    Ω = allocate(device,Complex{FP},ngrid...,nbeads,nbeads)
+    ω = structure_ω(structure, device, FP)
     ω = Adapt.adapt(device, ω)
     for i in @comps
         l = 1
@@ -29,12 +29,13 @@ end
 function preallocate_propagator(system::AbstractcDFTSystem,propagator::TangentHSPropagator,ρ,backend::Backend)
     nd = dimension(system)
     ngrid = system.structure.ngrid
-    Gcα = allocate(backend, Float64, size(ρ)..., sum(system.species.nbeads))
+    FP = eltype(ρ)
+    Gcα = allocate(backend, FP, size(ρ)..., sum(system.species.nbeads))
     Gcα .= 1.0
-    Gp = allocate(backend, Float64, size(ρ)...)
+    Gp = allocate(backend, FP, size(ρ)...)
     Gp .= 1.0
-    buf = similar(selectdim(ρ,nd+1,1), ComplexF64)
-    scratch = allocate(backend, Float64, ngrid...)
+    buf = similar(selectdim(ρ,nd+1,1), Complex{FP})
+    scratch = allocate(backend, FP, ngrid...)
 
     if backend isa CPU
         plan = plan_fft!(buf, 1:length(ngrid); num_threads=Threads.nthreads())

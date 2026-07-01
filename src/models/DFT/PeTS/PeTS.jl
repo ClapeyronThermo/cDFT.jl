@@ -17,11 +17,11 @@ struct PeTSSpecies <: DFTSpecies
 end
 
 function get_species(model::PeTSModel,structure::DFTStructure)
-    (p,T) = structure.conditions
+    (pressure, temperature) = structure.conditions
     ρbulk = structure.ρbulk
-    T̄ = T./diagvalues(model.params.epsilon.values)
+    T̄ = temperature./diagvalues(model.params.epsilon.values)
     size = d_pets.(T̄).*diagvalues(model.params.sigma.values)
-    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), T, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / T
+    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), temperature, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / temperature
     nc = length(model)
     return PeTSSpecies(ones(Int64,nc),size,ρbulk,μres)
 end
@@ -30,11 +30,11 @@ function length_scale(model::PeTSModel)
     return maximum(model.params.sigma.values)
 end
 
-function get_fields(model::PeTSModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
+function get_fields(model::PeTSModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     nc = length(model)
     ψ = 1.21
 
-    ω = structure_ω(structure, device)
+    ω = structure_ω(structure, device, FP)
     d = species.size
     ngrid = structure.ngrid
     
@@ -44,7 +44,7 @@ function get_fields(model::PeTSModel, species::DFTSpecies, structure::DFTStructu
             SWeightedDensity(:∫ρz²dz,ψ*d,ω,ngrid,device)]
 end
 
-function get_propagator(model::PeTSModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
+function get_propagator(model::PeTSModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     return IdealPropagator()
 end
 
@@ -96,11 +96,12 @@ end
 
 function preallocate_params(system::DFTSystem{<:PeTSModel})
     backend = system.options.device
+    FP      = fptype(system.options)
     params = (;
-        HSd     = Adapt.adapt(backend, system.species.size),
-        m       = Adapt.adapt(backend, system.model.params.segment.values),
-        sigma   = Adapt.adapt(backend, diagvalues(system.model.params.sigma.values)),
-        epsilon = Adapt.adapt(backend, diagvalues(system.model.params.epsilon.values)),
+        HSd     = adapt_to_device(backend, FP, system.species.size),
+        m       = adapt_to_device(backend, FP, system.model.params.segment.values),
+        sigma   = adapt_to_device(backend, FP, diagvalues(system.model.params.sigma.values)),
+        epsilon = adapt_to_device(backend, FP, diagvalues(system.model.params.epsilon.values)),
         PeTS_A  = PeTS_A,
         PeTS_B  = PeTS_B,
     )

@@ -27,7 +27,7 @@ julia> profiles = initialize_profiles(system)
 ```
 """
 function initialize_profiles(system::AbstractcDFTSystem)
-    ρ = initialize_profiles(system.model,system.structure,system.species,system.options.device)
+    ρ = initialize_profiles(system.model,system.structure,system.species,system.options.device,fptype(system.options))
     if system.external_field == nothing
         return ρ
     else
@@ -47,11 +47,11 @@ function initialize_profiles(system::AbstractcDFTSystem)
     end
 end
 
-function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species, device)
+function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     ngrid = structure.ngrid
     ρbulk = structure.ρbulk
 
-    ρ = allocate(device, Float64, ngrid..., sum(species.nbeads))
+    ρ = allocate(device, FP, ngrid..., sum(species.nbeads))
 
     for i in @comps
         for j in @chain(i)
@@ -61,13 +61,13 @@ function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species, 
     return ρ
 end
 
-function initialize_profiles(model::EoSModel,structure::Uniform2DCart, species, device)
+function initialize_profiles(model::EoSModel,structure::Uniform2DCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     nd = dimension(structure)
     ngrid = structure.ngrid
 
 
     ρbulk = structure.ρbulk
-    ρ = allocate(device, Float64, ngrid..., sum(species.nbeads))
+    ρ = allocate(device, FP, ngrid..., sum(species.nbeads))
     for i in @comps
         for j in @chain(i)
             ρ[:,:,j] .= ρbulk[i]
@@ -77,13 +77,13 @@ function initialize_profiles(model::EoSModel,structure::Uniform2DCart, species, 
     return ρ
 end
 
-function initialize_profiles(model::EoSModel,structure::Uniform3DCart, species, device)
+function initialize_profiles(model::EoSModel,structure::Uniform3DCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     nd = dimension(structure)
     ngrid = structure.ngrid
 
 
     ρbulk = structure.ρbulk
-    ρ = allocate(device, Float64, ngrid..., sum(species.nbeads))
+    ρ = allocate(device, FP, ngrid..., sum(species.nbeads))
     for i in @comps
         for j in @chain(i)
             ρ[:,:,:,j] .= ρbulk[i]
@@ -119,7 +119,7 @@ function structure_fftfreq(structure::DFTStructure)
     ω = fftfreq.(ngrid, f)
 end
 
-function structure_ω(structure::DFTStructure, device::Backend)
+function structure_ω(structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     ngrid = structure.ngrid
     nd = dimension(structure)
     ω̂ = structure_fftfreq(structure)  # ntuple of fftfreq vectors, one per dimension
@@ -127,12 +127,12 @@ function structure_ω(structure::DFTStructure, device::Backend)
     # Move each 1D frequency vector to GPU, then reshape for broadcasting
     # dim 1: (Nx,1,1,...), dim 2: (1,Ny,1,...), dim 3: (1,1,Nz,...) etc.
     ω_components = ntuple(nd) do i
-        vec = adapt(device, ComplexF64.(ω̂[i]))   # move to GPU
+        vec = adapt(device, Complex{FP}.(ω̂[i]))   # move to GPU
         shape = ntuple(d -> d == i ? ngrid[d] : 1, nd)  # e.g. (Nx,1,1) for i=1
         reshape(vec, shape)                               # ready to broadcast
     end
 
-    ω = allocate(device, ComplexF64, ngrid..., nd)
+    ω = allocate(device, Complex{FP}, ngrid..., nd)
 
     # Fill each α slice via broadcast — no scalar indexing
     for α in 1:nd

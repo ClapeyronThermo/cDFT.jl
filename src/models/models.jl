@@ -61,12 +61,12 @@ depending on `system.options.device`. When `system.options.ad_mode === :forward`
 function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
                    n, δf, fft_buf, in_buf, out_buf, P, iP,
                    params, f_val, δf_val, nc, nd, fwd_cache = nothing)
-    backend = system.options.device
-    ngrid   = system.structure.ngrid
-    NF      = size(n, ndims(n)-1)
-    NB      = size(n, ndims(n))
-    T       = system.structure.conditions[2]
-    M       = _kernel_type(system)
+    backend     = system.options.device
+    ngrid       = system.structure.ngrid
+    NF          = size(n, ndims(n)-1)
+    NB          = size(n, ndims(n))
+    temperature = convert(fptype(system.options), system.structure.conditions[2])
+    M           = _kernel_type(system)
 
     evaluate_field!(system, ρ, fft_buf, in_buf, out_buf, P, iP)
     synchronize(backend)
@@ -76,7 +76,7 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
         dn_seeds, df_outs, BATCH_val = fwd_cache
         fill!(δf, 0.0)
         kernel_fwd_batch = δf_fwd_batch_kernel!(backend)
-        kernel_fwd_batch(df_outs, n, f_val, dn_seeds, params, Float64(T),
+        kernel_fwd_batch(df_outs, n, f_val, dn_seeds, params, temperature,
                          Val(NF), Val(NB), Val(nc), Val(nd), BATCH_val, M,
                          ndrange = ngrid)
         synchronize(backend)
@@ -88,7 +88,7 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
         fill!(δf_val, 1.0)
         fill!(δf, 0.0)
         kernel_rev = δf_rev_kernel!(backend)
-        kernel_rev(δf, n, f_val, δf_val, params, Float64(T),
+        kernel_rev(δf, n, f_val, δf_val, params, temperature,
                    Val(NF), Val(NB), Val(nc), Val(nd), M,
                    ndrange = ngrid)
         synchronize(backend)
@@ -121,17 +121,18 @@ to `preallocate_params(system)` which returns `(params, nc)`.
 """
 function preallocate_model(system::DFTSystem, ρ)
     backend = system.options.device
+    FP      = fptype(system.options)
     nf      = length_fields(system)
     ngrid   = system.structure.ngrid
     nd      = length(ngrid)
     nb      = size(ρ, nd + 1)
 
-    n       = allocate(backend, Float64, ngrid..., nf, nb)
-    δf      = allocate(backend, Float64, ngrid..., nf, nb)
+    n       = allocate(backend, FP, ngrid..., nf, nb)
+    δf      = allocate(backend, FP, ngrid..., nf, nb)
     fill!(δf, 0.0)
-    fft_buf = allocate(backend, Float64, ngrid..., nf, nb)
+    fft_buf = allocate(backend, FP, ngrid..., nf, nb)
 
-    in_buf  = allocate(backend, ComplexF64, ngrid...)
+    in_buf  = allocate(backend, Complex{FP}, ngrid...)
     out_buf = similar(in_buf)
     tmp     = similar(in_buf)
     if backend isa CPU
@@ -141,8 +142,8 @@ function preallocate_model(system::DFTSystem, ρ)
     end
     iplan = inv(plan)
 
-    f_val  = allocate(backend, Float64, ngrid...)
-    δf_val = allocate(backend, Float64, ngrid...)
+    f_val  = allocate(backend, FP, ngrid...)
+    δf_val = allocate(backend, FP, ngrid...)
     fill!(δf_val, 1.0)
 
     params, nc = preallocate_params(system)
@@ -152,12 +153,12 @@ function preallocate_model(system::DFTSystem, ρ)
         dn_seeds = ntuple(Val(batch)) do k
             f_idx = (k - 1) ÷ nc + 1
             c_idx = (k - 1) % nc + 1
-            seed = allocate(backend, Float64, ngrid..., nf, nc)
+            seed = allocate(backend, FP, ngrid..., nf, nc)
             fill!(seed, 0.0)
             fill!(selectdim(selectdim(seed, nd+1, f_idx), nd+1, c_idx), 1.0)
             seed
         end
-        df_outs   = ntuple(_ -> allocate(backend, Float64, ngrid...), Val(batch))
+        df_outs   = ntuple(_ -> allocate(backend, FP, ngrid...), Val(batch))
         fwd_cache = (dn_seeds, df_outs, Val(batch))
     else
         fwd_cache = nothing
@@ -168,17 +169,18 @@ end
 
 function preallocate_model(system::ElectrolyteDFTSystem, ρ)
     backend = system.options.device
+    FP      = fptype(system.options)
     nf      = length_fields(system)
     ngrid   = system.structure.ngrid
     nd      = length(ngrid)
     nb      = size(ρ, nd + 1)
 
-    n       = allocate(backend, Float64, ngrid..., nf, nb)
-    δf      = allocate(backend, Float64, ngrid..., nf, nb)
+    n       = allocate(backend, FP, ngrid..., nf, nb)
+    δf      = allocate(backend, FP, ngrid..., nf, nb)
     fill!(δf, 0.0)
-    fft_buf = allocate(backend, Float64, ngrid..., nf, nb)
+    fft_buf = allocate(backend, FP, ngrid..., nf, nb)
 
-    in_buf  = allocate(backend, ComplexF64, ngrid...)
+    in_buf  = allocate(backend, Complex{FP}, ngrid...)
     out_buf = similar(in_buf)
     tmp     = similar(in_buf)
     if backend isa CPU
@@ -188,8 +190,8 @@ function preallocate_model(system::ElectrolyteDFTSystem, ρ)
     end
     iplan = inv(plan)
 
-    f_val  = allocate(backend, Float64, ngrid...)
-    δf_val = allocate(backend, Float64, ngrid...)
+    f_val  = allocate(backend, FP, ngrid...)
+    δf_val = allocate(backend, FP, ngrid...)
     fill!(δf_val, 1.0)
 
     params, nc = preallocate_params(system)
@@ -221,7 +223,7 @@ Runs identically on CPU and GPU; the backend is selected at call time.
 """
 @kernel function δf_rev_kernel!(
     δf, n, f_val, δf_val, params,
-    T, ::Val{NF}, ::Val{NB}, ::Val{NC}, ::Val{ND}, ::Type{M}
+    temperature, ::Val{NF}, ::Val{NB}, ::Val{NC}, ::Val{ND}, ::Type{M}
 ) where {NF, NB, NC, ND, M}
     kk = @index(Global, Cartesian)
     Enzyme.autodiff_deferred(
@@ -229,7 +231,7 @@ Runs identically on CPU and GPU; the backend is selected at call time.
         Const(M), Const(kk),
         Duplicated(f_val, δf_val),
         Duplicated(n, δf),
-        Const(params), Const(Float64(T)), Const(Val(NC)), Const(Val(ND))
+        Const(params), Const(temperature), Const(Val(NC)), Const(Val(ND))
     )
 end
 
@@ -243,7 +245,7 @@ Uses no per-thread intermediate storage, avoiding GPU stack overflow for large N
 """
 @kernel function δf_fwd_kernel!(
     δf_val, n, f_val, dn, params,
-    T, ::Val{NF}, ::Val{NB}, ::Val{NC}, ::Val{ND}, ::Type{M}
+    temperature, ::Val{NF}, ::Val{NB}, ::Val{NC}, ::Val{ND}, ::Type{M}
 ) where {NF, NB, NC, ND, M}
     kk = @index(Global, Cartesian)
     Enzyme.autodiff_deferred(
@@ -251,7 +253,7 @@ Uses no per-thread intermediate storage, avoiding GPU stack overflow for large N
         Const(M), Const(kk),
         Duplicated(f_val, δf_val),
         Duplicated(n, dn),
-        Const(params), Const(Float64(T)), Const(Val(NC)), Const(Val(ND))
+        Const(params), Const(temperature), Const(Val(NC)), Const(Val(ND))
     )
 end
 
@@ -265,7 +267,7 @@ receives ∂f_res(n[kk,:])/∂n[kk, f_k, c_k].
 """
 @kernel function δf_fwd_batch_kernel!(
     df_tuple, n, f_val, dn_tuple, params,
-    T, ::Val{NF}, ::Val{NB}, ::Val{NC}, ::Val{ND}, ::Val{BATCH}, ::Type{M}
+    temperature, ::Val{NF}, ::Val{NB}, ::Val{NC}, ::Val{ND}, ::Val{BATCH}, ::Type{M}
 ) where {NF, NB, NC, ND, BATCH, M}
     kk = @index(Global, Cartesian)
     Enzyme.autodiff_deferred(
@@ -273,6 +275,6 @@ receives ∂f_res(n[kk,:])/∂n[kk, f_k, c_k].
         Const(M), Const(kk),
         BatchDuplicated(f_val, df_tuple),
         BatchDuplicated(n,     dn_tuple),
-        Const(params), Const(Float64(T)), Const(Val(NC)), Const(Val(ND))
+        Const(params), Const(temperature), Const(Val(NC)), Const(Val(ND))
     )
 end

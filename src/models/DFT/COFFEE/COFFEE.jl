@@ -10,11 +10,11 @@ The bulk model can be obtained from Clapeyron.
 """
 COFFEE
 
-function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
+function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     nc = length(model)
     ψ = 1.3862
 
-    ω = structure_ω(structure, device)
+    ω = structure_ω(structure, device, FP)
     d = species.size
     ngrid = structure.ngrid
     λ_r = diagvalues(model.params.lambda_r.values)
@@ -226,6 +226,7 @@ end
 
 function preallocate_params(system::DFTSystem{<:COFFEEModel})
     backend = system.options.device
+    FP      = fptype(system.options)
     model   = system.model
     σ_diag  = diagvalues(model.params.sigma.values)
     ϵ_diag  = diagvalues(model.params.epsilon.values)
@@ -239,20 +240,20 @@ function preallocate_params(system::DFTSystem{<:COFFEEModel})
     lambda_r_t = ntuple(i -> ntuple(j -> lr[i,j], nc), nc)
     lambda_a_t = ntuple(i -> ntuple(j -> la[i,j], nc), nc)
     params = (;
-        HSd         = Adapt.adapt(backend, system.species.size),
-        m           = Adapt.adapt(backend, model.params.segment.values),
-        meff        = Adapt.adapt(backend, model.params.segment.values),
-        sigma       = Adapt.adapt(backend, model.params.sigma.values),
-        epsilon     = Adapt.adapt(backend, model.params.epsilon.values),
+        HSd         = adapt_to_device(backend, FP, system.species.size),
+        m           = adapt_to_device(backend, FP, model.params.segment.values),
+        meff        = adapt_to_device(backend, FP, model.params.segment.values),
+        sigma       = adapt_to_device(backend, FP, model.params.sigma.values),
+        epsilon     = adapt_to_device(backend, FP, model.params.epsilon.values),
         lambda_r_t  = lambda_r_t,
         lambda_a_t  = lambda_a_t,
-        psi_eff     = Adapt.adapt(backend, system.fields[end].width),
+        psi_eff     = adapt_to_device(backend, FP, system.fields[end].width),
         A           = SAFTVRMIE_A,
         phi         = SAFTVRMIE_PHI,
-        pcp_m       = Adapt.adapt(backend, pcp_segment(model)),
-        pcp_sigma   = Adapt.adapt(backend, pcp_sigma(model)),
-        pcp_epsilon = Adapt.adapt(backend, pcp_epsilon(model)),
-        dipole2     = Adapt.adapt(backend, pcp_dipole2(model)),
+        pcp_m       = adapt_to_device(backend, FP, pcp_segment(model)),
+        pcp_sigma   = adapt_to_device(backend, FP, pcp_sigma(model)),
+        pcp_epsilon = adapt_to_device(backend, FP, pcp_epsilon(model)),
+        dipole2     = adapt_to_device(backend, FP, pcp_dipole2(model)),
         coffee_b2   = COFFEEconsts.corr_b2,
         coffee_c2   = COFFEEconsts.corr_c2,
         coffee_b3   = COFFEEconsts.corr_b3,

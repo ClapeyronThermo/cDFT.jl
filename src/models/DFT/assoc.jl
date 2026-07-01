@@ -231,10 +231,10 @@ end
 #
 # Generates exactly NS explicit site updates with literal pair-index p — no
 # closures, no runtime NTuple indexing for the outer pair loop. GPU-safe.
-@generated function _assoc_SS_step(X::NTuple{NS,Float64},
-                                    n0::NTuple{NC,Float64},
-                                    xi::NTuple{NC,Float64},
-                                    Δ_vals::NTuple{NP,Float64},
+@generated function _assoc_SS_step(X::NTuple{NS,<:AbstractFloat},
+                                    n0::NTuple{NC,<:AbstractFloat},
+                                    xi::NTuple{NC,<:AbstractFloat},
+                                    Δ_vals::NTuple{NP,<:AbstractFloat},
                                     params) where {NS, NC, NP}
     stmts = Expr[]
     for s in 1:NS
@@ -272,10 +272,10 @@ end
 # If X_s - δX_s ∉ (0,1) for any site, that site falls back to the unblended SS
 # update — same safeguard as Clapeyron's assoc_matrix_solve_general.
 # Called FROM the regular @inline f_assoc so Enzyme traces f_assoc directly.
-@generated function _assoc_newton_step(X::NTuple{NS,Float64},
-                                        n0::NTuple{NC,Float64},
-                                        xi::NTuple{NC,Float64},
-                                        Δ_vals::NTuple{NP,Float64},
+@generated function _assoc_newton_step(X::NTuple{NS,<:AbstractFloat},
+                                        n0::NTuple{NC,<:AbstractFloat},
+                                        xi::NTuple{NC,<:AbstractFloat},
+                                        Δ_vals::NTuple{NP,<:AbstractFloat},
                                         params) where {NS, NC, NP}
     stmts = Expr[]
     cnt = Ref(0)
@@ -382,8 +382,8 @@ end
 # Enzyme differentiates _assoc_n0/_assoc_xi/_assoc_delta_vals → (n0,xi,Δ)
 # normally; the IFT rule fires here and replaces the iteration-based gradient
 # with a single solve: δX = -J⁻¹ · (∂F/∂n0·δn0 + ∂F/∂xi·δxi + ∂F/∂Δ·δΔ).
-@inline function _assoc_solve(n0::NTuple{NC,Float64}, xi::NTuple{NC,Float64},
-                               Δ_vals::NTuple{NP,Float64}, params,
+@inline function _assoc_solve(n0::NTuple{NC,<:AbstractFloat}, xi::NTuple{NC,<:AbstractFloat},
+                               Δ_vals::NTuple{NP,<:AbstractFloat}, params,
                                ::Val{NS}) where {NC, NP, NS}
     X = _assoc_X0(Val(NS))
     for _ in 1:5*NS; X = _assoc_SS_step(X, n0, xi, Δ_vals, params); end
@@ -400,9 +400,9 @@ end
 # δF_s     = X*_s · (∂C_s/∂n0·δn0 + ∂C_s/∂xi·δxi + ∂C_s/∂Δ·δΔ) — analytical.
 # Solve    : J · δX = -δF  via Gaussian elimination (no pivoting, J diag-dom).
 @generated function _assoc_ift_tangent(
-        X_star::NTuple{NS,Float64},
-        n0::NTuple{NC,Float64},  xi::NTuple{NC,Float64},  Δ_vals::NTuple{NP,Float64},
-        dn0::NTuple{NC,Float64}, dxi::NTuple{NC,Float64}, dΔ::NTuple{NP,Float64},
+        X_star::NTuple{NS,<:AbstractFloat},
+        n0::NTuple{NC,<:AbstractFloat},  xi::NTuple{NC,<:AbstractFloat},  Δ_vals::NTuple{NP,<:AbstractFloat},
+        dn0::NTuple{NC,<:AbstractFloat}, dxi::NTuple{NC,<:AbstractFloat}, dΔ::NTuple{NP,<:AbstractFloat},
         params) where {NS, NC, NP}
     stmts = Expr[]
     cnt = Ref(0)
@@ -514,9 +514,9 @@ end
 # Solve J^T·λ = seed (note transpose — J is NOT symmetric), then:
 #   ∂L/∂θ_k = -∑_s λ_s · ∂F_s/∂θ_k
 @generated function _assoc_ift_cotangents(
-        X_star::NTuple{NS,Float64},
-        n0::NTuple{NC,Float64}, xi::NTuple{NC,Float64}, Δ_vals::NTuple{NP,Float64},
-        seed::NTuple{NS,Float64},
+        X_star::NTuple{NS,<:AbstractFloat},
+        n0::NTuple{NC,<:AbstractFloat}, xi::NTuple{NC,<:AbstractFloat}, Δ_vals::NTuple{NP,<:AbstractFloat},
+        seed::NTuple{NS,<:AbstractFloat},
         params) where {NS, NC, NP}
     stmts = Expr[]
     cnt = Ref(0)

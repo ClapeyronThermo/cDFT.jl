@@ -329,17 +329,18 @@ end
 
 function preallocate_params(system::DFTSystem{<:QPCPSAFTModel})
     backend = system.options.device
+    FP      = fptype(system.options)
     model   = system.model
     base = (;
-        HSd         = Adapt.adapt(backend, system.species.size),
-        m           = Adapt.adapt(backend, model.params.segment.values),
-        sigma       = Adapt.adapt(backend, model.params.sigma.values),
-        epsilon     = Adapt.adapt(backend, model.params.epsilon.values),
-        pcp_m       = Adapt.adapt(backend, pcp_segment(model)),
-        pcp_sigma   = Adapt.adapt(backend, pcp_sigma(model)),
-        pcp_epsilon = Adapt.adapt(backend, pcp_epsilon(model)),
-        dipole2     = Adapt.adapt(backend, pcp_dipole2(model)),
-        quadrupole2 = Adapt.adapt(backend, model.params.quadrupole2.values),
+        HSd         = adapt_to_device(backend, FP, system.species.size),
+        m           = adapt_to_device(backend, FP, model.params.segment.values),
+        sigma       = adapt_to_device(backend, FP, model.params.sigma.values),
+        epsilon     = adapt_to_device(backend, FP, model.params.epsilon.values),
+        pcp_m       = adapt_to_device(backend, FP, pcp_segment(model)),
+        pcp_sigma   = adapt_to_device(backend, FP, pcp_sigma(model)),
+        pcp_epsilon = adapt_to_device(backend, FP, pcp_epsilon(model)),
+        dipole2     = adapt_to_device(backend, FP, pcp_dipole2(model)),
+        quadrupole2 = adapt_to_device(backend, FP, model.params.quadrupole2.values),
     )
 
     nn = Clapeyron.assoc_pair_length(model)
@@ -377,10 +378,10 @@ function preallocate_params(system::DFTSystem{<:QPCPSAFTModel})
             assoc_jb_global = assoc_jb_global_t,
             assoc_n_ia      = assoc_n_ia_t,
             assoc_n_jb      = assoc_n_jb_t,
-            assoc_eps       = Adapt.adapt(backend, assoc_eps_v),
-            assoc_kap       = Adapt.adapt(backend, assoc_kap_v),
-            assoc_sig3      = Adapt.adapt(backend, assoc_sig3_v),
-            assoc_dij       = Adapt.adapt(backend, assoc_dij_v),
+            assoc_eps       = adapt_to_device(backend, FP, assoc_eps_v),
+            assoc_kap       = adapt_to_device(backend, FP, assoc_kap_v),
+            assoc_sig3      = adapt_to_device(backend, FP, assoc_sig3_v),
+            assoc_dij       = adapt_to_device(backend, FP, assoc_dij_v),
             n_sites_flat    = n_sites_flat_t,
             n_sites_cumsum  = n_sites_cumsum_t,
             total_sites,

@@ -12,7 +12,7 @@ Integrates a collection of points `f`, with constant `dz`, using simpson rule.
 
 _∫(f::AbstractArray, dz) = _∫(Array(f), dz)
 
-function _∫(f::Array{Float64},dz)
+function _∫(f::Array{T},dz) where T<:Real
     ∑f = zero(typeof(first(dz)))
     for i in CartesianIndices(size(f))
         k = Tuple(i)

@@ -8,23 +8,22 @@ function ElectrolyteDFTSystem(model::ElectrolyteModel, structure::DFTStructure, 
     species = get_species(model.neutralmodel, structure)
     ion_species = get_species(model.ionmodel, model.neutralmodel, model.charge, structure)
 
-    (p,T) = structure.conditions
+    FP = fptype(options)
+    (pressure, temperature) = structure.conditions
     ρbulk = structure.ρbulk
-    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), T, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / T
+    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), temperature, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / temperature
 
     species.chempot_res .= μres
 
-
-    fields = get_fields(model.neutralmodel, species, structure, options.device)
-    fields_ion = get_fields(model.ionmodel, ion_species, structure, options.device)
+    fields = get_fields(model.neutralmodel, species, structure, options.device, FP)
+    fields_ion = get_fields(model.ionmodel, ion_species, structure, options.device, FP)
     append!(fields,fields_ion)
 
     typed_fields = tuple(fields...)
 
     propagator = get_propagator(model.neutralmodel, species, structure)
-    
 
-    external_field = [external_field, ElectrostaticPotential(model, structure, options.device)]
+    external_field = [external_field, ElectrostaticPotential(model, structure, options.device, FP)]
 
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
@@ -33,25 +32,25 @@ end
 
 function ElectrolyteDFTSystem(model::ElectrolyteModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
     device = options.device
+    FP = fptype(options)
     species = get_species(model.neutralmodel, structure)
     ion_species = get_species(model.ionmodel, model.neutralmodel, model.charge, structure)
 
-    (p,T) = structure.conditions
+    (pressure, temperature) = structure.conditions
     ρbulk = structure.ρbulk
-    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), T, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / T
+    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), temperature, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / temperature
 
     species.chempot_res .= μres
 
-
-    fields = get_fields(model.neutralmodel, species, structure, device)
-    fields_ion = get_fields(model.ionmodel, ion_species, structure, device)
+    fields = get_fields(model.neutralmodel, species, structure, device, FP)
+    fields_ion = get_fields(model.ionmodel, ion_species, structure, device, FP)
     append!(fields,fields_ion)
 
     typed_fields = tuple(fields...)
 
-    propagator = get_propagator(model.neutralmodel, species, structure, device)
+    propagator = get_propagator(model.neutralmodel, species, structure, device, FP)
 
-    external_field = [ElectrostaticPotential(model, structure, device)]
+    external_field = [ElectrostaticPotential(model, structure, device, FP)]
 
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()

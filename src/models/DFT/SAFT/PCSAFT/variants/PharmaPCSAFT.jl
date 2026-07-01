@@ -3,16 +3,17 @@ import Clapeyron: pharmaPCSAFTModel, Δσh20, water08_k
 function preallocate_params(system::DFTSystem{<:pharmaPCSAFTModel})
     params_base, nc = invoke(preallocate_params, Tuple{DFTSystem{<:PCSAFTModel}}, system)
 
-    model   = system.model
-    backend = system.options.device
-    T       = system.structure.conditions[2]
+    model       = system.model
+    backend     = system.options.device
+    FP          = fptype(system.options)
+    temperature = system.structure.conditions[2]
 
     k  = Int(water08_k(model))
     nc_model = length(model)
     sigma_eff = copy(model.params.sigma.values)
 
     if k > 0
-        Δσ = Δσh20(T)
+        Δσ = Δσh20(temperature)
         for i in 1:nc_model, j in 1:nc_model
             sigma_eff[i,j] += (0.5*(k == i) + 0.5*(k == j)) * Δσ
         end
@@ -26,7 +27,7 @@ function preallocate_params(system::DFTSystem{<:pharmaPCSAFTModel})
     for i in 1:nc_model
         for j in 1:nc_model
             i == j && continue
-            epsilon_eff[i,j] *= (1.0 - k0_mat[i,j] - k1_mat[i,j]*T)
+            epsilon_eff[i,j] *= (1.0 - k0_mat[i,j] - k1_mat[i,j]*temperature)
         end
     end
 
@@ -36,14 +37,14 @@ function preallocate_params(system::DFTSystem{<:pharmaPCSAFTModel})
         sig3_eff = [sigma_eff[eps_vals.outer_indices[idx]...]^3
                     for idx in 1:length(eps_vals.values)]
         return merge(params_base, (;
-            sigma      = Adapt.adapt(backend, sigma_eff),
-            epsilon    = Adapt.adapt(backend, epsilon_eff),
-            assoc_sig3 = Adapt.adapt(backend, sig3_eff),
+            sigma      = adapt_to_device(backend, FP, sigma_eff),
+            epsilon    = adapt_to_device(backend, FP, epsilon_eff),
+            assoc_sig3 = adapt_to_device(backend, FP, sig3_eff),
         )), nc
     else
         return merge(params_base, (;
-            sigma   = Adapt.adapt(backend, sigma_eff),
-            epsilon = Adapt.adapt(backend, epsilon_eff),
+            sigma   = adapt_to_device(backend, FP, sigma_eff),
+            epsilon = adapt_to_device(backend, FP, epsilon_eff),
         )), nc
     end
 end

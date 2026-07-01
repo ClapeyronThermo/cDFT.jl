@@ -33,11 +33,11 @@ struct SAFTgammaMieSpecies <: DFTSpecies
 end
 
 function get_species(model::SAFTgammaMie,structure::DFTStructure)
-    (p,T) = structure.conditions
-    ρbulk = structure.ρbulk 
-    HSd = d(model,1e-3,T,ones(length(model.groups.flattenedgroups)))
+    (pressure,temperature) = structure.conditions
+    ρbulk = structure.ρbulk
+    HSd = d(model,1e-3,temperature,ones(length(model.groups.flattenedgroups)))
 
-    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), T, ρbulk./sum(ρbulk)) / Clapeyron.R̄ / T
+    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), temperature, ρbulk./sum(ρbulk)) / Clapeyron.R̄ / temperature
     nbeads = length.(model.groups.groups)
 
     levels = zeros(Int, sum(nbeads))
@@ -63,11 +63,11 @@ function get_species(model::SAFTgammaMie,structure::DFTStructure)
     return SAFTgammaMieSpecies(nbeads,HSd,levels,ρbulk,μres)
 end
 
-function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
+function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     nb = sum(species.nbeads)
     ngrid = structure.ngrid
     nd = dimension(structure)
-    ω = structure_ω(structure, device)
+    ω = structure_ω(structure, device, FP)
     d = species.size
     λ_r = diagvalues(model.params.lambda_r.values)
     λ_a = diagvalues(model.params.lambda_a.values)
@@ -84,8 +84,8 @@ function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DF
             SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device)]
 end
 
-function get_propagator(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
-    return TangentHSPropagator(model, species, structure, device)
+function get_propagator(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+    return TangentHSPropagator(model, species, structure, device, FP)
 end
 
 
@@ -336,6 +336,7 @@ end
 
 function preallocate_params(system::DFTSystem{<:SAFTgammaMieModel})
     backend = system.options.device
+    FP      = fptype(system.options)
     model   = system.model
     T_val  = system.structure.conditions[2]
     x_val  = system.structure.ρbulk ./ sum(system.structure.ρbulk)
@@ -360,22 +361,22 @@ function preallocate_params(system::DFTSystem{<:SAFTgammaMieModel})
     max_nb   = maximum(nbeads_v)
     species_group_idx = ntuple(s -> ntuple(j -> (j <= nbeads_v[s] ? model.groups.i_groups[s][j] : 0), max_nb), nc_s_v)
     base = (;
-        HSd                = Adapt.adapt(backend, system.species.size),
-        m                  = Adapt.adapt(backend, m_vals),
-        S                  = Adapt.adapt(backend, S_vals),
-        meff               = Adapt.adapt(backend, meff),
-        sigma              = Adapt.adapt(backend, model.params.sigma.values),
-        epsilon            = Adapt.adapt(backend, model.params.epsilon.values),
+        HSd                = adapt_to_device(backend, FP, system.species.size),
+        m                  = adapt_to_device(backend, FP, m_vals),
+        S                  = adapt_to_device(backend, FP, S_vals),
+        meff               = adapt_to_device(backend, FP, meff),
+        sigma              = adapt_to_device(backend, FP, model.params.sigma.values),
+        epsilon            = adapt_to_device(backend, FP, model.params.epsilon.values),
         lambda_r_t         = lambda_r_t,
         lambda_a_t         = lambda_a_t,
-        psi_eff            = Adapt.adapt(backend, system.fields[end].width),
+        psi_eff            = adapt_to_device(backend, FP, system.fields[end].width),
         A                  = SAFTVRMIE_A,
         phi                = SAFTVRMIE_PHI,
         nbeads_comp        = ntuple(i -> system.species.nbeads[i], nc_s_v),
-        HSd_species        = Adapt.adapt(backend, HSd_sp),
-        m_species          = Adapt.adapt(backend, model.vrmodel.params.segment.values),
-        sigma_species      = Adapt.adapt(backend, model.vrmodel.params.sigma.values),
-        epsilon_species    = Adapt.adapt(backend, model.vrmodel.params.epsilon.values),
+        HSd_species        = adapt_to_device(backend, FP, HSd_sp),
+        m_species          = adapt_to_device(backend, FP, model.vrmodel.params.segment.values),
+        sigma_species      = adapt_to_device(backend, FP, model.vrmodel.params.sigma.values),
+        epsilon_species    = adapt_to_device(backend, FP, model.vrmodel.params.epsilon.values),
         lambda_r_species_t = lambda_r_species_t,
         lambda_a_species_t = lambda_a_species_t,
         species_group_idx  = species_group_idx,
@@ -424,10 +425,10 @@ function preallocate_params(system::DFTSystem{<:SAFTgammaMieModel})
             assoc_jb_global = assoc_jb_global_t,
             assoc_n_ia      = assoc_n_ia_t,
             assoc_n_jb      = assoc_n_jb_t,
-            assoc_eps       = Adapt.adapt(backend, assoc_eps_v),
-            assoc_kap       = Adapt.adapt(backend, assoc_kap_v),
-            assoc_sig3      = Adapt.adapt(backend, assoc_sig3_v),
-            assoc_dij       = Adapt.adapt(backend, assoc_dij_v),
+            assoc_eps       = adapt_to_device(backend, FP, assoc_eps_v),
+            assoc_kap       = adapt_to_device(backend, FP, assoc_kap_v),
+            assoc_sig3      = adapt_to_device(backend, FP, assoc_sig3_v),
+            assoc_dij       = adapt_to_device(backend, FP, assoc_dij_v),
             n_sites_flat    = n_sites_flat_t,
             n_sites_cumsum  = n_sites_cumsum_t,
             total_sites,

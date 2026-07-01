@@ -15,26 +15,33 @@ julia> using ThreadPinning
 julia> options = DFTOptions(CPU(4, [0,1,12,13]))
 ```
 """
-struct DFTOptions{D}
+struct DFTOptions{D, FP<:AbstractFloat}
     device::D
     ad_mode::Symbol   # :reverse (default) or :forward
 
-    function DFTOptions(device::D, ad_mode::Symbol = :forward) where D
-        return new{D}(device, ad_mode)
+    function DFTOptions(device::D, ad_mode::Symbol = :forward; precision::Type{FP} = Float64) where {D, FP<:AbstractFloat}
+        return new{D,FP}(device, ad_mode)
     end
 end
 
 DFTOptions() = DFTOptions(CPU(; static=true))
-DFTOptions(device::Backend; ad_mode::Symbol = :forward) = DFTOptions(device, ad_mode)
+DFTOptions(device::Backend; ad_mode::Symbol = :forward, precision::Type{FP} = Float64) where FP<:AbstractFloat =
+    DFTOptions(device, ad_mode; precision)
+
+fptype(::DFTOptions{D,FP}) where {D,FP} = FP
+
+adapt_to_device(backend, ::Type{FP}, arr::AbstractArray) where FP<:AbstractFloat =
+    Adapt.adapt(backend, FP.(arr))
 
 function preallocate(system, ρ)
     backend = system.options.device
-    
+    FP = fptype(system.options)
+
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(ρ,nd+1)
 
-    δfδρ_res = allocate(backend, Float64, ngrid...,nb)
+    δfδρ_res = allocate(backend, FP, ngrid...,nb)
 
     cache_model = preallocate_model(system, ρ)
 
@@ -91,4 +98,4 @@ function preallocate_propagator(system, ρ)
     return preallocate_propagator(system, propagtor, ρ, backend)
 end
 
-export CPU, DFTOptions
+export CPU, DFTOptions, fptype

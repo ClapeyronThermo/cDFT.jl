@@ -17,17 +17,18 @@ struct SWeightedDensity{M,P,iP} <: ScalarField
 end
 
 function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend)
-    R = Adapt.adapt(backend, 2π.*width')
+    nd = length(ngrid)
+    CT = eltype(ω)
+    FP = real(CT)
+    R = adapt_to_device(backend, FP, 2π.*width')
     # Reshape R based on the dimension of the system
     # R = reshape(R,length(width))
-    R = reshape(R, ntuple(i -> 1, length(ngrid))..., length(width))
-
-    nd = length(ngrid)
+    R = reshape(R, ntuple(i -> 1, nd)..., length(width))
 
     if type != :∫ρzdz
-        Ω = allocate(backend,ComplexF64,ngrid...,length(width))
+        Ω = allocate(backend,CT,ngrid...,length(width))
     else
-        Ω = allocate(backend,ComplexF64,ngrid...,length(ngrid),length(width))
+        Ω = allocate(backend,CT,ngrid...,length(ngrid),length(width))
     end
 
     if type == :∫ρdz
@@ -130,15 +131,16 @@ struct VWeightedDensity{M,P,iP} <: VectorField
 end
 
 function VWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend)
-    R = Adapt.adapt(backend, 2π.*width')
-    R = reshape(R, ntuple(i -> 1, length(ngrid))..., 1, length(width))
     nd = length(ngrid)
-
+    CT = eltype(ω)
+    FP = real(CT)
+    R = adapt_to_device(backend, FP, 2π.*width')
+    R = reshape(R, ntuple(i -> 1, nd)..., 1, length(width))
 
     if type != :∫ρzdz
-        Ω = allocate(backend,ComplexF64,ngrid...,length(width))
+        Ω = allocate(backend,CT,ngrid...,length(width))
     else
-        Ω = allocate(backend,ComplexF64,ngrid...,length(ngrid),length(width))
+        Ω = allocate(backend,CT,ngrid...,length(ngrid),length(width))
     end
 
     if type == :∇ρ

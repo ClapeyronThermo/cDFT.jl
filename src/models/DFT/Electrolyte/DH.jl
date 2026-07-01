@@ -28,13 +28,13 @@ end
 
 For a given `model`, obtain all of the fields that will be needed to perform the DFT calculation. This function should return a vector of `DFTField`s.
 """
-function get_fields(ionmodel::DHModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
-    (p,T) = structure.conditions
+function get_fields(ionmodel::DHModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+    (pressure, temperature) = structure.conditions
     ρbulk = structure.ρbulk
     ngrid = structure.ngrid
     Z = species.charges
-    ω = structure_ω(structure, device)
-    κ = screening_length(ionmodel, 1., T, ρbulk, Z, dielectric_constant(ionmodel.RSPmodel, 1., T, ρbulk))
+    ω = structure_ω(structure, device, FP)
+    κ = screening_length(ionmodel, 1., temperature, ρbulk, Z, dielectric_constant(ionmodel.RSPmodel, 1., temperature, ρbulk))
     d = species.size
     return [SWeightedDensity(:∫ρdz,d/2 .+ 1/κ,ω,ngrid,device)]
 end
@@ -46,9 +46,9 @@ end
 For a given `model` and `structure`, define the relevant parameters for each species. These structs will contain additional information not present by default in the inital `model`, such as the bead size, the number of beads and the connectivity of the beads.
 """
 function get_species(ionmodel::DHModel,model::EoSModel,charges::Vector{Int64},structure::DFTStructure)
-    (p,T) = structure.conditions
+    (pressure, temperature) = structure.conditions
     ρbulk = structure.ρbulk
-    size = get_sigma(ionmodel, 1., T, ρbulk, model)
+    size = get_sigma(ionmodel, 1., temperature, ρbulk, model)
     nc = length(ionmodel)
     return DHSpecies(ones(Int64,nc),charges,size,ρbulk)
 end
@@ -58,25 +58,26 @@ end
 
 For a given `model`, define the relevant propagator. 
 """
-function get_propagator(model::DHModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
+function get_propagator(model::DHModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     return IdealPropagator()
 end
 
 function preallocate_params(system::ElectrolyteDFTSystem, model::DHModel)
     nd         = dimension(system)
+    FP         = fptype(system.options)
     NF_neutral = compute_field_len(Base.front(system.fields), nd)
-    T          = Float64(system.structure.conditions[2])
+    temperature = system.structure.conditions[2]
     ρbulk_ion  = system.ion_species.bulk_density
-    eps_r      = Float64(dielectric_constant(model.RSPmodel, 1., T, ρbulk_ion))
+    eps_r      = FP(dielectric_constant(model.RSPmodel, 1., temperature, ρbulk_ion))
 
     nc        = length(model)
     Z_vec     = system.ion_species.charges
     σ_vec     = system.ion_species.size
     width_vec = last(system.fields).width
 
-    Z_t = ntuple(i -> i <= nc ? Float64(Z_vec[i]) : 0.0, Val(10))
-    σ_t = ntuple(i -> i <= nc ? σ_vec[i]           : 0.0, Val(10))
-    w_t = ntuple(i -> i <= nc ? width_vec[i]        : 0.0, Val(10))
+    Z_t = ntuple(i -> i <= nc ? FP(Z_vec[i]) : zero(FP), Val(10))
+    σ_t = ntuple(i -> i <= nc ? FP(σ_vec[i]) : zero(FP), Val(10))
+    w_t = ntuple(i -> i <= nc ? FP(width_vec[i]) : zero(FP), Val(10))
 
     return (;
         dh_eps_r      = eps_r,

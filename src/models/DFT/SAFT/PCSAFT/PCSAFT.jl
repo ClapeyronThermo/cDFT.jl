@@ -21,11 +21,11 @@ end
 
 For a given `model`, obtain all of the fields that will be needed to perform the DFT calculation. This function should return a vector of `DFTField`s.
 """
-function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
+function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     nc = length(model)
     ngrid = structure.ngrid
     #f = [ngrid[i]/(structure.bounds[i,2]-structure.bounds[i,1]) for i in 1:length(ngrid)]
-    ω = structure_ω(structure, device)
+    ω = structure_ω(structure, device, FP)
     ψ = 1.3862
     d = species.size
     return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid,device),
@@ -44,10 +44,10 @@ end
 For a given `model` and `structure`, define the relevant parameters for each species. These structs will contain additional information not present by default in the inital `model`, such as the bead size, the number of beads and the connectivity of the beads.
 """
 function get_species(model::PCSAFTModel,structure::DFTStructure)
-    (p,T) = structure.conditions
+    (pressure, temperature) = structure.conditions
     ρbulk = structure.ρbulk
-    size = d(model,1e-3,T,ρbulk)
-    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), T, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / T
+    size = d(model,1e-3,temperature,ρbulk)
+    μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), temperature, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / temperature
     nc = length(model)
     return PCSAFTSpecies(ones(Int64,nc),size,ρbulk,μres)
 end
@@ -57,7 +57,7 @@ end
 
 For a given `model`, define the relevant propagator. 
 """
-function get_propagator(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure, backend::Backend)
+function get_propagator(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure, backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     return IdealPropagator()
 end
 
@@ -197,13 +197,14 @@ end
 
 function preallocate_params(system::DFTSystem{<:PCSAFTModel})
     backend = system.options.device
+    FP      = fptype(system.options)
     model   = system.model
 
     base = (;
-        HSd     = Adapt.adapt(backend, system.species.size),
-        m       = Adapt.adapt(backend, model.params.segment.values),
-        sigma   = Adapt.adapt(backend, model.params.sigma.values),
-        epsilon = Adapt.adapt(backend, model.params.epsilon.values),
+        HSd     = adapt_to_device(backend, FP, system.species.size),
+        m       = adapt_to_device(backend, FP, model.params.segment.values),
+        sigma   = adapt_to_device(backend, FP, model.params.sigma.values),
+        epsilon = adapt_to_device(backend, FP, model.params.epsilon.values),
     )
 
     nn = Clapeyron.assoc_pair_length(model)
@@ -245,10 +246,10 @@ function preallocate_params(system::DFTSystem{<:PCSAFTModel})
             assoc_jb_global = assoc_jb_global_t,
             assoc_n_ia      = assoc_n_ia_t,
             assoc_n_jb      = assoc_n_jb_t,
-            assoc_eps       = Adapt.adapt(backend, assoc_eps_v),
-            assoc_kap       = Adapt.adapt(backend, assoc_kap_v),
-            assoc_sig3      = Adapt.adapt(backend, assoc_sig3_v),
-            assoc_dij       = Adapt.adapt(backend, assoc_dij_v),
+            assoc_eps       = adapt_to_device(backend, FP, assoc_eps_v),
+            assoc_kap       = adapt_to_device(backend, FP, assoc_kap_v),
+            assoc_sig3      = adapt_to_device(backend, FP, assoc_sig3_v),
+            assoc_dij       = adapt_to_device(backend, FP, assoc_dij_v),
             n_sites_flat    = n_sites_flat_t,
             n_sites_cumsum  = n_sites_cumsum_t,
             total_sites,

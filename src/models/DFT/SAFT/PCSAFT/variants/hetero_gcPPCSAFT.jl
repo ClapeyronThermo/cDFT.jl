@@ -31,12 +31,12 @@ struct gcPCPSAFTSpecies <: DFTSpecies
 end
 
 function get_species(model::HeterogcPCPSAFT,structure::DFTStructure)
-    (p,T) = structure.conditions
+    (pressure,temperature) = structure.conditions
     z = structure.ρbulk
     v = 1/sum(z)
 
-    HSd = d(model,1e-3,T,z)
-    μres = Clapeyron.VT_chemical_potential_res(model, v, T, z/sum(z)) / Clapeyron.R̄ / T
+    HSd = d(model,1e-3,temperature,z)
+    μres = Clapeyron.VT_chemical_potential_res(model, v, temperature, z/sum(z)) / Clapeyron.R̄ / temperature
     nbeads = length.(model.groups.groups)
 
     levels = zeros(Int, sum(nbeads))
@@ -62,10 +62,10 @@ function get_species(model::HeterogcPCPSAFT,structure::DFTStructure)
     return gcPCPSAFTSpecies(nbeads,HSd,levels,structure.ρbulk,μres)
 end
 
-function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure, backend::Backend)
+function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure, backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     nb = sum(species.nbeads)
     ngrid = structure.ngrid
-    ω = structure_ω(structure, backend)
+    ω = structure_ω(structure, backend, FP)
     d = species.size
     ψ = 1.5357
     return [SWeightedDensity(:ρ,zeros(nb),ω,ngrid,backend),
@@ -77,8 +77,8 @@ function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTS
 
 end
 
-function get_propagator(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure, backend::Backend)
-    return TangentHSPropagator(model, species, structure, backend)
+function get_propagator(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure, backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+    return TangentHSPropagator(model, species, structure, backend, FP)
 end
 
 # function  Δ(model::HeterogcPCPSAFT, T, n, n₃, nᵥ)
@@ -210,6 +210,7 @@ end
 
 function preallocate_params(system::DFTSystem{<:HeterogcPCPSAFT})
     backend  = system.options.device
+    FP       = fptype(system.options)
     model    = system.model
     nc_spec  = length(model)
     nbeads   = system.species.nbeads
@@ -242,10 +243,10 @@ function preallocate_params(system::DFTSystem{<:HeterogcPCPSAFT})
     nbeads_for_group_t = ntuple(i  -> Float64(nbeads_for_group[i]), nc_groups)
 
     base = (;
-        HSd              = Adapt.adapt(backend, system.species.size),
-        m                = Adapt.adapt(backend, system.model.params.segment.values),
-        sigma            = Adapt.adapt(backend, system.model.params.sigma.values),
-        epsilon          = Adapt.adapt(backend, system.model.params.epsilon.values),
+        HSd              = adapt_to_device(backend, FP, system.species.size),
+        m                = adapt_to_device(backend, FP, system.model.params.segment.values),
+        sigma            = adapt_to_device(backend, FP, system.model.params.sigma.values),
+        epsilon          = adapt_to_device(backend, FP, system.model.params.epsilon.values),
         nbeads_for_group = nbeads_for_group_t,
         bond_k           = bond_k_t,
         bond_l           = bond_l_t,
@@ -286,10 +287,10 @@ function preallocate_params(system::DFTSystem{<:HeterogcPCPSAFT})
             assoc_jb_global = assoc_jb_global_t,
             assoc_n_ia      = assoc_n_ia_t,
             assoc_n_jb      = assoc_n_jb_t,
-            assoc_eps       = Adapt.adapt(backend, assoc_eps_v),
-            assoc_kap       = Adapt.adapt(backend, assoc_kap_v),
-            assoc_sig3      = Adapt.adapt(backend, assoc_sig3_v),
-            assoc_dij       = Adapt.adapt(backend, assoc_dij_v),
+            assoc_eps       = adapt_to_device(backend, FP, assoc_eps_v),
+            assoc_kap       = adapt_to_device(backend, FP, assoc_kap_v),
+            assoc_sig3      = adapt_to_device(backend, FP, assoc_sig3_v),
+            assoc_dij       = adapt_to_device(backend, FP, assoc_dij_v),
             n_sites_flat    = n_sites_flat_t,
             n_sites_cumsum  = n_sites_cumsum_t,
             total_sites,
