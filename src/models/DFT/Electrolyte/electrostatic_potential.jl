@@ -25,7 +25,8 @@ function ElectrostaticPotential(model::ElectrolyteModel, structure::DFTStructure
     ω̄ = allocate(backend, FP, ngrid...)
     copyto!(ω̄,Adapt.adapt(typeof(ω̄), ω_norm))
 
-    Ω = @. (ω̄ != 0.0) / (4*pi^2*ω̄^2 + (ω̄==0.0)) * N_A*e_c^2/ϵ_0/ϵ_r
+    _c  = FP(N_A * e_c^2 / ϵ_0) / FP(ϵ_r)
+    Ω   = @. (!iszero(ω̄)) / (FP(4)*π*π*ω̄^2 + iszero(ω̄)) * _c
     return ElectrostaticPotential(ϵ_r, Ω)
 end
 

@@ -88,36 +88,37 @@ SAFT-VR Mie chain contribution (gMie contact value) at grid point `kk`.
     λa_mat  = params.lambda_a_t
     A       = params.A
     ϕ       = params.phi
+    FP      = eltype(n)
 
     idx_ζ = 4+ND;  idx_λ = 5+ND
 
-    ρS_c = 0.0
+    ρS_c = zero(FP)
     @inbounds for i in 1:NC
-        ρS_c += n[kk,idx_ζ,i] * 3.0/(4.0*π*HSd[i]^3) * m_seg[i]
+        ρS_c += n[kk,idx_ζ,i] * 3/(4*π*HSd[i]^3) * m_seg[i]
     end
-    kρS_c = ρS_c * π/6.0/8.0
+    kρS_c = ρS_c * π/6/8
 
-    ζ_Xc = 0.0;  σ3_xc = 0.0
+    ζ_Xc = zero(FP);  σ3_xc = zero(FP)
     @inbounds for i in 1:NC
         di   = HSd[i]
-        ρ̄hci = n[kk,idx_ζ,i] * 3.0/(4.0*π*di^3)
+        ρ̄hci = n[kk,idx_ζ,i] * 3/(4*π*di^3)
         x_Si = ρ̄hci * m_seg[i] / ρS_c
         @inbounds for j in 1:NC
             dj   = HSd[j]
-            ρ̄hcj = n[kk,idx_ζ,j] * 3.0/(4.0*π*dj^3)
+            ρ̄hcj = n[kk,idx_ζ,j] * 3/(4*π*dj^3)
             x_Sj = ρ̄hcj * m_seg[j] / ρS_c
             σ3_xc += x_Si*x_Sj*σ[i,j]^3
             ζ_Xc  += kρS_c*x_Si*x_Sj*(di+dj)^3
         end
     end
-    ζstc = σ3_xc * ρS_c * π/6.0
+    ζstc = σ3_xc * ρS_c * π/6
 
     _KHSc, _∂KHSc = _KHS_fdf_kernel(ρS_c, ζ_Xc)
 
-    res_chain = 0.0
+    res_chain = zero(FP)
     @inbounds for i in 1:NC
         di   = HSd[i]
-        ρ̄hci = n[kk,idx_ζ,i] * 3.0/(4.0*π*di^3)
+        ρ̄hci = n[kk,idx_ζ,i] * 3/(4*π*di^3)
         x_Si = ρ̄hci * m_seg[i] / ρS_c
 
         λa = λa_mat[i][i];  λr = λr_mat[i][i]
@@ -125,44 +126,43 @@ SAFT-VR Mie chain contribution (gMie contact value) at grid point `kk`.
         x0 = σ[i,i] / di
         ϵii = ϵ[i,i]
 
-        aS1_a,  dS1_a  = _aS1_fdf_kernel(λa,     ζ_Xc, A)
-        aS1_r,  dS1_r  = _aS1_fdf_kernel(λr,     ζ_Xc, A)
-        B_a,    dB_a   = _B_fdf_kernel(λa,    x0, ζ_Xc)
-        B_r,    dB_r   = _B_fdf_kernel(λr,    x0, ζ_Xc)
-        aS1_2a, dS1_2a = _aS1_fdf_kernel(2.0*λa,  ζ_Xc, A)
-        aS1_2r, dS1_2r = _aS1_fdf_kernel(2.0*λr,  ζ_Xc, A)
-        aS1_ar, dS1_ar = _aS1_fdf_kernel(λa+λr,   ζ_Xc, A)
-        B_2a,   dB_2a  = _B_fdf_kernel(2.0*λa, x0, ζ_Xc)
-        B_2r,   dB_2r  = _B_fdf_kernel(2.0*λr, x0, ζ_Xc)
-        B_ar,   dB_ar  = _B_fdf_kernel(λa+λr,  x0, ζ_Xc)
+        aS1_a,  dS1_a  = _aS1_fdf_kernel(λa,   ζ_Xc, A)
+        aS1_r,  dS1_r  = _aS1_fdf_kernel(λr,   ζ_Xc, A)
+        B_a,    dB_a   = _B_fdf_kernel(λa,      x0, ζ_Xc)
+        B_r,    dB_r   = _B_fdf_kernel(λr,      x0, ζ_Xc)
+        aS1_2a, dS1_2a = _aS1_fdf_kernel(2*λa,  ζ_Xc, A)
+        aS1_2r, dS1_2r = _aS1_fdf_kernel(2*λr,  ζ_Xc, A)
+        aS1_ar, dS1_ar = _aS1_fdf_kernel(λa+λr, ζ_Xc, A)
+        B_2a,   dB_2a  = _B_fdf_kernel(2*λa,    x0, ζ_Xc)
+        B_2r,   dB_2r  = _B_fdf_kernel(2*λr,    x0, ζ_Xc)
+        B_ar,   dB_ar  = _B_fdf_kernel(λa+λr,   x0, ζ_Xc)
 
         ∂a1ρS = _C*(x0^λa*(dS1_a+dB_a) - x0^λr*(dS1_r+dB_r))
-        g1_   = 3.0*∂a1ρS - _C*(λa*x0^λa*(aS1_a+B_a) - λr*x0^λr*(aS1_r+B_r))
+        g1_   = 3*∂a1ρS - _C*(λa*x0^λa*(aS1_a+B_a) - λr*x0^λr*(aS1_r+B_r))
 
-        α   = _C*(1.0/(λa-3.0) - 1.0/(λr-3.0))
+        α   = _C*(1/(λa-3) - 1/(λr-3))
         f1,f2,f3,f4,f5,f6 = _f123456_kernel(α, ϕ)
-        θ   = exp(ϵii/T) - 1.0
-        γc  = 10.0*(-tanh(10.0*(0.57-α))+1.0)*ζstc*θ*exp(-6.7*ζstc-8.0*ζstc^2)
+        θ   = exp(ϵii/T) - 1
+        γc  = 10*(-tanh(10*(FP(0.57)-α))+1)*ζstc*θ*exp(-FP(6.7)*ζstc-8*ζstc^2)
 
-        cb2a = x0^(2.0*λa)*(aS1_2a+B_2a)
+        cb2a = x0^(2*λa)*(aS1_2a+B_2a)
         cbar = x0^(λa+λr)*(aS1_ar+B_ar)
-        cb2r = x0^(2.0*λr)*(aS1_2r+B_2r)
-        ∂a2ρS = 0.5*_C*_C*(
-            ρS_c*_∂KHSc*(cb2a - 2.0*cbar + cb2r)
-          + _KHSc*(x0^(2.0*λa)*(dS1_2a+dB_2a)
-                 - 2.0*x0^(λa+λr)*(dS1_ar+dB_ar)
-                 + x0^(2.0*λr)*(dS1_2r+dB_2r))
+        cb2r = x0^(2*λr)*(aS1_2r+B_2r)
+        ∂a2ρS = _C*_C/2*(
+            ρS_c*_∂KHSc*(cb2a - 2*cbar + cb2r)
+          + _KHSc*(x0^(2*λa)*(dS1_2a+dB_2a)
+                 - 2*x0^(λa+λr)*(dS1_ar+dB_ar)
+                 + x0^(2*λr)*(dS1_2r+dB_2r))
         )
-        gMCA2 = 3.0*∂a2ρS - _KHSc*_C*_C*(
-                  λr*cb2r - (λa+λr)*cbar + λa*cb2a)
-        g2_ = (1.0+γc)*gMCA2
+        gMCA2 = 3*∂a2ρS - _KHSc*_C*_C*(λr*cb2r - (λa+λr)*cbar + λa*cb2a)
+        g2_ = (1+γc)*gMCA2
 
         gHS   = _gHS_kernel(x0, ζ_Xc)
         gMie  = gHS * exp(ϵii/T * g1_/gHS + (ϵii/T)^2 * g2_/gHS)
 
         ρhci  = n[kk,1,i]
-        λfld  = n[kk,idx_λ,i] / (2.0*di)
-        res_chain += ρhci * Base.log(abs(gMie*λfld/ρhci)) * (m_seg[i]-1.0)
+        λfld  = n[kk,idx_λ,i] / (2*di)
+        res_chain += ρhci * Base.log(abs(gMie*λfld/ρhci)) * (m_seg[i]-1)
     end
     return -res_chain
 end
@@ -171,9 +171,9 @@ end
     return (λr / (λr - λa)) * (λr / λa)^(λa / (λr - λa))
 end
 
-# ζeff(λ, ζ_X) using SAFTVRMIE_A (row-tuples)
+# ζeff(λ, ζ_X) using SAFTVRMIE_A (row-tuples, FP-typed from preallocate_params)
 @inline function _ζeff_kernel(λ, ζ_X, A)
-    li = 1.0 / λ;  li2 = li*li;  li3 = li2*li
+    li = 1/λ;  li2 = li*li;  li3 = li2*li
     aλ1 = A[1][1] + A[1][2]*li + A[1][3]*li2 + A[1][4]*li3
     aλ2 = A[2][1] + A[2][2]*li + A[2][3]*li2 + A[2][4]*li3
     aλ3 = A[3][1] + A[3][2]*li + A[3][3]*li2 + A[3][4]*li3
@@ -184,12 +184,12 @@ end
 
 @inline function _aS1_kernel(λ, ζ_X, A)
     ζeff = _ζeff_kernel(λ, ζ_X, A)
-    return -1.0/(λ-3.0) * (1.0 - ζeff*0.5) / (1.0-ζeff)^3
+    return -1/(λ-3) * (1 - ζeff/2) / (1-ζeff)^3
 end
 
 # Returns (aS_1, d(ρS·aS_1)/dρS)
 @inline function _aS1_fdf_kernel(λ, ζ_X, A)
-    li = 1.0/λ;  li2 = li*li;  li3 = li2*li
+    li = 1/λ;  li2 = li*li;  li3 = li2*li
     aλ1 = A[1][1] + A[1][2]*li + A[1][3]*li2 + A[1][4]*li3
     aλ2 = A[2][1] + A[2][2]*li + A[2][3]*li2 + A[2][4]*li3
     aλ3 = A[3][1] + A[3][2]*li + A[3][3]*li2 + A[3][4]*li3
@@ -197,59 +197,59 @@ end
     ζ2 = ζ_X*ζ_X;  ζ3 = ζ2*ζ_X;  ζ4 = ζ3*ζ_X
     ζeff = aλ1*ζ_X + aλ2*ζ2 + aλ3*ζ3 + aλ4*ζ4
     # ∂ζeff/∂ζ_X * ζ_X  (= ρS·∂ζeff/∂ρS since ζ_X ∝ ρS)
-    dζeff_ζ = aλ1*ζ_X + 2.0*aλ2*ζ2 + 3.0*aλ3*ζ3 + 4.0*aλ4*ζ4
-    ζeff3   = (1.0-ζeff)^3
-    ζeffm1  = 1.0 - ζeff*0.5
+    dζeff_ζ = aλ1*ζ_X + 2*aλ2*ζ2 + 3*aλ3*ζ3 + 4*aλ4*ζ4
+    ζeff3   = (1-ζeff)^3
+    ζeffm1  = 1 - ζeff/2
     ζf      = ζeffm1 / ζeff3
-    λf      = -1.0 / (λ-3.0)
+    λf      = -1 / (λ-3)
     f       = λf * ζf
-    dζf     = (3.0*ζeffm1*(1.0-ζeff)^2 - 0.5*ζeff3) / (ζeff3*ζeff3)
+    dζf     = (3*ζeffm1*(1-ζeff)^2 - ζeff3/2) / (ζeff3*ζeff3)
     df      = λf * (ζf + dζeff_ζ * dζf)
     return f, df
 end
 
 @inline function _B_kernel(λ, x_0, ζ_X)
-    x3λ = x_0^(3.0-λ)
-    ζX3 = (1.0-ζ_X)^3
-    I   = (1.0 - x3λ) / (λ-3.0)
-    J   = (1.0 - (λ-3.0)*x_0^(4.0-λ) + (λ-4.0)*x3λ) / ((λ-3.0)*(λ-4.0))
-    return I*(1.0-ζ_X*0.5)/ζX3 - 9.0*J*ζ_X*(ζ_X+1.0)/(2.0*ζX3)
+    x3λ = x_0^(3-λ)
+    ζX3 = (1-ζ_X)^3
+    I   = (1 - x3λ) / (λ-3)
+    J   = (1 - (λ-3)*x_0^(4-λ) + (λ-4)*x3λ) / ((λ-3)*(λ-4))
+    return I*(1-ζ_X/2)/ζX3 - 9*J*ζ_X*(ζ_X+1)/(2*ζX3)
 end
 
 # Returns (B, d(ρS·B)/dρS)
 @inline function _B_fdf_kernel(λ, x_0, ζ_X)
-    x3λ = x_0^(3.0-λ)
-    ζX2 = (1.0-ζ_X)^2;  ζX3 = ζX2*(1.0-ζ_X);  ζX6 = ζX3*ζX3
-    I   = (1.0 - x3λ) / (λ-3.0)
-    J   = (1.0 - (λ-3.0)*x_0^(4.0-λ) + (λ-4.0)*x3λ) / ((λ-3.0)*(λ-4.0))
-    f   = I*(1.0-ζ_X*0.5)/ζX3 - 9.0*J*ζ_X*(ζ_X+1.0)/(2.0*ζX3)
+    x3λ = x_0^(3-λ)
+    ζX2 = (1-ζ_X)^2;  ζX3 = ζX2*(1-ζ_X);  ζX6 = ζX3*ζX3
+    I   = (1 - x3λ) / (λ-3)
+    J   = (1 - (λ-3)*x_0^(4-λ) + (λ-4)*x3λ) / ((λ-3)*(λ-4))
+    f   = I*(1-ζ_X/2)/ζX3 - 9*J*ζ_X*(ζ_X+1)/(2*ζX3)
     df  = f + ζ_X*(
-              (3.0*(1.0-ζ_X*0.5)*ζX2 - 0.5*ζX3)*I/ζX6
-            - 9.0*J*((1.0+2.0*ζ_X)*ζX3 + ζ_X*(1.0+ζ_X)*3.0*ζX2)/(2.0*ζX6)
+              (3*(1-ζ_X/2)*ζX2 - ζX3/2)*I/ζX6
+            - 9*J*((1+2*ζ_X)*ζX3 + ζ_X*(1+ζ_X)*3*ζX2)/(2*ζX6)
           )
     return f, df
 end
 
 @inline function _KHS_kernel(ζ_X)
-    return (1.0-ζ_X)^4 / evalpoly(ζ_X, (1.0, 4.0, 4.0, -4.0, 1.0))
+    return (1-ζ_X)^4 / evalpoly(ζ_X, (1, 4, 4, -4, 1))
 end
 
 # Returns (KHS, dKHS/dρS)
 @inline function _KHS_fdf_kernel(ρS, ζ_X)
-    ζX4   = (1.0-ζ_X)^4
-    denom = evalpoly(ζ_X, (1.0, 4.0, 4.0, -4.0, 1.0))
-    ddenom = evalpoly(ζ_X, (4.0, 8.0, -12.0, 4.0))
+    ζX4   = (1-ζ_X)^4
+    denom  = evalpoly(ζ_X, (1, 4, 4, -4, 1))
+    ddenom = evalpoly(ζ_X, (4, 8, -12, 4))
     f    = ζX4 / denom
-    ρdf  = -ζ_X*(4.0*(1.0-ζ_X)^3*denom + ζX4*ddenom) / (denom*denom)
+    ρdf  = -ζ_X*(4*(1-ζ_X)^3*denom + ζX4*ddenom) / (denom*denom)
     return f, ρdf / ρS
 end
 
 @inline function _gHS_kernel(x_0, ζ_X)
-    ζX3 = (1.0-ζ_X)^3
-    k0 = -Base.log(1.0-ζ_X) + evalpoly(ζ_X,(0.0,42.0,-39.0,9.0,-2.0))/(6.0*ζX3)
-    k1 = evalpoly(ζ_X,(0.0,-12.0,6.0,0.0,1.0)) / (2.0*ζX3)
-    k2 = -3.0*ζ_X*ζ_X / (8.0*(1.0-ζ_X)^2)
-    k3 = evalpoly(ζ_X,(0.0,3.0,3.0,0.0,-1.0)) / (6.0*ζX3)
+    ζX3 = (1-ζ_X)^3
+    k0 = -Base.log(1-ζ_X) + evalpoly(ζ_X,(0,42,-39,9,-2))/(6*ζX3)
+    k1 = evalpoly(ζ_X,(0,-12,6,0,1)) / (2*ζX3)
+    k2 = -3*ζ_X*ζ_X / (8*(1-ζ_X)^2)
+    k3 = evalpoly(ζ_X,(0,3,3,0,-1)) / (6*ζX3)
     return exp(k0 + x_0*(k1 + x_0*(k2 + x_0*k3)))
 end
 
@@ -265,9 +265,10 @@ const SAFTVRMIE_PHI = (
 )
 
 @inline function _f123456_kernel(α, ϕ)
-    fa1=0.0;fa2=0.0;fa3=0.0;fa4=0.0;fa5=0.0;fa6=0.0
-    fb1=0.0;fb2=0.0;fb3=0.0;fb4=0.0;fb5=0.0;fb6=0.0
-    αi = 1.0
+    T   = typeof(α)
+    fa1=zero(T);fa2=zero(T);fa3=zero(T);fa4=zero(T);fa5=zero(T);fa6=zero(T)
+    fb1=zero(T);fb2=zero(T);fb3=zero(T);fb4=zero(T);fb5=zero(T);fb6=zero(T)
+    αi = one(T)
     for i in 1:4
         p = ϕ[i]
         fa1+=p[1]*αi; fa2+=p[2]*αi; fa3+=p[3]*αi
@@ -281,8 +282,8 @@ const SAFTVRMIE_PHI = (
         fb4+=p[4]*αi; fb5+=p[5]*αi; fb6+=p[6]*αi
         αi *= α
     end
-    return (fa1/(1.0+fb1), fa2/(1.0+fb2), fa3/(1.0+fb3),
-            fa4/(1.0+fb4), fa5/(1.0+fb5), fa6/(1.0+fb6))
+    return (fa1/(1+fb1), fa2/(1+fb2), fa3/(1+fb3),
+            fa4/(1+fb4), fa5/(1+fb5), fa6/(1+fb6))
 end
 
 """
@@ -303,71 +304,72 @@ Used by SAFTVRMieModel, SAFTgammaMieModel, COFFEEModel.
     psi_eff  = params.psi_eff
     A        = params.A
     phi      = params.phi
-    ρS_d = 0.0
+    FP = eltype(n)
+    ρS_d = zero(FP)
     @inbounds for i in 1:NC
-        ρS_d += n[kk, IDX_ρz, i] * 3.0/(4.0*π*psi_eff[i]^3) * meff[i]
+        ρS_d += n[kk, IDX_ρz, i] * 3/(4*π*psi_eff[i]^3) * meff[i]
     end
-    kρS_d = ρS_d * π/6.0/8.0
+    kρS_d = ρS_d * π/6/8
 
-    ζ_Xd=0.0;  σ3_xd=0.0
+    ζ_Xd=zero(FP);  σ3_xd=zero(FP)
     @inbounds for i in 1:NC
         di   = HSd[i]
-        ρ̄zi  = n[kk, IDX_ρz, i] * 3.0/(4.0*π*psi_eff[i]^3)
+        ρ̄zi  = n[kk, IDX_ρz, i] * 3/(4*π*psi_eff[i]^3)
         x_Si = ρ̄zi * meff[i] / ρS_d
         @inbounds for j in 1:NC
             dj   = HSd[j]
-            ρ̄zj  = n[kk, IDX_ρz, j] * 3.0/(4.0*π*psi_eff[j]^3)
+            ρ̄zj  = n[kk, IDX_ρz, j] * 3/(4*π*psi_eff[j]^3)
             x_Sj = ρ̄zj * meff[j] / ρS_d
             σ3_xd += x_Si*x_Sj*sigma[i,j]^3
             ζ_Xd  += kρS_d*x_Si*x_Sj*(di+dj)^3
         end
     end
-    ζstd  = σ3_xd * ρS_d * π/6.0
+    ζstd  = σ3_xd * ρS_d * π/6
     ζst5d = ζstd^5;  ζst8d = ζstd^8
     KHSd  = _KHS_kernel(ζ_Xd)
 
-    a₁=0.0;  a₂=0.0;  a₃=0.0
+    a₁=zero(FP);  a₂=zero(FP);  a₃=zero(FP)
     @inbounds for i in 1:NC
         di   = HSd[i]
-        ρ̄zi  = n[kk, IDX_ρz, i] * 3.0/(4.0*π*psi_eff[i]^3)
+        ρ̄zi  = n[kk, IDX_ρz, i] * 3/(4*π*psi_eff[i]^3)
         x_Si = ρ̄zi * meff[i] / ρS_d
         λa=lambda_a[i][i]; λr=lambda_r[i][i]; σii=sigma[i,i]; ϵii=epsilon[i,i]
         _C=_Cλ_kernel(λa,λr);  x0=σii/di;  dij3=di^3
-        aS1_a=_aS1_kernel(λa,     ζ_Xd,A); B_a=_B_kernel(λa,    x0,ζ_Xd)
-        aS1_r=_aS1_kernel(λr,     ζ_Xd,A); B_r=_B_kernel(λr,    x0,ζ_Xd)
-        a1ij = 2.0*π*ϵii*dij3*_C*ρS_d*(x0^λa*(aS1_a+B_a)-x0^λr*(aS1_r+B_r))
-        aS1_2a=_aS1_kernel(2.0*λa, ζ_Xd,A); B_2a=_B_kernel(2.0*λa, x0,ζ_Xd)
-        aS1_2r=_aS1_kernel(2.0*λr, ζ_Xd,A); B_2r=_B_kernel(2.0*λr, x0,ζ_Xd)
-        aS1_ar=_aS1_kernel(λa+λr,  ζ_Xd,A); B_ar=_B_kernel(λa+λr,  x0,ζ_Xd)
-        α=_C*(1.0/(λa-3.0)-1.0/(λr-3.0))
+        aS1_a=_aS1_kernel(λa,   ζ_Xd,A); B_a=_B_kernel(λa,   x0,ζ_Xd)
+        aS1_r=_aS1_kernel(λr,   ζ_Xd,A); B_r=_B_kernel(λr,   x0,ζ_Xd)
+        a1ij = 2*π*ϵii*dij3*_C*ρS_d*(x0^λa*(aS1_a+B_a)-x0^λr*(aS1_r+B_r))
+        aS1_2a=_aS1_kernel(2*λa, ζ_Xd,A); B_2a=_B_kernel(2*λa, x0,ζ_Xd)
+        aS1_2r=_aS1_kernel(2*λr, ζ_Xd,A); B_2r=_B_kernel(2*λr, x0,ζ_Xd)
+        aS1_ar=_aS1_kernel(λa+λr,ζ_Xd,A); B_ar=_B_kernel(λa+λr,x0,ζ_Xd)
+        α=_C*(1/(λa-3)-1/(λr-3))
         f1,f2,f3,f4,f5,f6 = _f123456_kernel(α,phi)
         χ = f1*ζstd+f2*ζst5d+f3*ζst8d
-        a2ij = π*KHSd*(1.0+χ)*ρS_d*ϵii^2*dij3*_C^2*(
-               x0^(2.0*λa)*(aS1_2a+B_2a)
-             - 2.0*x0^(λa+λr)*(aS1_ar+B_ar)
-             + x0^(2.0*λr)*(aS1_2r+B_2r))
+        a2ij = π*KHSd*(1+χ)*ρS_d*ϵii^2*dij3*_C^2*(
+               x0^(2*λa)*(aS1_2a+B_2a)
+             - 2*x0^(λa+λr)*(aS1_ar+B_ar)
+             + x0^(2*λr)*(aS1_2r+B_2r))
         a3ij = -ϵii^3*f4*ζstd*exp(f5*ζstd+f6*ζstd^2)
         a₁ += a1ij*x_Si*x_Si;  a₂ += a2ij*x_Si*x_Si;  a₃ += a3ij*x_Si*x_Si
         @inbounds for j in 1:NC
             if j != i
-                dj   = HSd[j]
-                ρ̄zj  = n[kk, IDX_ρz, j] * 3.0/(4.0*π*psi_eff[j]^3)
-                x_Sj = ρ̄zj * meff[j] / ρS_d
+                dj    = HSd[j]
+                ρ̄zj   = n[kk, IDX_ρz, j] * 3/(4*π*psi_eff[j]^3)
+                x_Sj  = ρ̄zj * meff[j] / ρS_d
                 λa2=lambda_a[i][j]; λr2=lambda_r[i][j]; σij=sigma[i,j]; ϵij=epsilon[i,j]
-                _C2=_Cλ_kernel(λa2,λr2); dij2=0.5*(di+dj); dij3_2=dij2^3; x0ij=σij/dij2
-                aS1_a2=_aS1_kernel(λa2,      ζ_Xd,A); B_a2=_B_kernel(λa2,      x0ij,ζ_Xd)
-                aS1_r2=_aS1_kernel(λr2,      ζ_Xd,A); B_r2=_B_kernel(λr2,      x0ij,ζ_Xd)
-                a1ij2 = 2.0*π*ϵij*dij3_2*_C2*ρS_d*(x0ij^λa2*(aS1_a2+B_a2)-x0ij^λr2*(aS1_r2+B_r2))
-                aS1_2a2=_aS1_kernel(2.0*λa2, ζ_Xd,A); B_2a2=_B_kernel(2.0*λa2, x0ij,ζ_Xd)
-                aS1_2r2=_aS1_kernel(2.0*λr2, ζ_Xd,A); B_2r2=_B_kernel(2.0*λr2, x0ij,ζ_Xd)
-                aS1_ar2=_aS1_kernel(λa2+λr2, ζ_Xd,A); B_ar2=_B_kernel(λa2+λr2, x0ij,ζ_Xd)
-                α2=_C2*(1.0/(λa2-3.0)-1.0/(λr2-3.0))
+                _C2=_Cλ_kernel(λa2,λr2); dij2=(di+dj)/2; dij3_2=dij2^3; x0ij=σij/dij2
+                aS1_a2=_aS1_kernel(λa2,    ζ_Xd,A); B_a2=_B_kernel(λa2,    x0ij,ζ_Xd)
+                aS1_r2=_aS1_kernel(λr2,    ζ_Xd,A); B_r2=_B_kernel(λr2,    x0ij,ζ_Xd)
+                a1ij2 = 2*π*ϵij*dij3_2*_C2*ρS_d*(x0ij^λa2*(aS1_a2+B_a2)-x0ij^λr2*(aS1_r2+B_r2))
+                aS1_2a2=_aS1_kernel(2*λa2, ζ_Xd,A); B_2a2=_B_kernel(2*λa2, x0ij,ζ_Xd)
+                aS1_2r2=_aS1_kernel(2*λr2, ζ_Xd,A); B_2r2=_B_kernel(2*λr2, x0ij,ζ_Xd)
+                aS1_ar2=_aS1_kernel(λa2+λr2,ζ_Xd,A); B_ar2=_B_kernel(λa2+λr2,x0ij,ζ_Xd)
+                α2=_C2*(1/(λa2-3)-1/(λr2-3))
                 f1_2,f2_2,f3_2,f4_2,f5_2,f6_2 = _f123456_kernel(α2,phi)
                 χ2 = f1_2*ζstd+f2_2*ζst5d+f3_2*ζst8d
-                a2ij2 = π*KHSd*(1.0+χ2)*ρS_d*ϵij^2*dij3_2*_C2^2*(
-                        x0ij^(2.0*λa2)*(aS1_2a2+B_2a2)
-                      - 2.0*x0ij^(λa2+λr2)*(aS1_ar2+B_ar2)
-                      + x0ij^(2.0*λr2)*(aS1_2r2+B_2r2))
+                a2ij2 = π*KHSd*(1+χ2)*ρS_d*ϵij^2*dij3_2*_C2^2*(
+                        x0ij^(2*λa2)*(aS1_2a2+B_2a2)
+                      - 2*x0ij^(λa2+λr2)*(aS1_ar2+B_ar2)
+                      + x0ij^(2*λr2)*(aS1_2r2+B_2r2))
                 a3ij2 = -ϵij^3*f4_2*ζstd*exp(f5_2*ζstd+f6_2*ζstd^2)
                 a₁ += a1ij2*x_Si*x_Sj
                 a₂ += a2ij2*x_Si*x_Sj
@@ -383,24 +385,25 @@ end
 # Overrides the default g_hs _assoc_delta via more specific M <: SAFTVRMieModel dispatch.
 @inline function _assoc_delta(p, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix,
                                ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: SAFTVRMieModel}
-    p > n_pairs && return 0.0
+    FP = eltype(n)
+    p > n_pairs && return zero(FP)
 
     # Compute ρS from individual n₃ fields (field index 3 = F2+1)
-    ρS = 0.0
+    ρS = zero(FP)
     @inbounds for k in 1:NC
-        ρS += n[kk, 3, k] * 6.0 / (π * params.HSd[k]^3) * params.m[k]
+        ρS += n[kk, 3, k] * 6 / (π * params.HSd[k]^3) * params.m[k]
     end
 
     # σ³_x double loop: x_Sk = ρ̄k * m[k] / ρS
-    σ3_x = 0.0
+    σ3_x = zero(FP)
     @inbounds for k in 1:NC
-        ρ̄k  = n[kk, 3, k] * 6.0 / (π * params.HSd[k]^3)
+        ρ̄k  = n[kk, 3, k] * 6 / (π * params.HSd[k]^3)
         xSk = ρ̄k * params.m[k] / ρS
         σ3_x += xSk * xSk * params.sigma[k,k]^3
         @inbounds for l in 1:(k-1)
-            ρ̄l  = n[kk, 3, l] * 6.0 / (π * params.HSd[l]^3)
+            ρ̄l  = n[kk, 3, l] * 6 / (π * params.HSd[l]^3)
             xSl = ρ̄l * params.m[l] / ρS
-            σ3_x += 2.0 * xSk * xSl * params.sigma[k,l]^3
+            σ3_x += 2 * xSk * xSl * params.sigma[k,l]^3
         end
     end
     ρr = ρS * σ3_x
@@ -409,12 +412,12 @@ end
     jc = _nti(params.assoc_jcomp, p)
     Tr = T / params.epsilon[ic, jc]
 
-    # I(Tr, ρr): c stored as NTuple{11, NTuple{11, Float64}} (row = n-index, col = m-index)
-    I_val = 0.0
-    ρrn   = 1.0
+    # I(Tr, ρr): c stored as NTuple{11, NTuple{11, FP}} (row = n-index, col = m-index)
+    I_val = zero(FP)
+    ρrn   = one(FP)
     for ni in 0:10
         row = _nti(params.VRMie_c, ni + 1)
-        Trm = 1.0
+        Trm = one(FP)
         for mi in 0:10
             I_val += _nti(row, mi + 1) * Trm * ρrn
             Trm *= Tr
@@ -434,6 +437,8 @@ function preallocate_params(system::DFTSystem{<:SAFTVRMieModel})
     la = model.params.lambda_a.values
     lambda_r_t = ntuple(i -> ntuple(j -> lr[i,j], nc), nc)
     lambda_a_t = ntuple(i -> ntuple(j -> la[i,j], nc), nc)
+    A_fp  = ntuple(i -> ntuple(j -> FP(SAFTVRMIE_A[i][j]),   4), 4)
+    phi_fp = ntuple(i -> ntuple(j -> FP(SAFTVRMIE_PHI[i][j]), 6), 7)
     base = (;
         HSd        = adapt_to_device(backend, FP, system.species.size),
         m          = adapt_to_device(backend, FP, model.params.segment.values),
@@ -443,8 +448,8 @@ function preallocate_params(system::DFTSystem{<:SAFTVRMieModel})
         lambda_r_t = lambda_r_t,
         lambda_a_t = lambda_a_t,
         psi_eff    = adapt_to_device(backend, FP, system.fields[end].width),
-        A          = SAFTVRMIE_A,
-        phi        = SAFTVRMIE_PHI,
+        A          = A_fp,
+        phi        = phi_fp,
     )
 
     nn = Clapeyron.assoc_pair_length(model)
@@ -470,9 +475,9 @@ function preallocate_params(system::DFTSystem{<:SAFTVRMieModel})
         n_sites_flat_t   = ntuple(j -> n_sites_flat_v[j],   Val(total_sites))
         n_sites_cumsum_t = ntuple(i -> n_sites_cumsum_v[i], Val(nc_model + 1))
 
-        # Pack I(Tr,ρr) polynomial as NTuple{11,NTuple{11,Float64}}: row=n-index, col=m-index
+        # Pack I(Tr,ρr) polynomial as NTuple{11,NTuple{11,FP}}: row=n-index, col=m-index
         c_mat   = SAFTVRMieconsts.c
-        VRMie_c = ntuple(ni -> ntuple(mi -> c_mat[ni, mi], 11), 11)
+        VRMie_c = ntuple(ni -> ntuple(mi -> FP(c_mat[ni, mi]), 11), 11)
 
         assoc = (;
             has_assoc       = true,

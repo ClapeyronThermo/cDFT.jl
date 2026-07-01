@@ -55,80 +55,81 @@ Field layout (5 fields):
   4+ND     : ∫ρz²dz with ψ1*d → dispersion density (per-component ψ1)
 """
 @inline function f_ff(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: COFFEEModel}
+    FP    = eltype(n)
     HSd   = params.HSd
     m_seg = params.m
     pcp_ϵ = params.pcp_epsilon
     pcp_σ = params.pcp_sigma
     dip2  = params.dipole2
-    ψff   = 1.3862
+    ψff   = FP(1.3862)
     idx_ff = 3 + ND
     cb2   = params.coffee_b2;  cc2 = params.coffee_c2
     cb3   = params.coffee_b3;  cc3 = params.coffee_c3
 
-    ∑ρ̄_ff = 0.0;  η_ff = 0.0
+    ∑ρ̄_ff = zero(FP);  η_ff = zero(FP)
     @inbounds for i in 1:NC
         di    = HSd[i]
-        ρ̄i_ff = n[kk,idx_ff,i] * 3.0/(4.0*ψff^3*π*di*di*di)
+        ρ̄i_ff = n[kk,idx_ff,i] * 3/(4*ψff^3*π*di*di*di)
         ∑ρ̄_ff += ρ̄i_ff
         η_ff  += m_seg[i] * ρ̄i_ff * di*di*di
     end
-    η_ff *= π/6.0
+    η_ff *= π/6
 
     has_polar = false
     @inbounds for i in 1:NC
-        if dip2[i] != 0.0; has_polar = true; break; end
+        if !iszero(dip2[i]); has_polar = true; break; end
     end
 
-    res_polar = 0.0
+    res_polar = zero(FP)
     if has_polar
-        _A₂ = 0.0
+        _A₂ = zero(FP)
         @inbounds for i in 1:NC
-            d2i = dip2[i]; if d2i == 0.0; continue; end
-            ρ̄i = n[kk,idx_ff,i] * 3.0/(4.0*ψff^3*π*HSd[i]^3)
+            d2i = dip2[i]; if iszero(d2i); continue; end
+            ρ̄i = n[kk,idx_ff,i] * 3/(4*ψff^3*π*HSd[i]^3)
             xi = ρ̄i / ∑ρ̄_ff
             J2ii = _J2_coffee_kernel(pcp_ϵ[i,i], η_ff, T, cb2, cc2)
             _A₂ += xi*xi * d2i*d2i / (pcp_σ[i,i]*pcp_σ[i,i]*pcp_σ[i,i]) * J2ii
             @inbounds for j in (i+1):NC
-                d2j = dip2[j]; if d2j == 0.0; continue; end
-                ρ̄j = n[kk,idx_ff,j] * 3.0/(4.0*ψff^3*π*HSd[j]^3)
+                d2j = dip2[j]; if iszero(d2j); continue; end
+                ρ̄j = n[kk,idx_ff,j] * 3/(4*ψff^3*π*HSd[j]^3)
                 xj = ρ̄j / ∑ρ̄_ff
                 σij3 = pcp_σ[i,j]*pcp_σ[i,j]*pcp_σ[i,j]
                 J2ij = _J2_coffee_kernel(pcp_ϵ[i,j], η_ff, T, cb2, cc2)
-                _A₂ += 2.0*xi*xj * d2i*d2j / σij3 * J2ij
+                _A₂ += 2*xi*xj * d2i*d2j / σij3 * J2ij
             end
         end
         _A₂ *= -π * ∑ρ̄_ff / (T*T)
 
-        if abs(_A₂) > 0.0
-            _A₃ = 0.0
+        if abs(_A₂) > 0
+            _A₃ = zero(FP)
             @inbounds for i in 1:NC
-                d2i = dip2[i]; if d2i == 0.0; continue; end
-                ρ̄i = n[kk,idx_ff,i] * 3.0/(4.0*ψff^3*π*HSd[i]^3)
+                d2i = dip2[i]; if iszero(d2i); continue; end
+                ρ̄i = n[kk,idx_ff,i] * 3/(4*ψff^3*π*HSd[i]^3)
                 xi  = ρ̄i / ∑ρ̄_ff
                 a3i = xi * d2i / pcp_σ[i,i]
                 J3iii = _J3_coffee_kernel(pcp_ϵ[i,i], η_ff, T, cb3, cc3)
                 _A₃ += a3i*a3i*a3i * J3iii
                 @inbounds for j in (i+1):NC
-                    d2j = dip2[j]; if d2j == 0.0; continue; end
-                    ρ̄j = n[kk,idx_ff,j] * 3.0/(4.0*ψff^3*π*HSd[j]^3)
+                    d2j = dip2[j]; if iszero(d2j); continue; end
+                    ρ̄j = n[kk,idx_ff,j] * 3/(4*ψff^3*π*HSd[j]^3)
                     xj   = ρ̄j / ∑ρ̄_ff
-                    σij⁻¹ = 1.0 / pcp_σ[i,j]
+                    σij⁻¹ = 1 / pcp_σ[i,j]
                     a3iij = xi*d2i*σij⁻¹;  a3ijj = xj*d2j*σij⁻¹
                     a3j   = xj*d2j/pcp_σ[j,j]
                     J3iij = _J3_coffee_kernel(pcp_ϵ[i,j], η_ff, T, cb3, cc3)
                     J3ijj = _J3_coffee_kernel(pcp_ϵ[i,j], η_ff, T, cb3, cc3)
-                    _A₃ += 3.0*a3iij*a3ijj*(a3i*J3iij + a3j*J3ijj)
+                    _A₃ += 3*a3iij*a3ijj*(a3i*J3iij + a3j*J3ijj)
                     @inbounds for kk2 in (j+1):NC
-                        d2k = dip2[kk2]; if d2k == 0.0; continue; end
-                        ρ̄k = n[kk,idx_ff,kk2] * 3.0/(4.0*ψff^3*π*HSd[kk2]^3)
+                        d2k = dip2[kk2]; if iszero(d2k); continue; end
+                        ρ̄k = n[kk,idx_ff,kk2] * 3/(4*ψff^3*π*HSd[kk2]^3)
                         xk  = ρ̄k / ∑ρ̄_ff
                         J3ijk = _J3_coffee_kernel(pcp_ϵ[i,j], η_ff, T, cb3, cc3)
-                        _A₃ += 6.0*xi*xj*xk * d2i*d2j*d2k *
+                        _A₃ += 6*xi*xj*xk * d2i*d2j*d2k *
                                 σij⁻¹/(pcp_σ[i,kk2]*pcp_σ[j,kk2]) * J3ijk
                     end
                 end
             end
-            _A₃ *= -4.0*π*π/3.0 * ∑ρ̄_ff*∑ρ̄_ff / (T*T*T)
+            _A₃ *= -4*π*π/3 * ∑ρ̄_ff*∑ρ̄_ff / (T*T*T)
             denom_p = _A₂ - _A₃
             res_polar = ∑ρ̄_ff * _A₂*_A₂ / denom_p
         end
@@ -163,13 +164,14 @@ end
     corr_I    = params.coffee_corr_I
     xi_x      = params.xi_x;  xi_w = params.xi_w
     gamma_x   = params.gamma_x;  gamma_w = params.gamma_w
+    FP        = typeof(n₀)
 
-    ρ̄_nf   = n₃₃ * 6.0/π * nf_sigrat
+    ρ̄_nf   = n₃₃ * 6/π * nf_sigrat
     T̄_nf   = T / nf_eps
     Iμμval = _Iμμ_kernel(ρ̄_nf, T̄_nf, nf_mu, corr_I)
 
-    coeff = -24.0/19.0 * nf_mu2 / T̄_nf * Iμμval
-    Q_nf = 0.0
+    coeff = FP(-24/19) * nf_mu2 / T̄_nf * Iμμval
+    Q_nf = zero(FP)
     @inbounds for i in 1:25
         ξ1i = xi_x[i]; w1i = xi_w[i]
         @inbounds for j in 1:25
@@ -184,11 +186,11 @@ end
 
     nv2sq_nf = nv2_1*nv2_1 + nv2_2*nv2_2 + nv2_3*nv2_3
     di1  = HSd[1]
-    ξ_nf = 1.0 - nv2sq_nf / (n₂*n₂)
-    g_hs_nf = 1.0/(1.0-n₃₃) + di1*ξ_nf*n₂/(4.0*(1.0-n₃₃)^2) +
-              di1*di1/4.0*n₂*n₂*ξ_nf/(18.0*(1.0-n₃₃)^3)
+    ξ_nf = 1 - nv2sq_nf / (n₂*n₂)
+    g_hs_nf = 1/(1-n₃₃) + di1*ξ_nf*n₂/(4*(1-n₃₃)^2) +
+              di1*di1/4*n₂*n₂*ξ_nf/(18*(1-n₃₃)^3)
 
-    return 19.0*π/12.0 * n₀ * ρ̄_nf * g_hs_nf * Base.log(4.0*π/Q_nf)
+    return FP(19π/12) * n₀ * ρ̄_nf * g_hs_nf * Base.log(4*π/Q_nf)
 end
 
 @inline function _Iμμ_kernel(ρ̄, T̄, μ, a)
@@ -197,29 +199,31 @@ end
 end
 
 @inline function _∫odr_kernel(d, ξ1, ξ2, γ12)
-    if d == 0.0
-        s1 = sqrt(abs(1.0 - ξ1*ξ1));  s2 = sqrt(abs(1.0 - ξ2*ξ2))
-        cosΘ = 2.0*ξ1*ξ2 - s1*s2*cos(γ12)
-        return -cosΘ * 5.0/18.0
+    if iszero(d)
+        s1 = sqrt(abs(1 - ξ1*ξ1));  s2 = sqrt(abs(1 - ξ2*ξ2))
+        cosΘ = 2*ξ1*ξ2 - s1*s2*cos(γ12)
+        return -cosΘ * typeof(ξ1)(5/18)
     else
-        s1 = sqrt(abs(1.0 - ξ1*ξ1));  s2 = sqrt(abs(1.0 - ξ2*ξ2))
+        s1 = sqrt(abs(1 - ξ1*ξ1));  s2 = sqrt(abs(1 - ξ2*ξ2))
         A12 = ξ1*ξ2 + s1*s2*cos(γ12)
-        a_  = 3.0*ξ1*ξ2 - A12
-        b_  = d*(ξ1 - ξ2)*(A12 - 3.0)
-        c_  = -d*d*(A12*A12 - 4.0*A12 + 3.0)
-        f_  = 2.0*d*(ξ1 - ξ2)
+        a_  = 3*ξ1*ξ2 - A12
+        b_  = d*(ξ1 - ξ2)*(A12 - 3)
+        c_  = -d*d*(A12*A12 - 4*A12 + 3)
+        f_  = 2*d*(ξ1 - ξ2)
         f2  = f_*f_;  f3 = f2*f_
-        g_  = -2.0*d*d*(A12 - 1.0)
+        g_  = -2*d*d*(A12 - 1)
         g2  = g_*g_
-        inv_3f24g2 = 1.0 / (3.0*(f2 - 4.0*g_)*(f2 - 4.0*g_))
-        term1 = (1.0/((1.0+f_+g_)^1.5)) * (
-                2.0*c_*(2.0+f_)*(-8.0-8.0*f_+f2-12.0*g_)
-              + 2.0*b_*(3.0*f3+8.0*g2+2.0*f2*(6.0+g_)+4.0*f_*(2.0+3.0*g_))
-              - 2.0*a_*(3.0*f3+8.0*g_+4.0*f_*g_*(3.0+2.0*g_)+2.0*f2*(1.0+6.0*g_)))
-        term2 = (1.0/((9.0+6.0*f_+4.0*g_)^1.5)) * 4.0 * (
-              - 4.0*c_*(3.0+f_)*(-12.0*f_+f2-6.0*(3.0+2.0*g_))
-              - 2.0*b_*(9.0*f3+16.0*g2+18.0*f_*(3.0+2.0*g_)+f2*(54.0+4.0*g_))
-              + a_*(27.0*f3+108.0*g_+9.0*f2*(3.0+8.0*g_)+4.0*f_*g_*(27.0+8.0*g_)))
+        inv_3f24g2 = 1 / (3*(f2 - 4*g_)*(f2 - 4*g_))
+        p1         = 1 + f_ + g_; p1h = p1 * sqrt(p1)
+        p2         = 9 + 6*f_ + 4*g_; p2h = p2 * sqrt(p2)
+        term1 = (1/p1h) * (
+                2*c_*(2+f_)*(-8-8*f_+f2-12*g_)
+              + 2*b_*(3*f3+8*g2+2*f2*(6+g_)+4*f_*(2+3*g_))
+              - 2*a_*(3*f3+8*g_+4*f_*g_*(3+2*g_)+2*f2*(1+6*g_)))
+        term2 = (1/p2h) * 4 * (
+              - 4*c_*(3+f_)*(-12*f_+f2-6*(3+2*g_))
+              - 2*b_*(9*f3+16*g2+18*f_*(3+2*g_)+f2*(54+4*g_))
+              + a_*(27*f3+108*g_+9*f2*(3+8*g_)+4*f_*g_*(27+8*g_)))
         return -inv_3f24g2 * (term1 + term2)
     end
 end
@@ -239,6 +243,9 @@ function preallocate_params(system::DFTSystem{<:COFFEEModel})
     la = model.params.lambda_a.values
     lambda_r_t = ntuple(i -> ntuple(j -> lr[i,j], nc), nc)
     lambda_a_t = ntuple(i -> ntuple(j -> la[i,j], nc), nc)
+    A_fp   = ntuple(i -> ntuple(j -> FP(SAFTVRMIE_A[i][j]),   4), 4)
+    phi_fp = ntuple(i -> ntuple(j -> FP(SAFTVRMIE_PHI[i][j]), 6), 7)
+    _conv_tup(tup) = map(FP, tup)
     params = (;
         HSd         = adapt_to_device(backend, FP, system.species.size),
         m           = adapt_to_device(backend, FP, model.params.segment.values),
@@ -248,25 +255,25 @@ function preallocate_params(system::DFTSystem{<:COFFEEModel})
         lambda_r_t  = lambda_r_t,
         lambda_a_t  = lambda_a_t,
         psi_eff     = adapt_to_device(backend, FP, system.fields[end].width),
-        A           = SAFTVRMIE_A,
-        phi         = SAFTVRMIE_PHI,
+        A           = A_fp,
+        phi         = phi_fp,
         pcp_m       = adapt_to_device(backend, FP, pcp_segment(model)),
         pcp_sigma   = adapt_to_device(backend, FP, pcp_sigma(model)),
         pcp_epsilon = adapt_to_device(backend, FP, pcp_epsilon(model)),
         dipole2     = adapt_to_device(backend, FP, pcp_dipole2(model)),
-        coffee_b2   = COFFEEconsts.corr_b2,
-        coffee_c2   = COFFEEconsts.corr_c2,
-        coffee_b3   = COFFEEconsts.corr_b3,
-        coffee_c3   = COFFEEconsts.corr_c3,
-        coffee_corr_I = COFFEEconsts.corr_I,
-        nf_d        = nf_d_val,
-        nf_mu2      = nf_mu2_val,
-        nf_epsilon  = ϵ_diag[1],
-        nf_sigma_ratio = nf_sig3,
-        xi_x        = COFFEEconsts.xi_quadrature[1],
-        xi_w        = COFFEEconsts.xi_quadrature[2],
-        gamma_x     = COFFEEconsts.gamma_quadrature[1],
-        gamma_w     = COFFEEconsts.gamma_quadrature[2],
+        coffee_b2   = _conv_tup(COFFEEconsts.corr_b2),
+        coffee_c2   = _conv_tup(COFFEEconsts.corr_c2),
+        coffee_b3   = _conv_tup(COFFEEconsts.corr_b3),
+        coffee_c3   = _conv_tup(COFFEEconsts.corr_c3),
+        coffee_corr_I = _conv_tup(COFFEEconsts.corr_I),
+        nf_d        = FP(nf_d_val),
+        nf_mu2      = FP(nf_mu2_val),
+        nf_epsilon  = FP(ϵ_diag[1]),
+        nf_sigma_ratio = FP(nf_sig3),
+        xi_x        = _conv_tup(COFFEEconsts.xi_quadrature[1]),
+        xi_w        = _conv_tup(COFFEEconsts.xi_quadrature[2]),
+        gamma_x     = _conv_tup(COFFEEconsts.gamma_quadrature[1]),
+        gamma_w     = _conv_tup(COFFEEconsts.gamma_quadrature[2]),
     )
     nc = length(model)
     return params, nc

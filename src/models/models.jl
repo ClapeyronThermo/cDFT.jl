@@ -74,7 +74,7 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
 
     if system.options.ad_mode === :forward
         dn_seeds, df_outs, BATCH_val = fwd_cache
-        fill!(δf, 0.0)
+        fill!(δf, 0)
         kernel_fwd_batch = δf_fwd_batch_kernel!(backend)
         kernel_fwd_batch(df_outs, n, f_val, dn_seeds, params, temperature,
                          Val(NF), Val(NB), Val(nc), Val(nd), BATCH_val, M,
@@ -85,8 +85,8 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
             selectdim(selectdim(δf, nd+1, f_idx), nd+1, c_idx) .= df_outs[k]
         end
     else  # :reverse (default)
-        fill!(δf_val, 1.0)
-        fill!(δf, 0.0)
+        fill!(δf_val, 1)
+        fill!(δf, 0)
         kernel_rev = δf_rev_kernel!(backend)
         kernel_rev(δf, n, f_val, δf_val, params, temperature,
                    Val(NF), Val(NB), Val(nc), Val(nd), M,
@@ -129,7 +129,7 @@ function preallocate_model(system::DFTSystem, ρ)
 
     n       = allocate(backend, FP, ngrid..., nf, nb)
     δf      = allocate(backend, FP, ngrid..., nf, nb)
-    fill!(δf, 0.0)
+    fill!(δf, 0)
     fft_buf = allocate(backend, FP, ngrid..., nf, nb)
 
     in_buf  = allocate(backend, Complex{FP}, ngrid...)
@@ -144,7 +144,7 @@ function preallocate_model(system::DFTSystem, ρ)
 
     f_val  = allocate(backend, FP, ngrid...)
     δf_val = allocate(backend, FP, ngrid...)
-    fill!(δf_val, 1.0)
+    fill!(δf_val, 1)
 
     params, nc = preallocate_params(system)
 
@@ -154,8 +154,8 @@ function preallocate_model(system::DFTSystem, ρ)
             f_idx = (k - 1) ÷ nc + 1
             c_idx = (k - 1) % nc + 1
             seed = allocate(backend, FP, ngrid..., nf, nc)
-            fill!(seed, 0.0)
-            fill!(selectdim(selectdim(seed, nd+1, f_idx), nd+1, c_idx), 1.0)
+            fill!(seed, 0)
+            fill!(selectdim(selectdim(seed, nd+1, f_idx), nd+1, c_idx), 1)
             seed
         end
         df_outs   = ntuple(_ -> allocate(backend, FP, ngrid...), Val(batch))
@@ -177,7 +177,7 @@ function preallocate_model(system::ElectrolyteDFTSystem, ρ)
 
     n       = allocate(backend, FP, ngrid..., nf, nb)
     δf      = allocate(backend, FP, ngrid..., nf, nb)
-    fill!(δf, 0.0)
+    fill!(δf, 0)
     fft_buf = allocate(backend, FP, ngrid..., nf, nb)
 
     in_buf  = allocate(backend, Complex{FP}, ngrid...)
@@ -192,7 +192,7 @@ function preallocate_model(system::ElectrolyteDFTSystem, ρ)
 
     f_val  = allocate(backend, FP, ngrid...)
     δf_val = allocate(backend, FP, ngrid...)
-    fill!(δf_val, 1.0)
+    fill!(δf_val, 1)
 
     params, nc = preallocate_params(system)
 

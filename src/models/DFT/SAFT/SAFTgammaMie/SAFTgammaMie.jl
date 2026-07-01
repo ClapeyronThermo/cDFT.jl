@@ -183,28 +183,29 @@ NC here is the total number of groups (sum of nbeads per component).
     λa_s     = params.lambda_a_species_t
     nc_s     = length(nbeads_c)
 
+    FP    = eltype(n)
     sg_idx = params.species_group_idx
-    ρS_c  = 0.0
+    ρS_c  = zero(FP)
     @inbounds for s in 1:nc_s
         nb_s     = _nti(nbeads_c, s)
         sg_idx_s = _nti(sg_idx, s)      # NTuple{MNB,Int} — Const to Enzyme
         ρ̄hc_s   = _chain_bead_sum(sg_idx_s, n, HSd, kk, idx_ζ_c, nb_s)
-        ρS_c    += (ρ̄hc_s / Float64(nb_s)) * m_s[s]
+        ρS_c    += (ρ̄hc_s / nb_s) * m_s[s]
     end
-    kρS_c = ρS_c * π/6.0/8.0
+    kρS_c = ρS_c * π/6/8
 
-    ρhc_gc_total = 0.0
+    ρhc_gc_total = zero(FP)
     @inbounds for kg in 1:NC
         ρhc_gc_total += n[kk, 1, kg]
     end
-    m̄_gc = 0.0
+    m̄_gc = zero(FP)
     @inbounds for kg in 1:NC
         z_gc_kg = n[kk, 1, kg] / ρhc_gc_total
         m̄_gc += z_gc_kg * meff[kg]
     end
-    m̄inv_gc = 1.0/m̄_gc
+    m̄inv_gc = 1/m̄_gc
 
-    ζ_Xc = 0.0;  σ3_xc = 0.0
+    ζ_Xc = zero(FP);  σ3_xc = zero(FP)
     @inbounds for i in 1:NC
         z_gc_i = n[kk, 1, i] / ρhc_gc_total
         x_Si_c = z_gc_i * meff[i] * m̄inv_gc
@@ -217,15 +218,15 @@ NC here is the total number of groups (sum of nbeads per component).
             ζ_Xc  += kρS_c*x_Si_c*x_Sj_c*(di_c+dj_c)^3
         end
     end
-    ζstc = σ3_xc * ρS_c * π/6.0
+    ζstc = σ3_xc * ρS_c * π/6
     _KHSc, _∂KHSc = _KHS_fdf_kernel(ρS_c, ζ_Xc)
 
-    res_chain = 0.0
+    res_chain = zero(FP)
     @inbounds for s in 1:nc_s
         nb_s     = _nti(nbeads_c, s)
         sg_idx_s = _nti(sg_idx, s)          # NTuple{MNB,Int} — Const to Enzyme
         ρhc_s    = _chain_ρhc_s(sg_idx_s, n, kk, nb_s)
-        ρhc_s   /= Float64(nb_s)
+        ρhc_s   /= nb_s
 
         di_s = HSd_s[s]
         λa_c = _nti(_nti(λa_s, s), s)       # use _nti to avoid jl_get_nth_field_checked on GPU
@@ -234,42 +235,42 @@ NC here is the total number of groups (sum of nbeads per component).
         x0c  = σ_s[s,s] / di_s
         ϵiic = ϵ_s[s,s]
 
-        aS1c_a,  dS1c_a  = _aS1_fdf_kernel(λa_c,       ζ_Xc, A)
-        aS1c_r,  dS1c_r  = _aS1_fdf_kernel(λr_c,       ζ_Xc, A)
-        Bc_a,    dBc_a   = _B_fdf_kernel(λa_c,     x0c, ζ_Xc)
-        Bc_r,    dBc_r   = _B_fdf_kernel(λr_c,     x0c, ζ_Xc)
-        aS1c_2a, dS1c_2a = _aS1_fdf_kernel(2.0*λa_c,   ζ_Xc, A)
-        aS1c_2r, dS1c_2r = _aS1_fdf_kernel(2.0*λr_c,   ζ_Xc, A)
-        aS1c_ar, dS1c_ar = _aS1_fdf_kernel(λa_c+λr_c,  ζ_Xc, A)
-        Bc_2a,   dBc_2a  = _B_fdf_kernel(2.0*λa_c, x0c, ζ_Xc)
-        Bc_2r,   dBc_2r  = _B_fdf_kernel(2.0*λr_c, x0c, ζ_Xc)
-        Bc_ar,   dBc_ar  = _B_fdf_kernel(λa_c+λr_c,x0c, ζ_Xc)
+        aS1c_a,  dS1c_a  = _aS1_fdf_kernel(λa_c,      ζ_Xc, A)
+        aS1c_r,  dS1c_r  = _aS1_fdf_kernel(λr_c,      ζ_Xc, A)
+        Bc_a,    dBc_a   = _B_fdf_kernel(λa_c,    x0c, ζ_Xc)
+        Bc_r,    dBc_r   = _B_fdf_kernel(λr_c,    x0c, ζ_Xc)
+        aS1c_2a, dS1c_2a = _aS1_fdf_kernel(2*λa_c,    ζ_Xc, A)
+        aS1c_2r, dS1c_2r = _aS1_fdf_kernel(2*λr_c,    ζ_Xc, A)
+        aS1c_ar, dS1c_ar = _aS1_fdf_kernel(λa_c+λr_c, ζ_Xc, A)
+        Bc_2a,   dBc_2a  = _B_fdf_kernel(2*λa_c,  x0c, ζ_Xc)
+        Bc_2r,   dBc_2r  = _B_fdf_kernel(2*λr_c,  x0c, ζ_Xc)
+        Bc_ar,   dBc_ar  = _B_fdf_kernel(λa_c+λr_c,x0c,ζ_Xc)
 
         ∂a1ρSc = _Cc*(x0c^λa_c*(dS1c_a+dBc_a) - x0c^λr_c*(dS1c_r+dBc_r))
-        g1c    = 3.0*∂a1ρSc - _Cc*(λa_c*x0c^λa_c*(aS1c_a+Bc_a) - λr_c*x0c^λr_c*(aS1c_r+Bc_r))
+        g1c    = 3*∂a1ρSc - _Cc*(λa_c*x0c^λa_c*(aS1c_a+Bc_a) - λr_c*x0c^λr_c*(aS1c_r+Bc_r))
 
-        αc  = _Cc*(1.0/(λa_c-3.0) - 1.0/(λr_c-3.0))
+        αc  = _Cc*(1/(λa_c-3) - 1/(λr_c-3))
         f1c,f2c,f3c,f4c,f5c,f6c = _f123456_kernel(αc, ϕ)
-        θc  = exp(ϵiic/T) - 1.0
-        γcc = 10.0*(-tanh(10.0*(0.57-αc))+1.0)*ζstc*θc*exp(-6.7*ζstc-8.0*ζstc^2)
+        θc  = exp(ϵiic/T) - 1
+        γcc = 10*(-tanh(10*(FP(0.57)-αc))+1)*ζstc*θc*exp(-FP(6.7)*ζstc-8*ζstc^2)
 
-        cb2ac = x0c^(2.0*λa_c)*(aS1c_2a+Bc_2a)
+        cb2ac = x0c^(2*λa_c)*(aS1c_2a+Bc_2a)
         cbarc = x0c^(λa_c+λr_c)*(aS1c_ar+Bc_ar)
-        cb2rc = x0c^(2.0*λr_c)*(aS1c_2r+Bc_2r)
-        ∂a2ρSc = 0.5*_Cc*_Cc*(
-            ρS_c*_∂KHSc*(cb2ac - 2.0*cbarc + cb2rc)
-          + _KHSc*(x0c^(2.0*λa_c)*(dS1c_2a+dBc_2a)
-                 - 2.0*x0c^(λa_c+λr_c)*(dS1c_ar+dBc_ar)
-                 + x0c^(2.0*λr_c)*(dS1c_2r+dBc_2r))
+        cb2rc = x0c^(2*λr_c)*(aS1c_2r+Bc_2r)
+        ∂a2ρSc = _Cc*_Cc/2*(
+            ρS_c*_∂KHSc*(cb2ac - 2*cbarc + cb2rc)
+          + _KHSc*(x0c^(2*λa_c)*(dS1c_2a+dBc_2a)
+                 - 2*x0c^(λa_c+λr_c)*(dS1c_ar+dBc_ar)
+                 + x0c^(2*λr_c)*(dS1c_2r+dBc_2r))
         )
-        gMCA2c = 3.0*∂a2ρSc - _KHSc*_Cc*_Cc*(λr_c*cb2rc - (λa_c+λr_c)*cbarc + λa_c*cb2ac)
-        g2c    = (1.0+γcc)*gMCA2c
+        gMCA2c = 3*∂a2ρSc - _KHSc*_Cc*_Cc*(λr_c*cb2rc - (λa_c+λr_c)*cbarc + λa_c*cb2ac)
+        g2c    = (1+γcc)*gMCA2c
 
         gHSc  = _gHS_kernel(x0c, ζ_Xc)
         gMiec = gHSc * exp(ϵiic/T * g1c/gHSc + (ϵiic/T)^2 * g2c/gHSc)
 
         ms = m_s[s]
-        res_chain += ρhc_s * Base.log(abs(gMiec)) * (ms - 1.0)
+        res_chain += ρhc_s * Base.log(abs(gMiec)) * (ms - 1)
     end
     return -res_chain
 end
@@ -278,19 +279,21 @@ end
 # compile-time inside these functions, regardless of how autodiff_deferred specialises.
 
 @inline function _chain_bead_sum(sg_idx_s::NTuple{MNB, Int}, n, HSd, kk, field_idx, nb_s) where MNB
-    acc = 0.0
+    FP  = eltype(n)
+    acc = zero(FP)
     @inbounds for j in 1:MNB        # MNB from WHERE clause → compile-time
         if j <= nb_s                 # nb_s is runtime but MNB (bound) is compile-time
             kg = _nti(sg_idx_s, j)
             dg = HSd[kg]
-            acc += n[kk, field_idx, kg] * 3.0/(4.0*π*dg^3)
+            acc += n[kk, field_idx, kg] * 3/(4*π*dg^3)
         end
     end
     return acc
 end
 
 @inline function _chain_ρhc_s(sg_idx_s::NTuple{MNB, Int}, n, kk, nb_s) where MNB
-    acc = 0.0
+    FP  = eltype(n)
+    acc = zero(FP)
     @inbounds for j in 1:MNB        # MNB from WHERE clause → compile-time
         j <= nb_s || continue
         acc += n[kk, 1, _nti(sg_idx_s, j)]
@@ -303,29 +306,30 @@ end
 # (nc_spec × nc_spec VR Mie ε at species level) for the reduced temperature Tr.
 @inline function _assoc_delta(p, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix,
                                ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M <: SAFTgammaMieModel}
-    p > n_pairs && return 0.0
-    ρS = 0.0
+    FP = eltype(n)
+    p > n_pairs && return zero(FP)
+    ρS = zero(FP)
     @inbounds for k in 1:NC
-        ρS += n[kk, 3, k] * 6.0 / (π * params.HSd[k]^3) * params.meff[k]
+        ρS += n[kk, 3, k] * 6 / (π * params.HSd[k]^3) * params.meff[k]
     end
-    σ3_x = 0.0
+    σ3_x = zero(FP)
     @inbounds for k in 1:NC
-        ρ̄k  = n[kk, 3, k] * 6.0 / (π * params.HSd[k]^3)
+        ρ̄k  = n[kk, 3, k] * 6 / (π * params.HSd[k]^3)
         xSk = ρ̄k * params.meff[k] / ρS
         σ3_x += xSk * xSk * params.sigma[k,k]^3
         @inbounds for l in 1:(k-1)
-            ρ̄l  = n[kk, 3, l] * 6.0 / (π * params.HSd[l]^3)
+            ρ̄l  = n[kk, 3, l] * 6 / (π * params.HSd[l]^3)
             xSl = ρ̄l * params.meff[l] / ρS
-            σ3_x += 2.0 * xSk * xSl * params.sigma[k,l]^3
+            σ3_x += 2 * xSk * xSl * params.sigma[k,l]^3
         end
     end
     ρr = ρS * σ3_x
     is = _nti(params.assoc_ispec, p)
     js = _nti(params.assoc_jspec, p)
     Tr = T / params.epsilon_species[is, js]
-    I_val = 0.0; ρrn = 1.0
+    I_val = zero(FP); ρrn = one(FP)
     for ni in 0:10
-        row = _nti(params.VRMie_c, ni + 1); Trm = 1.0
+        row = _nti(params.VRMie_c, ni + 1); Trm = one(FP)
         for mi in 0:10
             I_val += _nti(row, mi + 1) * Trm * ρrn; Trm *= Tr
         end
@@ -360,6 +364,8 @@ function preallocate_params(system::DFTSystem{<:SAFTgammaMieModel})
     nbeads_v = system.species.nbeads
     max_nb   = maximum(nbeads_v)
     species_group_idx = ntuple(s -> ntuple(j -> (j <= nbeads_v[s] ? model.groups.i_groups[s][j] : 0), max_nb), nc_s_v)
+    A_fp   = ntuple(i -> ntuple(j -> FP(SAFTVRMIE_A[i][j]),   4), 4)
+    phi_fp = ntuple(i -> ntuple(j -> FP(SAFTVRMIE_PHI[i][j]), 6), 7)
     base = (;
         HSd                = adapt_to_device(backend, FP, system.species.size),
         m                  = adapt_to_device(backend, FP, m_vals),
@@ -370,8 +376,8 @@ function preallocate_params(system::DFTSystem{<:SAFTgammaMieModel})
         lambda_r_t         = lambda_r_t,
         lambda_a_t         = lambda_a_t,
         psi_eff            = adapt_to_device(backend, FP, system.fields[end].width),
-        A                  = SAFTVRMIE_A,
-        phi                = SAFTVRMIE_PHI,
+        A                  = A_fp,
+        phi                = phi_fp,
         nbeads_comp        = ntuple(i -> system.species.nbeads[i], nc_s_v),
         HSd_species        = adapt_to_device(backend, FP, HSd_sp),
         m_species          = adapt_to_device(backend, FP, model.vrmodel.params.segment.values),
@@ -409,7 +415,7 @@ function preallocate_params(system::DFTSystem{<:SAFTgammaMieModel})
         n_sites_cumsum_t = ntuple(i -> n_sites_cumsum_v[i], Val(nc_model + 1))
 
         c_mat   = SAFTVRMieconsts.c
-        VRMie_c = ntuple(ni -> ntuple(mi -> c_mat[ni, mi], 11), 11)
+        VRMie_c = ntuple(ni -> ntuple(mi -> FP(c_mat[ni, mi]), 11), 11)
 
         assoc = (;
             has_assoc       = true,

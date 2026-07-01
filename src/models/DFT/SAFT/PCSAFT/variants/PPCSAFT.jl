@@ -53,38 +53,39 @@ PCP-SAFT dipole–dipole polar term (Padé: A₂²/(A₂−A₃)) at grid point 
 Takes `m̄` and `ηd` from f_disp output.
 """
 @inline function f_polar(::Type{M}, kk, n, params, T, m̄, ηd, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: PCPSAFTModel}
-    pcp_m   = params.pcp_m
-    pcp_ϵ   = params.pcp_epsilon
-    pcp_σ   = params.pcp_sigma
-    dip2    = params.dipole2
-    ca      = DD_consts.corr_a
-    cb      = DD_consts.corr_b
-    cc      = DD_consts.corr_c
+    FP    = eltype(n)
+    pcp_m = params.pcp_m
+    pcp_ϵ = params.pcp_epsilon
+    pcp_σ = params.pcp_sigma
+    dip2  = params.dipole2
+    ca    = params.dd_a
+    cb    = params.dd_b
+    cc    = params.dd_c
 
     has_polar = false
     @inbounds for i in 1:NC
-        if dip2[i] != 0.0; has_polar = true; break; end
+        if !iszero(dip2[i]); has_polar = true; break; end
     end
 
-    res_polar = 0.0
+    res_polar = zero(FP)
     if has_polar
-        ψ       = 1.3862
+        ψ       = FP(1.3862)
         idx_ρz  = 6 + ND
-        factor  = 3.0 / (4.0*ψ*ψ*ψ*π)
-        ∑ρ̄_p = 0.0
+        factor  = 3 / (4*ψ*ψ*ψ*π)
+        ∑ρ̄_p = zero(FP)
         @inbounds for i in 1:NC
             ∑ρ̄_p += n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
         end
 
-        _A₂ = 0.0
+        _A₂ = zero(FP)
         @inbounds for i in 1:NC
             dip2_i = dip2[i]
-            if dip2_i == 0.0; continue; end
+            if iszero(dip2_i); continue; end
             ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
             xᵢ = ρ̄zi_i / ∑ρ̄_p
             @inbounds for j in 1:NC
                 dip2_j = dip2[j]
-                if dip2_j == 0.0; continue; end
+                if iszero(dip2_j); continue; end
                 ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
                 xⱼ = ρ̄zi_j / ∑ρ̄_p
                 σij3 = pcp_σ[i,j]*pcp_σ[i,j]*pcp_σ[i,j]
@@ -94,21 +95,21 @@ Takes `m̄` and `ηd` from f_disp output.
         end
         _A₂ *= -π * ∑ρ̄_p / (T*T)
 
-        if abs(_A₂) > 0.0
-            _A₃ = 0.0
+        if abs(_A₂) > 0
+            _A₃ = zero(FP)
             @inbounds for i in 1:NC
                 dip2_i = dip2[i]
-                if dip2_i == 0.0; continue; end
+                if iszero(dip2_i); continue; end
                 ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
                 xᵢ = ρ̄zi_i / ∑ρ̄_p
                 @inbounds for j in 1:NC
                     dip2_j = dip2[j]
-                    if dip2_j == 0.0; continue; end
+                    if iszero(dip2_j); continue; end
                     ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
                     xⱼ = ρ̄zi_j / ∑ρ̄_p
                     @inbounds for k in 1:NC
                         dip2_k = dip2[k]
-                        if dip2_k == 0.0; continue; end
+                        if iszero(dip2_k); continue; end
                         ρ̄zi_k = n[kk, idx_ρz, k] * factor / (params.HSd[k]*params.HSd[k]*params.HSd[k])
                         xₖ = ρ̄zi_k / ∑ρ̄_p
                         _J3_ijk = _J3_kernel(pcp_m[i], pcp_m[j], pcp_m[k], ηd, cc)
@@ -117,7 +118,7 @@ Takes `m̄` and `ηd` from f_disp output.
                     end
                 end
             end
-            _A₃ *= -4.0*π*π/3.0 * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
+            _A₃ *= -4*π*π/3 * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
 
             denom_p = _A₂ - _A₃
             res_polar = ∑ρ̄_p * _A₂*_A₂ / denom_p
@@ -128,12 +129,13 @@ Takes `m̄` and `ηd` from f_disp output.
 end
 
 @inline function _J2_kernel(mᵢ, mⱼ, ϵᵢⱼ, η, T, corr_a, corr_b)
-    ϵT = ϵᵢⱼ / T
-    m̄  = min(sqrt(mᵢ * mⱼ), 2.0)
-    m1  = 1.0 - 1.0/m̄
-    m2  = m1 * (1.0 - 2.0/m̄)
-    result = 0.0
-    ηn = 1.0
+    FP  = typeof(η)
+    ϵT  = ϵᵢⱼ / T
+    m̄   = min(sqrt(mᵢ * mⱼ), 2)
+    m1  = 1 - 1/m̄
+    m2  = m1 * (1 - 2/m̄)
+    result = zero(FP)
+    ηn = one(FP)
     for n in 0:4
         a0, a1, a2 = corr_a[n+1]
         b0, b1, b2 = corr_b[n+1]
@@ -144,11 +146,12 @@ end
 end
 
 @inline function _J3_kernel(mᵢ, mⱼ, mₖ, η, corr_c)
-    m̄  = min(cbrt(mᵢ * mⱼ * mₖ), 2.0)
-    m1  = 1.0 - 1.0/m̄
-    m2  = m1 * (1.0 - 2.0/m̄)
-    result = 0.0
-    ηn = 1.0
+    FP  = typeof(η)
+    m̄   = min(cbrt(mᵢ * mⱼ * mₖ), 2)
+    m1  = 1 - 1/m̄
+    m2  = m1 * (1 - 2/m̄)
+    result = zero(FP)
+    ηn = one(FP)
     for n in 0:4
         c0, c1, c2 = corr_c[n+1]
         result += (c0 + c1*m1 + c2*m2) * ηn
@@ -161,6 +164,9 @@ function preallocate_params(system::DFTSystem{<:PCPSAFTModel})
     backend = system.options.device
     FP      = fptype(system.options)
     model   = system.model
+    dd_a_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_a[i][j]), 3), 5)
+    dd_b_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_b[i][j]), 3), 5)
+    dd_c_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_c[i][j]), 3), 5)
     base = (;
         HSd         = adapt_to_device(backend, FP, system.species.size),
         m           = adapt_to_device(backend, FP, model.params.segment.values),
@@ -170,6 +176,9 @@ function preallocate_params(system::DFTSystem{<:PCPSAFTModel})
         pcp_sigma   = adapt_to_device(backend, FP, pcp_sigma(model)),
         pcp_epsilon = adapt_to_device(backend, FP, pcp_epsilon(model)),
         dipole2     = adapt_to_device(backend, FP, pcp_dipole2(model)),
+        dd_a        = dd_a_fp,
+        dd_b        = dd_b_fp,
+        dd_c        = dd_c_fp,
     )
 
     nn = Clapeyron.assoc_pair_length(model)

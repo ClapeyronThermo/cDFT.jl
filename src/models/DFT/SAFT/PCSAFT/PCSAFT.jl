@@ -113,23 +113,24 @@ PC-SAFT hard-chain contribution at grid point `kk`.
 Field layout assumed: field 1 = ρ (unweighted), field 4+ND = ρ̄hc, field 5+ND = λ.
 """
 @inline function f_hc(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: PCSAFTModel}
+    FP  = eltype(n)
     m   = params.m
     HSd = params.HSd
     idx_ζ = 4 + ND;  idx_λ = 5 + ND
-    ζ₃=0.0; ζ₂=0.0
+    ζ₃=zero(FP); ζ₂=zero(FP)
     @inbounds for i in 1:NC
         mi=m[i]; di=HSd[i]; ρ̄hci=n[kk, idx_ζ, i]
         ζ₃ += mi * ρ̄hci;  ζ₂ += mi * ρ̄hci / di
     end
-    ζ₃ *= 0.125;  ζ₂ *= 0.125
-    inv1ζ₃ = 1.0/(1.0-ζ₃)
-    res_hc = 0.0
+    ζ₃ /= 8;  ζ₂ /= 8
+    inv1ζ₃ = one(FP)/(one(FP)-ζ₃)
+    res_hc = zero(FP)
     @inbounds for i in 1:NC
         ρi  = n[kk, 1, i]
-        λ   = n[kk, idx_λ, i] / (2.0*HSd[i])
-        ydd = inv1ζ₃ + 1.5*HSd[i]*ζ₂*inv1ζ₃*inv1ζ₃ +
-              0.5*HSd[i]*HSd[i]*ζ₂*ζ₂*inv1ζ₃*inv1ζ₃*inv1ζ₃
-        res_hc += -ρi * (m[i]-1.0) * Base.log(abs(ydd*λ/ρi))
+        λ   = n[kk, idx_λ, i] / (2*HSd[i])
+        ydd = inv1ζ₃ + FP(1.5)*HSd[i]*ζ₂*inv1ζ₃*inv1ζ₃ +
+              FP(0.5)*HSd[i]*HSd[i]*ζ₂*ζ₂*inv1ζ₃*inv1ζ₃*inv1ζ₃
+        res_hc += -ρi * (m[i]-1) * Base.log(abs(ydd*λ/ρi))
     end
     return res_hc
 end
@@ -139,15 +140,16 @@ PC-SAFT dispersion contribution at grid point `kk`. Field 6+ND is the dispersion
 Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the polar term.
 """
 @inline function f_disp(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: PCSAFTModel}
+    FP     = eltype(n)
     m      = params.m
     HSd    = params.HSd
     sigma  = params.sigma
     epsilon = params.epsilon
-    ψ      = 1.3862
+    ψ      = FP(1.3862)
     idx_ρz = 6 + ND
-    factor = 3.0 / (4.0*ψ*ψ*ψ*π)
+    factor = 3 / (4*ψ*ψ*ψ*π)
 
-    ρ̄z_sum=0.0; m̄_top=0.0; η_sum=0.0
+    ρ̄z_sum=zero(FP); m̄_top=zero(FP); η_sum=zero(FP)
     @inbounds for i in 1:NC
         ρ̄zi = n[kk, idx_ρz, i] * factor / (HSd[i]*HSd[i]*HSd[i])
         ρ̄z_sum += ρ̄zi
@@ -155,9 +157,9 @@ Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the po
         η_sum  += m[i] * ρ̄zi * HSd[i]*HSd[i]*HSd[i]
     end
     m̄  = m̄_top / ρ̄z_sum
-    ηd = π/6.0 * η_sum
+    ηd = η_sum * π / 6
 
-    m2ϵσ3_1=0.0; m2ϵσ3_2=0.0
+    m2ϵσ3_1=zero(FP); m2ϵσ3_2=zero(FP)
     @inbounds for i in 1:NC
         ρzi = n[kk, idx_ρz, i] * factor / (HSd[i]*HSd[i]*HSd[i])
         @inbounds for j in 1:NC
@@ -169,29 +171,30 @@ Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the po
         end
     end
     ηd2    = ηd*ηd
-    ηd4    = (1.0-ηd)^4
-    inv1ηd = 1.0/(1.0-ηd)
-    inv2ηd = 1.0/(2.0-ηd)
-    C₁     = 1.0 + m̄*(8.0*ηd-2.0*ηd2)/ηd4 +
-              (1.0-m̄)*(20.0*ηd-27.0*ηd2+12.0*(ηd*ηd2)-2.0*(ηd2*ηd2)) *
+    ηd4    = (one(FP)-ηd)^4
+    inv1ηd = one(FP)/(one(FP)-ηd)
+    inv2ηd = one(FP)/(2-ηd)
+    C₁     = one(FP) + m̄*(8*ηd-2*ηd2)/ηd4 +
+              (one(FP)-m̄)*(20*ηd-27*ηd2+12*(ηd*ηd2)-2*(ηd2*ηd2)) *
               inv1ηd*inv1ηd*inv2ηd*inv2ηd
     I₁     = I_lite(PCSAFT_CORR1, m̄, ηd)
     I₂     = I_lite(PCSAFT_CORR2, m̄, ηd)
-    res_disp = -2.0*π*I₁*m2ϵσ3_1 - π*m̄*I₂*m2ϵσ3_2 / C₁
+    res_disp = -2*π*I₁*m2ϵσ3_1 - π*m̄*I₂*m2ϵσ3_2 / C₁
     return res_disp, m̄, ηd
 end
 
 @inline function I_lite(corr, m̄, η)
-    res = 0.0
-    m2 = (m̄ - 1.0) / m̄
-    m3 = m2 * (m̄ - 2.0) / m̄
-    c1 = corr[1]; res += (c1[1] + m2*c1[2] + m3*c1[3])
-    c2 = corr[2]; res += (c2[1] + m2*c2[2] + m3*c2[3]) * η
-    c3 = corr[3]; res += (c3[1] + m2*c3[2] + m3*c3[3]) * η * η
-    c4 = corr[4]; res += (c4[1] + m2*c4[2] + m3*c4[3]) * η * η * η
-    c5 = corr[5]; res += (c5[1] + m2*c5[2] + m3*c5[3]) * η * η * η * η
-    c6 = corr[6]; res += (c6[1] + m2*c6[2] + m3*c6[3]) * η * η * η * η * η
-    c7 = corr[7]; res += (c7[1] + m2*c7[2] + m3*c7[3]) * η * η * η * η * η * η
+    T  = typeof(m̄)
+    res = zero(T)
+    m2 = (m̄ - 1) / m̄
+    m3 = m2 * (m̄ - 2) / m̄
+    c1 = corr[1]; res += (T(c1[1]) + m2*T(c1[2]) + m3*T(c1[3]))
+    c2 = corr[2]; res += (T(c2[1]) + m2*T(c2[2]) + m3*T(c2[3])) * η
+    c3 = corr[3]; res += (T(c3[1]) + m2*T(c3[2]) + m3*T(c3[3])) * η * η
+    c4 = corr[4]; res += (T(c4[1]) + m2*T(c4[2]) + m3*T(c4[3])) * η * η * η
+    c5 = corr[5]; res += (T(c5[1]) + m2*T(c5[2]) + m3*T(c5[3])) * η * η * η * η
+    c6 = corr[6]; res += (T(c6[1]) + m2*T(c6[2]) + m3*T(c6[3])) * η * η * η * η * η
+    c7 = corr[7]; res += (T(c7[1]) + m2*T(c7[2]) + m3*T(c7[3])) * η * η * η * η * η * η
     return res
 end
 

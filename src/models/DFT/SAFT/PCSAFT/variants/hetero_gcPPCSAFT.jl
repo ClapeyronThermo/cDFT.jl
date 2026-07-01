@@ -132,15 +132,16 @@ end
     bond_k  = params.bond_k
     bond_l  = params.bond_l
 
+    FP    = eltype(n)
     idx_ζ = 4 + ND
-    ζ₃ = 0.0; ζ₂ = 0.0
+    ζ₃ = zero(FP); ζ₂ = zero(FP)
     @inbounds for i in 1:NC
         mi = m_seg[i]; di = HSd[i]; ρ̄hci = n[kk, idx_ζ, i]
         ζ₃ += mi * ρ̄hci
         ζ₂ += mi * ρ̄hci / di
     end
-    ζ₃ *= 0.125; ζ₂ *= 0.125
-    inv1ζ₃ = 1.0 / (1.0 - ζ₃)
+    ζ₃ /= 8; ζ₂ /= 8
+    inv1ζ₃ = 1 / (1 - ζ₃)
 
     return _f_hc_bonds(n, bond_k, bond_l, HSd, kk, ζ₂, inv1ζ₃)
 end
@@ -149,15 +150,16 @@ end
 # compile-time inside this function, regardless of how autodiff_deferred specialises.
 @inline function _f_hc_bonds(n, bond_k::NTuple{NB, Int32}, bond_l::NTuple{NB, Int32},
                                HSd, kk, ζ₂, inv1ζ₃) where NB
-    res_hc = 0.0
+    FP     = typeof(ζ₂)
+    res_hc = zero(FP)
     @inbounds for ib in 1:NB
         k = _nti(bond_k, ib); l = _nti(bond_l, ib)
         dk = HSd[k]; dl = HSd[l]
         r_HSd = dk * dl / (dk + dl)
         ζ₂_ov3 = ζ₂ * inv1ζ₃
-        yᵈᵈ = inv1ζ₃ + 3.0*r_HSd*ζ₂_ov3*inv1ζ₃ + 2.0*r_HSd^2*ζ₂_ov3^2*inv1ζ₃
+        yᵈᵈ = inv1ζ₃ + 3*r_HSd*ζ₂_ov3*inv1ζ₃ + 2*r_HSd^2*ζ₂_ov3^2*inv1ζ₃
         ρhck = n[kk, 1, k]
-        res_hc -= ρhck * 0.5 * Base.log(abs(yᵈᵈ))
+        res_hc -= ρhck / 2 * Base.log(abs(yᵈᵈ))
     end
     return res_hc
 end
@@ -169,10 +171,11 @@ end
     ϵ                = params.epsilon
     nbeads_for_group = params.nbeads_for_group
 
-    ψ       = 1.5357
+    FP      = eltype(n)
+    ψ       = FP(1.5357)
     idx_ρz  = 5 + ND
-    factor  = 3.0 / (4.0*ψ*ψ*ψ*π)
-    ρ̄_tot   = 0.0; m̄_num = 0.0; η_sum = 0.0
+    factor  = 3 / (4*ψ*ψ*ψ*π)
+    ρ̄_tot   = zero(FP); m̄_num = zero(FP); η_sum = zero(FP)
     @inbounds for i in 1:NC
         di  = HSd[i]
         ρ̄i  = n[kk, idx_ρz, i] * factor / (di*di*di)
@@ -181,9 +184,9 @@ end
         ρ̄_tot  += ρ̄i / _nti(nbeads_for_group, i)
     end
     m̄  = m̄_num / ρ̄_tot
-    ηd = π/6.0 * η_sum
+    ηd = π/6 * η_sum
 
-    m2ϵσ3_1 = 0.0; m2ϵσ3_2 = 0.0
+    m2ϵσ3_1 = zero(FP); m2ϵσ3_2 = zero(FP)
     @inbounds for i in 1:NC
         di   = HSd[i]
         ρ̄i   = n[kk, idx_ρz, i] * factor / (di*di*di)
@@ -197,15 +200,15 @@ end
         end
     end
     ηd2    = ηd*ηd
-    ηd4    = (1.0-ηd)^4
-    inv1ηd = 1.0/(1.0-ηd)
-    inv2ηd = 1.0/(2.0-ηd)
-    C₁     = 1.0 + m̄*(8.0*ηd-2.0*ηd2)/ηd4 +
-              (1.0-m̄)*(20.0*ηd-27.0*ηd2+12.0*(ηd*ηd2)-2.0*(ηd2*ηd2)) *
+    ηd4    = (1-ηd)^4
+    inv1ηd = 1/(1-ηd)
+    inv2ηd = 1/(2-ηd)
+    C₁     = 1 + m̄*(8*ηd-2*ηd2)/ηd4 +
+              (1-m̄)*(20*ηd-27*ηd2+12*(ηd*ηd2)-2*(ηd2*ηd2)) *
               inv1ηd*inv1ηd*inv2ηd*inv2ηd
     I₁     = I_lite(PCSAFT_CORR1, m̄, ηd)
     I₂     = I_lite(PCSAFT_CORR2, m̄, ηd)
-    return -2.0*π*I₁*m2ϵσ3_1 - π*m̄*I₂*m2ϵσ3_2 / C₁
+    return -2*π*I₁*m2ϵσ3_1 - π*m̄*I₂*m2ϵσ3_2 / C₁
 end
 
 function preallocate_params(system::DFTSystem{<:HeterogcPCPSAFT})

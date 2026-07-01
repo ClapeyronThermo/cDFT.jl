@@ -71,42 +71,43 @@ end
 QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions.
 """
 @inline function f_polar(::Type{M}, kk, n, params, T, m̄, ηd, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: QPCPSAFTModel}
+    FP    = eltype(n)
     pcp_m = params.pcp_m
     pcp_ϵ = params.pcp_epsilon
     pcp_σ = params.pcp_sigma
     dip2  = params.dipole2
     quad2 = params.quadrupole2
-    ca_dd = DD_consts.corr_a;  cb_dd = DD_consts.corr_b;  cc_dd = DD_consts.corr_c
-    ca_qq = QQ_consts.corr_a;  cb_qq = QQ_consts.corr_b;  cc_qq = QQ_consts.corr_c
-    ca_dq = DQ_consts.corr_a;  cb_dq = DQ_consts.corr_b;  cc_dq = DQ_consts.corr_c
+    ca_dd = params.dd_a;  cb_dd = params.dd_b;  cc_dd = params.dd_c
+    ca_qq = params.qq_a;  cb_qq = params.qq_b;  cc_qq = params.qq_c
+    ca_dq = params.dq_a;  cb_dq = params.dq_b;  cc_dq = params.dq_c
 
-    ψ      = 1.3862
+    ψ      = FP(1.3862)
     idx_ρz = 6 + ND
-    factor = 3.0 / (4.0*ψ*ψ*ψ*π)
-    ∑ρ̄_p  = 0.0
+    factor = 3 / (4*ψ*ψ*ψ*π)
+    ∑ρ̄_p  = zero(FP)
     @inbounds for i in 1:NC
         ∑ρ̄_p += n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
     end
 
     has_dipole = false;  has_quad = false
     @inbounds for i in 1:NC
-        if dip2[i]  != 0.0; has_dipole = true; end
-        if quad2[i] != 0.0; has_quad   = true; end
+        if !iszero(dip2[i]);  has_dipole = true; end
+        if !iszero(quad2[i]); has_quad   = true; end
     end
 
-    res_polar = 0.0
+    res_polar = zero(FP)
 
     # ── DD contribution ───────────────────────────────────────────────────────
     if has_dipole
-        _A₂_dd = 0.0
+        _A₂_dd = zero(FP)
         @inbounds for i in 1:NC
             dip2_i = dip2[i]
-            if dip2_i == 0.0; continue; end
+            if iszero(dip2_i); continue; end
             ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
             xᵢ = ρ̄zi_i / ∑ρ̄_p
             @inbounds for j in 1:NC
                 dip2_j = dip2[j]
-                if dip2_j == 0.0; continue; end
+                if iszero(dip2_j); continue; end
                 ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
                 xⱼ = ρ̄zi_j / ∑ρ̄_p
                 σij3 = pcp_σ[i,j]*pcp_σ[i,j]*pcp_σ[i,j]
@@ -116,21 +117,21 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
         end
         _A₂_dd *= -π * ∑ρ̄_p / (T*T)
 
-        if abs(_A₂_dd) > 0.0
-            _A₃_dd = 0.0
+        if !iszero(_A₂_dd)
+            _A₃_dd = zero(FP)
             @inbounds for i in 1:NC
                 dip2_i = dip2[i]
-                if dip2_i == 0.0; continue; end
+                if iszero(dip2_i); continue; end
                 ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
                 xᵢ = ρ̄zi_i / ∑ρ̄_p
                 @inbounds for j in 1:NC
                     dip2_j = dip2[j]
-                    if dip2_j == 0.0; continue; end
+                    if iszero(dip2_j); continue; end
                     ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
                     xⱼ = ρ̄zi_j / ∑ρ̄_p
                     @inbounds for k in 1:NC
                         dip2_k = dip2[k]
-                        if dip2_k == 0.0; continue; end
+                        if iszero(dip2_k); continue; end
                         ρ̄zi_k = n[kk, idx_ρz, k] * factor / (params.HSd[k]*params.HSd[k]*params.HSd[k])
                         xₖ = ρ̄zi_k / ∑ρ̄_p
                         _J3_ijk = _J3_kernel(pcp_m[i], pcp_m[j], pcp_m[k], ηd, cc_dd)
@@ -139,7 +140,7 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
                     end
                 end
             end
-            _A₃_dd *= -4.0*π*π/3.0 * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
+            _A₃_dd *= -FP(4)*π*π/3 * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
             denom_dd = _A₂_dd - _A₃_dd
             res_polar += ∑ρ̄_p * _A₂_dd*_A₂_dd / denom_dd
         end
@@ -147,15 +148,15 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
 
     # ── QQ contribution ───────────────────────────────────────────────────────
     if has_quad
-        _A₂_qq = 0.0
+        _A₂_qq = zero(FP)
         @inbounds for i in 1:NC
             quad2_i = quad2[i]
-            if quad2_i == 0.0; continue; end
+            if iszero(quad2_i); continue; end
             ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
             xᵢ = ρ̄zi_i / ∑ρ̄_p
             @inbounds for j in 1:NC
                 quad2_j = quad2[j]
-                if quad2_j == 0.0; continue; end
+                if iszero(quad2_j); continue; end
                 ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
                 xⱼ = ρ̄zi_j / ∑ρ̄_p
                 σij_sq = pcp_σ[i,j]*pcp_σ[i,j]
@@ -164,24 +165,24 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
                 _A₂_qq += xᵢ * xⱼ * quad2_i * quad2_j / σij7 * _J2_ij
             end
         end
-        _A₂_qq *= -(9.0/16.0) * π * ∑ρ̄_p / (T*T)
+        _A₂_qq *= -(FP(9)/16) * π * ∑ρ̄_p / (T*T)
 
-        if abs(_A₂_qq) > 0.0
-            _A₃_qq = 0.0
+        if !iszero(_A₂_qq)
+            _A₃_qq = zero(FP)
             @inbounds for i in 1:NC
                 quad2_i = quad2[i]
-                if quad2_i == 0.0; continue; end
+                if iszero(quad2_i); continue; end
                 ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
                 xᵢ = ρ̄zi_i / ∑ρ̄_p
                 @inbounds for j in 1:NC
                     quad2_j = quad2[j]
-                    if quad2_j == 0.0; continue; end
+                    if iszero(quad2_j); continue; end
                     ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
                     xⱼ = ρ̄zi_j / ∑ρ̄_p
                     σij3 = pcp_σ[i,j]*pcp_σ[i,j]*pcp_σ[i,j]
                     @inbounds for k in 1:NC
                         quad2_k = quad2[k]
-                        if quad2_k == 0.0; continue; end
+                        if iszero(quad2_k); continue; end
                         ρ̄zi_k = n[kk, idx_ρz, k] * factor / (params.HSd[k]*params.HSd[k]*params.HSd[k])
                         xₖ = ρ̄zi_k / ∑ρ̄_p
                         σik3 = pcp_σ[i,k]*pcp_σ[i,k]*pcp_σ[i,k]
@@ -192,7 +193,7 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
                     end
                 end
             end
-            _A₃_qq *= (9.0*π*π/16.0) * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
+            _A₃_qq *= FP(9)*π*π/16 * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
             denom_qq = _A₂_qq - _A₃_qq
             res_polar += ∑ρ̄_p * _A₂_qq*_A₂_qq / denom_qq
         end
@@ -200,15 +201,15 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
 
     # ── DQ cross contribution ─────────────────────────────────────────────────
     if has_dipole && has_quad
-        _A₂_dq = 0.0
+        _A₂_dq = zero(FP)
         @inbounds for i in 1:NC
             dip2_i = dip2[i]
-            if dip2_i == 0.0; continue; end
+            if iszero(dip2_i); continue; end
             ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
             xᵢ = ρ̄zi_i / ∑ρ̄_p
             @inbounds for j in 1:NC
                 quad2_j = quad2[j]
-                if quad2_j == 0.0; continue; end
+                if iszero(quad2_j); continue; end
                 ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
                 xⱼ = ρ̄zi_j / ∑ρ̄_p
                 σij_sq = pcp_σ[i,j]*pcp_σ[i,j]
@@ -217,24 +218,23 @@ QPCP-SAFT polar term at grid point `kk`: Padé sum of DD + QQ + DQ contributions
                 _A₂_dq += xᵢ * xⱼ * dip2_i * quad2_j / σij5 * _J2_ij
             end
         end
-        _A₂_dq *= -(9.0/4.0) * π * ∑ρ̄_p / (T*T)
+        _A₂_dq *= -(FP(9)/4) * π * ∑ρ̄_p / (T*T)
 
-        if abs(_A₂_dq) > 0.0
-            _A₃_dq = 0.0
+        if !iszero(_A₂_dq)
+            _A₃_dq = zero(FP)
             @inbounds for i in 1:NC
                 dip2_i = dip2[i]
-                if dip2_i == 0.0; continue; end
+                if iszero(dip2_i); continue; end
                 ρ̄zi_i = n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
                 xᵢ = ρ̄zi_i / ∑ρ̄_p
                 @inbounds for j in 1:NC
-                    # j ∈ dp_comps ∪ qp_comps: contributes if it has dipole or quadrupole
-                    if dip2[j] == 0.0 && quad2[j] == 0.0; continue; end
+                    if iszero(dip2[j]) && iszero(quad2[j]); continue; end
                     ρ̄zi_j = n[kk, idx_ρz, j] * factor / (params.HSd[j]*params.HSd[j]*params.HSd[j])
                     xⱼ = ρ̄zi_j / ∑ρ̄_p
-                    contrib_j = pcp_σ[j,j] * dip2[j] + 1.19374 / pcp_σ[j,j] * quad2[j]
+                    contrib_j = pcp_σ[j,j] * dip2[j] + FP(1.19374) / pcp_σ[j,j] * quad2[j]
                     @inbounds for k in 1:NC
                         quad2_k = quad2[k]
-                        if quad2_k == 0.0; continue; end
+                        if iszero(quad2_k); continue; end
                         ρ̄zi_k = n[kk, idx_ρz, k] * factor / (params.HSd[k]*params.HSd[k]*params.HSd[k])
                         xₖ = ρ̄zi_k / ∑ρ̄_p
                         σij2 = pcp_σ[i,j]*pcp_σ[i,j]
@@ -260,12 +260,13 @@ end
 QQ J₂ integral kernel: no min(m̄,2) clamping (unlike DD), 5 terms.
 """
 @inline function _J2_qq_kernel(mᵢ, mⱼ, ϵᵢⱼ, η, T, corr_a, corr_b)
-    ϵT = ϵᵢⱼ / T
-    m̄  = sqrt(mᵢ * mⱼ)
-    m1  = 1.0 - 1.0/m̄
-    m2  = m1 * (1.0 - 2.0/m̄)
-    result = 0.0
-    ηn = 1.0
+    FP     = typeof(η)
+    ϵT     = ϵᵢⱼ / T
+    m̄      = sqrt(mᵢ * mⱼ)
+    m1     = 1 - 1/m̄
+    m2     = m1 * (1 - 2/m̄)
+    result = zero(FP)
+    ηn     = one(FP)
     for n in 0:4
         a0, a1, a2 = corr_a[n+1]
         b0, b1, b2 = corr_b[n+1]
@@ -279,12 +280,13 @@ end
 DQ J₂ integral kernel: no min clamping, 4 terms only (DQ_consts has 4 entries).
 """
 @inline function _J2_dq_kernel(mᵢ, mⱼ, ϵᵢⱼ, η, T, corr_a, corr_b)
-    ϵT = ϵᵢⱼ / T
-    m̄  = sqrt(mᵢ * mⱼ)
-    m1  = 1.0 - 1.0/m̄
-    m2  = m1 * (1.0 - 2.0/m̄)
-    result = 0.0
-    ηn = 1.0
+    FP     = typeof(η)
+    ϵT     = ϵᵢⱼ / T
+    m̄      = sqrt(mᵢ * mⱼ)
+    m1     = 1 - 1/m̄
+    m2     = m1 * (1 - 2/m̄)
+    result = zero(FP)
+    ηn     = one(FP)
     for n in 0:3
         a0, a1, a2 = corr_a[n+1]
         b0, b1, b2 = corr_b[n+1]
@@ -298,11 +300,12 @@ end
 QQ J₃ integral kernel: no min clamping, 5 terms, includes m2.
 """
 @inline function _J3_qq_kernel(mᵢ, mⱼ, mₖ, η, corr_c)
-    m̄  = cbrt(mᵢ * mⱼ * mₖ)
-    m1  = 1.0 - 1.0/m̄
-    m2  = m1 * (1.0 - 2.0/m̄)
-    result = 0.0
-    ηn = 1.0
+    FP     = typeof(η)
+    m̄      = cbrt(mᵢ * mⱼ * mₖ)
+    m1     = 1 - 1/m̄
+    m2     = m1 * (1 - 2/m̄)
+    result = zero(FP)
+    ηn     = one(FP)
     for n in 0:4
         c0, c1, c2 = corr_c[n+1]
         result += (c0 + c1*m1 + c2*m2) * ηn
@@ -315,10 +318,11 @@ end
 DQ J₃ integral kernel: no min clamping, 4 terms, no m2 (DQ_consts.corr_c has only (c0,c1) per entry).
 """
 @inline function _J3_dq_kernel(mᵢ, mⱼ, mₖ, η, corr_c)
-    m̄  = cbrt(mᵢ * mⱼ * mₖ)
-    m1  = 1.0 - 1.0/m̄
-    result = 0.0
-    ηn = 1.0
+    FP     = typeof(η)
+    m̄      = cbrt(mᵢ * mⱼ * mₖ)
+    m1     = 1 - 1/m̄
+    result = zero(FP)
+    ηn     = one(FP)
     for n in 0:3
         c0, c1 = corr_c[n+1]
         result += (c0 + c1*m1) * ηn
@@ -331,6 +335,15 @@ function preallocate_params(system::DFTSystem{<:QPCPSAFTModel})
     backend = system.options.device
     FP      = fptype(system.options)
     model   = system.model
+    dd_a_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_a[i][j]), 3), 5)
+    dd_b_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_b[i][j]), 3), 5)
+    dd_c_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_c[i][j]), 3), 5)
+    qq_a_fp = ntuple(i -> ntuple(j -> FP(QQ_consts.corr_a[i][j]), 3), 5)
+    qq_b_fp = ntuple(i -> ntuple(j -> FP(QQ_consts.corr_b[i][j]), 3), 5)
+    qq_c_fp = ntuple(i -> ntuple(j -> FP(QQ_consts.corr_c[i][j]), 3), 5)
+    dq_a_fp = ntuple(i -> ntuple(j -> FP(DQ_consts.corr_a[i][j]), 3), 4)
+    dq_b_fp = ntuple(i -> ntuple(j -> FP(DQ_consts.corr_b[i][j]), 3), 4)
+    dq_c_fp = ntuple(i -> ntuple(j -> FP(DQ_consts.corr_c[i][j]), 2), 4)
     base = (;
         HSd         = adapt_to_device(backend, FP, system.species.size),
         m           = adapt_to_device(backend, FP, model.params.segment.values),
@@ -341,6 +354,9 @@ function preallocate_params(system::DFTSystem{<:QPCPSAFTModel})
         pcp_epsilon = adapt_to_device(backend, FP, pcp_epsilon(model)),
         dipole2     = adapt_to_device(backend, FP, pcp_dipole2(model)),
         quadrupole2 = adapt_to_device(backend, FP, model.params.quadrupole2.values),
+        dd_a = dd_a_fp, dd_b = dd_b_fp, dd_c = dd_c_fp,
+        qq_a = qq_a_fp, qq_b = qq_b_fp, qq_c = qq_c_fp,
+        dq_a = dq_a_fp, dq_b = dq_b_fp, dq_c = dq_c_fp,
     )
 
     nn = Clapeyron.assoc_pair_length(model)

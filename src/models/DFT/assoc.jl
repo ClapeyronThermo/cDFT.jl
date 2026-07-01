@@ -129,7 +129,7 @@ end
 # Dispatch helper: zero-cost when model has no association (hasfield is compile-time constant)
 @inline _assoc_or_zero(M, kk, n, params::P, T, vNC, vND) where P =
     hasfield(P, :assoc_eps) ? f_assoc(M, kk, n, params, T, vNC, vND,
-                                      params.assoc_n_pairs, params.assoc_n_sites) : 0.0
+                                      params.assoc_n_pairs, params.assoc_n_sites) : zero(eltype(n))
 
 # ── GPU/Enzyme-compatible kernel helpers ────────────────────────────────────
 
@@ -151,11 +151,12 @@ end
 # The n, kk, NC, ND, M arguments are unused here but required for a uniform signature.
 @inline function _assoc_delta(p, n_pairs, n, params, T, kk, n3_mix, n2_mix, xi_mix,
                                ::Val{NC}, ::Val{ND}, ::Type{M}) where {NC, ND, M}
-    p > n_pairs && return 0.0
+    FP = typeof(n3_mix)
+    p > n_pairs && return zero(FP)
     dij_p  = params.assoc_dij[p]
-    inv1n3 = 1.0 / (1.0 - n3_mix)
-    g_hs   = inv1n3 + 0.5*dij_p*xi_mix*n2_mix*inv1n3^2 +
-             dij_p*dij_p*n2_mix*n2_mix*xi_mix*(inv1n3^3)/18.0
+    inv1n3 = one(FP) / (one(FP) - n3_mix)
+    g_hs   = inv1n3 + FP(0.5)*dij_p*xi_mix*n2_mix*inv1n3^2 +
+             dij_p*dij_p*n2_mix*n2_mix*xi_mix*(inv1n3^3)/18
     return g_hs * params.assoc_sig3[p] * expm1(params.assoc_eps[p]/T) * params.assoc_kap[p]
 end
 
@@ -179,29 +180,33 @@ end
 
 # Per-component geometry factor ξᵢ = 1 − |nv2ᵢ|²/n2ᵢ²  (FV=4 always)
 @generated function _assoc_xi(n, kk, params, ::Val{NC}, ::Val{ND}) where {NC, ND}
+    FP     = eltype(n)
+    z      = zero(FP)
+    o      = one(FP)
+    two_pi = FP(2π)
     stmts = Expr[]
     for i in 1:NC
         n2v  = Symbol("_xi_n2_$i")
         sqv  = Symbol("_xi_sq_$i")
         xiv  = Symbol("_xi_$i")
         push!(stmts, :($n2v = π * n[kk, 2, $i] * params.HSd[$i]))
-        push!(stmts, :($sqv = 0.0))
+        push!(stmts, :($sqv = $z))
         if ND >= 1
             ndv = Symbol("_xi_nd_$(i)_1")
-            push!(stmts, :($ndv = -2.0*π * n[kk, 4, $i]))
+            push!(stmts, :($ndv = -$(two_pi) * n[kk, 4, $i]))
             push!(stmts, :($sqv += $ndv * $ndv))
         end
         if ND >= 2
             ndv = Symbol("_xi_nd_$(i)_2")
-            push!(stmts, :($ndv = -2.0*π * n[kk, 5, $i]))
+            push!(stmts, :($ndv = -$(two_pi) * n[kk, 5, $i]))
             push!(stmts, :($sqv += $ndv * $ndv))
         end
         if ND >= 3
             ndv = Symbol("_xi_nd_$(i)_3")
-            push!(stmts, :($ndv = -2.0*π * n[kk, 6, $i]))
+            push!(stmts, :($ndv = -$(two_pi) * n[kk, 6, $i]))
             push!(stmts, :($sqv += $ndv * $ndv))
         end
-        push!(stmts, :($xiv = 1.0 - $sqv / ($n2v * $n2v)))
+        push!(stmts, :($xiv = $o - $sqv / ($n2v * $n2v)))
     end
     return quote
         $(stmts...)
@@ -222,9 +227,10 @@ end
     end
 end
 
-# Initial X₀ = (0.9, …, 0.9) with NS elements
-@generated function _assoc_X0(::Val{NS}) where NS
-    :(tuple($(fill(0.9, NS)...)))
+# Initial X₀ = (0.9, …, 0.9) with NS elements, typed as FP
+@generated function _assoc_X0(::Val{NS}, ::Type{FP}) where {NS, FP<:AbstractFloat}
+    v = FP(0.9)
+    :(tuple($(fill(v, NS)...)))
 end
 
 # ── @generated successive-substitution step ─────────────────────────────────
@@ -236,6 +242,10 @@ end
                                     xi::NTuple{NC,<:AbstractFloat},
                                     Δ_vals::NTuple{NP,<:AbstractFloat},
                                     params) where {NS, NC, NP}
+    FP = eltype(X)
+    z  = zero(FP)
+    o  = one(FP)
+    h  = FP(0.5)
     stmts = Expr[]
     for s in 1:NS
         denom_parts = Expr[]
@@ -244,18 +254,18 @@ end
                 params.assoc_n_jb[$p] *
                 _nti(n0, params.assoc_jcomp[$p]) * _nti(xi, params.assoc_jcomp[$p]) *
                 Δ_vals[$p] * _nti(X, params.assoc_jb_global[$p]),
-                0.0)))
+                $z)))
             push!(denom_parts, :(ifelse(params.assoc_jb_global[$p] == $s,
                 params.assoc_n_ia[$p] *
                 _nti(n0, params.assoc_icomp[$p]) * _nti(xi, params.assoc_icomp[$p]) *
                 Δ_vals[$p] * _nti(X, params.assoc_ia_global[$p]),
-                0.0)))
+                $z)))
         end
         denom_expr = reduce((a, b) -> :($a + $b), denom_parts)
         new_x = Symbol("new_x_$s")
         blend = Symbol("blend_$s")
-        push!(stmts, :($new_x = 1.0 / (1.0 + $denom_expr)))
-        push!(stmts, :($blend = 0.5 * (X[$s] + $new_x)))
+        push!(stmts, :($new_x = $o / ($o + $denom_expr)))
+        push!(stmts, :($blend = $h * (X[$s] + $new_x)))
     end
     result = :(tuple($([ Symbol("blend_$s") for s in 1:NS ]...)))
     return quote
@@ -277,6 +287,9 @@ end
                                         xi::NTuple{NC,<:AbstractFloat},
                                         Δ_vals::NTuple{NP,<:AbstractFloat},
                                         params) where {NS, NC, NP}
+    FP = eltype(X)
+    z  = zero(FP)
+    o  = one(FP)
     stmts = Expr[]
     cnt = Ref(0)
     new_sym() = (cnt[] += 1; Symbol("_nt_$(cnt[])"))
@@ -290,21 +303,21 @@ end
             push!(parts, :(ifelse(params.assoc_ia_global[$p] == $s,
                 params.assoc_n_jb[$p] *
                 _nti(n0, params.assoc_jcomp[$p]) * _nti(xi, params.assoc_jcomp[$p]) *
-                Δ_vals[$p] * _nti(X, params.assoc_jb_global[$p]), 0.0)))
+                Δ_vals[$p] * _nti(X, params.assoc_jb_global[$p]), $z)))
             push!(parts, :(ifelse(params.assoc_jb_global[$p] == $s,
                 params.assoc_n_ia[$p] *
                 _nti(n0, params.assoc_icomp[$p]) * _nti(xi, params.assoc_icomp[$p]) *
-                Δ_vals[$p] * _nti(X, params.assoc_ia_global[$p]), 0.0)))
+                Δ_vals[$p] * _nti(X, params.assoc_ia_global[$p]), $z)))
         end
         C_expr = reduce((a, b) -> :($a + $b), parts)
         push!(stmts, :($(C_syms[s]) = $C_expr))
-        push!(stmts, :($(ss_syms[s]) = 1.0 / (1.0 + $(C_syms[s]))))
+        push!(stmts, :($(ss_syms[s]) = $o / ($o + $(C_syms[s]))))
     end
 
     # Step B: residuals F_s = X_s*(1 + C_s) - 1
     F_syms = [new_sym() for _ in 1:NS]
     for s in 1:NS
-        push!(stmts, :($(F_syms[s]) = X[$s] * (1.0 + $(C_syms[s])) - 1.0))
+        push!(stmts, :($(F_syms[s]) = X[$s] * ($o + $(C_syms[s])) - $o))
     end
 
     # Step C: Jacobian J_{st} = (1+C_s)*δ_{st} + X_s * ∂C_s/∂X_t
@@ -316,15 +329,15 @@ end
                 ifelse(params.assoc_jb_global[$p] == $t,
                     params.assoc_n_jb[$p] *
                     _nti(n0, params.assoc_jcomp[$p]) * _nti(xi, params.assoc_jcomp[$p]) *
-                    Δ_vals[$p], 0.0), 0.0)))
+                    Δ_vals[$p], $z), $z)))
             push!(k_parts, :(ifelse(params.assoc_jb_global[$p] == $s,
                 ifelse(params.assoc_ia_global[$p] == $t,
                     params.assoc_n_ia[$p] *
                     _nti(n0, params.assoc_icomp[$p]) * _nti(xi, params.assoc_icomp[$p]) *
-                    Δ_vals[$p], 0.0), 0.0)))
+                    Δ_vals[$p], $z), $z)))
         end
         K_st  = reduce((a, b) -> :($a + $b), k_parts)
-        diag  = s == t ? :(1.0 + $(C_syms[s])) : :(0.0)
+        diag  = s == t ? :($o + $(C_syms[s])) : :($z)
         push!(stmts, :($(J_sym[s,t]) = $diag + X[$s] * $K_st))
     end
 
@@ -364,8 +377,8 @@ end
     for s in 1:NS
         cand = new_sym()
         push!(stmts, :($cand = X[$s] - $(δX[s])))
-        push!(stmts, :($(res[s]) = ifelse($cand > 0.0,
-            ifelse($cand < 1.0, $cand, $(ss_syms[s])),
+        push!(stmts, :($(res[s]) = ifelse($cand > $z,
+            ifelse($cand < $o, $cand, $(ss_syms[s])),
             $(ss_syms[s]))))
     end
 
@@ -385,7 +398,8 @@ end
 @inline function _assoc_solve(n0::NTuple{NC,<:AbstractFloat}, xi::NTuple{NC,<:AbstractFloat},
                                Δ_vals::NTuple{NP,<:AbstractFloat}, params,
                                ::Val{NS}) where {NC, NP, NS}
-    X = _assoc_X0(Val(NS))
+    FP = eltype(n0)
+    X = _assoc_X0(Val(NS), FP)
     for _ in 1:5*NS; X = _assoc_SS_step(X, n0, xi, Δ_vals, params); end
     for _ in 1:5*NS; X = _assoc_newton_step(X, n0, xi, Δ_vals, params); end
     X
@@ -404,6 +418,9 @@ end
         n0::NTuple{NC,<:AbstractFloat},  xi::NTuple{NC,<:AbstractFloat},  Δ_vals::NTuple{NP,<:AbstractFloat},
         dn0::NTuple{NC,<:AbstractFloat}, dxi::NTuple{NC,<:AbstractFloat}, dΔ::NTuple{NP,<:AbstractFloat},
         params) where {NS, NC, NP}
+    FP = eltype(X_star)
+    z  = zero(FP)
+    o  = one(FP)
     stmts = Expr[]
     cnt = Ref(0)
     new_sym() = (cnt[] += 1; Symbol("_ift_$(cnt[])"))
@@ -416,11 +433,11 @@ end
             push!(parts, :(ifelse(params.assoc_ia_global[$p] == $s,
                 params.assoc_n_jb[$p] *
                 _nti(n0, params.assoc_jcomp[$p]) * _nti(xi, params.assoc_jcomp[$p]) *
-                Δ_vals[$p] * _nti(X_star, params.assoc_jb_global[$p]), 0.0)))
+                Δ_vals[$p] * _nti(X_star, params.assoc_jb_global[$p]), $z)))
             push!(parts, :(ifelse(params.assoc_jb_global[$p] == $s,
                 params.assoc_n_ia[$p] *
                 _nti(n0, params.assoc_icomp[$p]) * _nti(xi, params.assoc_icomp[$p]) *
-                Δ_vals[$p] * _nti(X_star, params.assoc_ia_global[$p]), 0.0)))
+                Δ_vals[$p] * _nti(X_star, params.assoc_ia_global[$p]), $z)))
         end
         push!(stmts, :($(C_syms[s]) = $(reduce((a,b)->:($a+$b), parts))))
     end
@@ -434,15 +451,15 @@ end
                 ifelse(params.assoc_jb_global[$p] == $t,
                     params.assoc_n_jb[$p] *
                     _nti(n0, params.assoc_jcomp[$p]) * _nti(xi, params.assoc_jcomp[$p]) *
-                    Δ_vals[$p], 0.0), 0.0)))
+                    Δ_vals[$p], $z), $z)))
             push!(k_parts, :(ifelse(params.assoc_jb_global[$p] == $s,
                 ifelse(params.assoc_ia_global[$p] == $t,
                     params.assoc_n_ia[$p] *
                     _nti(n0, params.assoc_icomp[$p]) * _nti(xi, params.assoc_icomp[$p]) *
-                    Δ_vals[$p], 0.0), 0.0)))
+                    Δ_vals[$p], $z), $z)))
         end
         K_st = reduce((a,b)->:($a+$b), k_parts)
-        diag = s == t ? :(1.0 + $(C_syms[s])) : :(0.0)
+        diag = s == t ? :($o + $(C_syms[s])) : :($z)
         push!(stmts, :($(J_sym[s,t]) = $diag + X_star[$s] * $K_st))
     end
 
@@ -458,13 +475,13 @@ end
                 (_nti(dn0, params.assoc_jcomp[$p]) * _nti(xi,  params.assoc_jcomp[$p]) * Δ_vals[$p]
                + _nti(n0,  params.assoc_jcomp[$p]) * _nti(dxi, params.assoc_jcomp[$p]) * Δ_vals[$p]
                + _nti(n0,  params.assoc_jcomp[$p]) * _nti(xi,  params.assoc_jcomp[$p]) * dΔ[$p]),
-                0.0)))
+                $z)))
             push!(parts, :(ifelse(params.assoc_jb_global[$p] == $s,
                 params.assoc_n_ia[$p] * _nti(X_star, params.assoc_ia_global[$p]) *
                 (_nti(dn0, params.assoc_icomp[$p]) * _nti(xi,  params.assoc_icomp[$p]) * Δ_vals[$p]
                + _nti(n0,  params.assoc_icomp[$p]) * _nti(dxi, params.assoc_icomp[$p]) * Δ_vals[$p]
                + _nti(n0,  params.assoc_icomp[$p]) * _nti(xi,  params.assoc_icomp[$p]) * dΔ[$p]),
-                0.0)))
+                $z)))
         end
         dC = reduce((a,b)->:($a+$b), parts)
         push!(stmts, :($(dF_syms[s]) = X_star[$s] * $dC))
@@ -518,6 +535,9 @@ end
         n0::NTuple{NC,<:AbstractFloat}, xi::NTuple{NC,<:AbstractFloat}, Δ_vals::NTuple{NP,<:AbstractFloat},
         seed::NTuple{NS,<:AbstractFloat},
         params) where {NS, NC, NP}
+    FP = eltype(X_star)
+    z  = zero(FP)
+    o  = one(FP)
     stmts = Expr[]
     cnt = Ref(0)
     new_sym() = (cnt[] += 1; Symbol("_ct_$(cnt[])"))
@@ -530,11 +550,11 @@ end
             push!(parts, :(ifelse(params.assoc_ia_global[$p] == $s,
                 params.assoc_n_jb[$p] *
                 _nti(n0, params.assoc_jcomp[$p]) * _nti(xi, params.assoc_jcomp[$p]) *
-                Δ_vals[$p] * _nti(X_star, params.assoc_jb_global[$p]), 0.0)))
+                Δ_vals[$p] * _nti(X_star, params.assoc_jb_global[$p]), $z)))
             push!(parts, :(ifelse(params.assoc_jb_global[$p] == $s,
                 params.assoc_n_ia[$p] *
                 _nti(n0, params.assoc_icomp[$p]) * _nti(xi, params.assoc_icomp[$p]) *
-                Δ_vals[$p] * _nti(X_star, params.assoc_ia_global[$p]), 0.0)))
+                Δ_vals[$p] * _nti(X_star, params.assoc_ia_global[$p]), $z)))
         end
         push!(stmts, :($(C_syms[s]) = $(reduce((a,b)->:($a+$b), parts))))
     end
@@ -548,15 +568,15 @@ end
                 ifelse(params.assoc_jb_global[$p] == $t,
                     params.assoc_n_jb[$p] *
                     _nti(n0, params.assoc_jcomp[$p]) * _nti(xi, params.assoc_jcomp[$p]) *
-                    Δ_vals[$p], 0.0), 0.0)))
+                    Δ_vals[$p], $z), $z)))
             push!(k_parts, :(ifelse(params.assoc_jb_global[$p] == $s,
                 ifelse(params.assoc_ia_global[$p] == $t,
                     params.assoc_n_ia[$p] *
                     _nti(n0, params.assoc_icomp[$p]) * _nti(xi, params.assoc_icomp[$p]) *
-                    Δ_vals[$p], 0.0), 0.0)))
+                    Δ_vals[$p], $z), $z)))
         end
         K_st = reduce((a,b)->:($a+$b), k_parts)
-        diag = s == t ? :(1.0 + $(C_syms[s])) : :(0.0)
+        diag = s == t ? :($o + $(C_syms[s])) : :($z)
         push!(stmts, :($(J_sym[s,t]) = $diag + X_star[$s] * $K_st))
     end
 
@@ -604,12 +624,12 @@ end
                 ifelse(params.assoc_jcomp[$p] == $i,
                     params.assoc_n_jb[$p] * _nti(xi, params.assoc_jcomp[$p]) *
                     Δ_vals[$p] * _nti(X_star, params.assoc_jb_global[$p]) *
-                    $(λ[s]) * X_star[$s], 0.0), 0.0)))
+                    $(λ[s]) * X_star[$s], $z), $z)))
             push!(parts, :(ifelse(params.assoc_jb_global[$p] == $s,
                 ifelse(params.assoc_icomp[$p] == $i,
                     params.assoc_n_ia[$p] * _nti(xi, params.assoc_icomp[$p]) *
                     Δ_vals[$p] * _nti(X_star, params.assoc_ia_global[$p]) *
-                    $(λ[s]) * X_star[$s], 0.0), 0.0)))
+                    $(λ[s]) * X_star[$s], $z), $z)))
         end
         push!(stmts, :($(dn0_syms[i]) = -($(reduce((a,b)->:($a+$b), parts)))))
     end
@@ -623,12 +643,12 @@ end
                 ifelse(params.assoc_jcomp[$p] == $i,
                     params.assoc_n_jb[$p] * _nti(n0, params.assoc_jcomp[$p]) *
                     Δ_vals[$p] * _nti(X_star, params.assoc_jb_global[$p]) *
-                    $(λ[s]) * X_star[$s], 0.0), 0.0)))
+                    $(λ[s]) * X_star[$s], $z), $z)))
             push!(parts, :(ifelse(params.assoc_jb_global[$p] == $s,
                 ifelse(params.assoc_icomp[$p] == $i,
                     params.assoc_n_ia[$p] * _nti(n0, params.assoc_icomp[$p]) *
                     Δ_vals[$p] * _nti(X_star, params.assoc_ia_global[$p]) *
-                    $(λ[s]) * X_star[$s], 0.0), 0.0)))
+                    $(λ[s]) * X_star[$s], $z), $z)))
         end
         push!(stmts, :($(dxi_syms[i]) = -($(reduce((a,b)->:($a+$b), parts)))))
     end
@@ -641,11 +661,11 @@ end
             push!(parts, :(ifelse(params.assoc_ia_global[$p] == $s,
                 params.assoc_n_jb[$p] * _nti(n0, params.assoc_jcomp[$p]) *
                 _nti(xi, params.assoc_jcomp[$p]) *
-                _nti(X_star, params.assoc_jb_global[$p]) * $(λ[s]) * X_star[$s], 0.0)))
+                _nti(X_star, params.assoc_jb_global[$p]) * $(λ[s]) * X_star[$s], $z)))
             push!(parts, :(ifelse(params.assoc_jb_global[$p] == $s,
                 params.assoc_n_ia[$p] * _nti(n0, params.assoc_icomp[$p]) *
                 _nti(xi, params.assoc_icomp[$p]) *
-                _nti(X_star, params.assoc_ia_global[$p]) * $(λ[s]) * X_star[$s], 0.0)))
+                _nti(X_star, params.assoc_ia_global[$p]) * $(λ[s]) * X_star[$s], $z)))
         end
         push!(stmts, :($(dΔ_syms[p]) = -($(reduce((a,b)->:($a+$b), parts)))))
     end
@@ -676,32 +696,34 @@ heap allocation.
                           ::Val{1}, ::Val{NS}) where {NC, ND, NS, M}
     F2    = 2
     FV    = F2 + 2
+    FP    = eltype(n)
+    _2π   = FP(2π)
 
     # Mixture FMT densities
-    n2_mix    = 0.0
-    n3_mix    = 0.0
-    nv2sq_mix = 0.0
+    n2_mix    = zero(FP)
+    n3_mix    = zero(FP)
+    nv2sq_mix = zero(FP)
     @inbounds for i in 1:NC
         nim = n[kk, F2, i] * params.m[i]
         n2_mix += π * nim * params.HSd[i]
         n3_mix += n[kk, F2+1, i] * params.m[i]
     end
     if ND >= 1
-        nv2d = 0.0
-        @inbounds for i in 1:NC; nv2d -= 2.0*π * n[kk, FV,   i] * params.m[i]; end
+        nv2d = zero(FP)
+        @inbounds for i in 1:NC; nv2d -= _2π * n[kk, FV,   i] * params.m[i]; end
         nv2sq_mix += nv2d * nv2d
     end
     if ND >= 2
-        nv2d = 0.0
-        @inbounds for i in 1:NC; nv2d -= 2.0*π * n[kk, FV+1, i] * params.m[i]; end
+        nv2d = zero(FP)
+        @inbounds for i in 1:NC; nv2d -= _2π * n[kk, FV+1, i] * params.m[i]; end
         nv2sq_mix += nv2d * nv2d
     end
     if ND >= 3
-        nv2d = 0.0
-        @inbounds for i in 1:NC; nv2d -= 2.0*π * n[kk, FV+2, i] * params.m[i]; end
+        nv2d = zero(FP)
+        @inbounds for i in 1:NC; nv2d -= _2π * n[kk, FV+2, i] * params.m[i]; end
         nv2sq_mix += nv2d * nv2d
     end
-    xi_mix = 1.0 - nv2sq_mix / (n2_mix*n2_mix)
+    xi_mix = one(FP) - nv2sq_mix / (n2_mix*n2_mix)
 
     # ── Analytical 1-pair solution ─────────────────────────────────────────
     ic  = params.assoc_icomp[1];  jc  = params.assoc_jcomp[1]
@@ -710,61 +732,64 @@ heap allocation.
 
     n0_ic    = n[kk, F2, ic] / params.HSd[ic]
     n2_ic    = π * n[kk, F2, ic] * params.HSd[ic]
-    nv2sq_ic = 0.0
-    if ND >= 1; nd = -2.0*π*n[kk, FV,   ic]; nv2sq_ic += nd*nd; end
-    if ND >= 2; nd = -2.0*π*n[kk, FV+1, ic]; nv2sq_ic += nd*nd; end
-    if ND >= 3; nd = -2.0*π*n[kk, FV+2, ic]; nv2sq_ic += nd*nd; end
-    xi_ic = 1.0 - nv2sq_ic / (n2_ic*n2_ic)
+    nv2sq_ic = zero(FP)
+    if ND >= 1; nd = -_2π*n[kk, FV,   ic]; nv2sq_ic += nd*nd; end
+    if ND >= 2; nd = -_2π*n[kk, FV+1, ic]; nv2sq_ic += nd*nd; end
+    if ND >= 3; nd = -_2π*n[kk, FV+2, ic]; nv2sq_ic += nd*nd; end
+    xi_ic = one(FP) - nv2sq_ic / (n2_ic*n2_ic)
 
     n0_jc    = n[kk, F2, jc] / params.HSd[jc]
     n2_jc    = π * n[kk, F2, jc] * params.HSd[jc]
-    nv2sq_jc = 0.0
-    if ND >= 1; nd = -2.0*π*n[kk, FV,   jc]; nv2sq_jc += nd*nd; end
-    if ND >= 2; nd = -2.0*π*n[kk, FV+1, jc]; nv2sq_jc += nd*nd; end
-    if ND >= 3; nd = -2.0*π*n[kk, FV+2, jc]; nv2sq_jc += nd*nd; end
-    xi_jc = 1.0 - nv2sq_jc / (n2_jc*n2_jc)
+    nv2sq_jc = zero(FP)
+    if ND >= 1; nd = -_2π*n[kk, FV,   jc]; nv2sq_jc += nd*nd; end
+    if ND >= 2; nd = -_2π*n[kk, FV+1, jc]; nv2sq_jc += nd*nd; end
+    if ND >= 3; nd = -_2π*n[kk, FV+2, jc]; nv2sq_jc += nd*nd; end
+    xi_jc = one(FP) - nv2sq_jc / (n2_jc*n2_jc)
 
     # Precomputed site counts (NP=1 → literal index 1)
     n_ia = params.assoc_n_ia[1]
     n_jb = params.assoc_n_jb[1]
 
-    kia = n_ia * n0_ic * xi_ic * Δ_val
-    kjb = n_jb * n0_jc * xi_jc * Δ_val
-    _b  = 1.0 - kia + kjb
-    X_ia = 2.0 / (_b + sqrt(_b*_b + 4.0*kia))
-    X_jb = 1.0 / (1.0 + kia * X_ia)
+    kia  = n_ia * n0_ic * xi_ic * Δ_val
+    kjb  = n_jb * n0_jc * xi_jc * Δ_val
+    _b   = one(FP) - kia + kjb
+    X_ia = 2 / (_b + sqrt(_b*_b + 4*kia))
+    X_jb = one(FP) / (one(FP) + kia * X_ia)
+    h    = FP(0.5)
 
-    return n0_ic * xi_ic * n_ia * (Base.log(abs(X_ia)) - 0.5*X_ia + 0.5) +
-           n0_jc * xi_jc * n_jb * (Base.log(abs(X_jb)) - 0.5*X_jb + 0.5)
+    return n0_ic * xi_ic * n_ia * (Base.log(abs(X_ia)) - h*X_ia + h) +
+           n0_jc * xi_jc * n_jb * (Base.log(abs(X_jb)) - h*X_jb + h)
 end
 
 @inline function f_assoc(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND},
                           ::Val{NP}, ::Val{NS}) where {NC, ND, NP, NS, M}
-    F2 = 2; FV = 4
+    F2  = 2; FV = 4
+    FP  = eltype(n)
+    _2π = FP(2π)
 
     # Mixture FMT densities (straight-line loops, no closures)
-    n2_mix = 0.0; n3_mix = 0.0; nv2sq_mix = 0.0
+    n2_mix = zero(FP); n3_mix = zero(FP); nv2sq_mix = zero(FP)
     @inbounds for i in 1:NC
         nim = n[kk, F2, i] * params.m[i]
         n2_mix += π * nim * params.HSd[i]
         n3_mix += n[kk, F2+1, i] * params.m[i]
     end
     if ND >= 1
-        nv2d = 0.0
-        @inbounds for i in 1:NC; nv2d -= 2.0*π * n[kk, FV,   i] * params.m[i]; end
+        nv2d = zero(FP)
+        @inbounds for i in 1:NC; nv2d -= _2π * n[kk, FV,   i] * params.m[i]; end
         nv2sq_mix += nv2d * nv2d
     end
     if ND >= 2
-        nv2d = 0.0
-        @inbounds for i in 1:NC; nv2d -= 2.0*π * n[kk, FV+1, i] * params.m[i]; end
+        nv2d = zero(FP)
+        @inbounds for i in 1:NC; nv2d -= _2π * n[kk, FV+1, i] * params.m[i]; end
         nv2sq_mix += nv2d * nv2d
     end
     if ND >= 3
-        nv2d = 0.0
-        @inbounds for i in 1:NC; nv2d -= 2.0*π * n[kk, FV+2, i] * params.m[i]; end
+        nv2d = zero(FP)
+        @inbounds for i in 1:NC; nv2d -= _2π * n[kk, FV+2, i] * params.m[i]; end
         nv2sq_mix += nv2d * nv2d
     end
-    xi_mix = 1.0 - nv2sq_mix / (n2_mix * n2_mix)
+    xi_mix = one(FP) - nv2sq_mix / (n2_mix * n2_mix)
 
     # Per-component n₀ and ξ via @generated helpers (no closures, no boxing)
     n0     = _assoc_n0(n, kk, params, Val(NC))
@@ -778,7 +803,8 @@ end
 
     # Accumulate f_assoc = Σᵢ Σₐ n₀ᵢ ξᵢ nᵢₐ (ln Xᵢₐ - Xᵢₐ/2 + 1/2)
     # Regular for-loops + _nti: no closures, GPU-safe
-    res = 0.0
+    h   = FP(0.5)
+    res = zero(FP)
     for i in 1:NC
         base_i = _nti(params.n_sites_cumsum, i)
         ns_i   = _nti(params.n_sites_cumsum, i + 1) - base_i
@@ -788,7 +814,7 @@ end
             s        = base_i + a
             n_ia_val = _nti(params.n_sites_flat, s)
             X_val    = _nti(X, s)
-            res     += n0i * xii * n_ia_val * (Base.log(abs(X_val)) - 0.5*X_val + 0.5)
+            res     += n0i * xii * n_ia_val * (Base.log(abs(X_val)) - h*X_val + h)
         end
     end
     res

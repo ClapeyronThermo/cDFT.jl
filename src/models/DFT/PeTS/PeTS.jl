@@ -70,40 +70,43 @@ end
 PeTS Barker–Henderson perturbation contribution at grid point `kk`.
 """
 @inline function f_pert(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: PeTSModel}
+    FP  = eltype(n)
     HSd = params.HSd
     m   = params.m
     σ   = params.sigma
     ϵ   = params.epsilon
 
-    ψ     = 1.21
+    ψ     = FP(1.21)
     T̄     = T / ϵ[1]
     idx_ρ̄ = 3 + ND
-    ρ̃     = 0.0; η_sum = 0.0; ∑ρ̄ = 0.0
+    ρ̃     = zero(FP); η_sum = zero(FP); ∑ρ̄ = zero(FP)
     @inbounds for i in 1:NC
-        ρ̄zi  = n[kk, idx_ρ̄, i] * 3.0 / (4.0*ψ*ψ*ψ*HSd[i]*HSd[i]*HSd[i]*π)
+        ρ̄zi  = n[kk, idx_ρ̄, i] * 3 / (4*ψ*ψ*ψ*HSd[i]*HSd[i]*HSd[i]*π)
         ρ̃    += ρ̄zi * m[i] * σ[i]*σ[i]*σ[i]
         η_sum += ρ̄zi * m[i] * HSd[i]*HSd[i]*HSd[i]
         ∑ρ̄   += ρ̄zi
     end
-    η    = π / 6.0 * η_sum
-    I1   = evalpoly(η, params.PeTS_A)
-    I2   = evalpoly(η, params.PeTS_B)
-    ã1   = -2.0*π*ρ̃*I1 / T̄
-    inv_g = 1.0 / (1.0 + 2.0*η*(4.0 - η) / (1.0 - η)^4)
-    ã2   = -π*ρ̃*I2*inv_g / (T̄*T̄)
+    η     = π/6 * η_sum
+    I1    = evalpoly(η, params.PeTS_A)
+    I2    = evalpoly(η, params.PeTS_B)
+    ã1    = -2*π*ρ̃*I1 / T̄
+    inv_g = 1 / (1 + 2*η*(4 - η) / (1 - η)^4)
+    ã2    = -π*ρ̃*I2*inv_g / (T̄*T̄)
     return (ã1 + ã2) * ∑ρ̄
 end
 
 function preallocate_params(system::DFTSystem{<:PeTSModel})
     backend = system.options.device
     FP      = fptype(system.options)
+    PeTS_A_fp = map(FP, PeTS_A)
+    PeTS_B_fp = map(FP, PeTS_B)
     params = (;
         HSd     = adapt_to_device(backend, FP, system.species.size),
         m       = adapt_to_device(backend, FP, system.model.params.segment.values),
         sigma   = adapt_to_device(backend, FP, diagvalues(system.model.params.sigma.values)),
         epsilon = adapt_to_device(backend, FP, diagvalues(system.model.params.epsilon.values)),
-        PeTS_A  = PeTS_A,
-        PeTS_B  = PeTS_B,
+        PeTS_A  = PeTS_A_fp,
+        PeTS_B  = PeTS_B_fp,
     )
     nc = length(system.model)
     return params, nc

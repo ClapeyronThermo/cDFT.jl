@@ -23,6 +23,9 @@ function preallocate_params(system::DFTSystem{<:HomogcPCPSAFTModel})
     backend  = system.options.device
     FP       = fptype(system.options)
     ppcmodel = system.model.ppcmodel
+    dd_a_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_a[i][j]), 3), 5)
+    dd_b_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_b[i][j]), 3), 5)
+    dd_c_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_c[i][j]), 3), 5)
     base = (;
         HSd         = adapt_to_device(backend, FP, system.species.size),
         m           = adapt_to_device(backend, FP, ppcmodel.params.segment.values),
@@ -32,6 +35,9 @@ function preallocate_params(system::DFTSystem{<:HomogcPCPSAFTModel})
         pcp_sigma   = adapt_to_device(backend, FP, pcp_sigma(ppcmodel)),
         pcp_epsilon = adapt_to_device(backend, FP, pcp_epsilon(ppcmodel)),
         dipole2     = adapt_to_device(backend, FP, pcp_dipole2(ppcmodel)),
+        dd_a        = dd_a_fp,
+        dd_b        = dd_b_fp,
+        dd_c        = dd_c_fp,
     )
 
     nn = Clapeyron.assoc_pair_length(ppcmodel)
