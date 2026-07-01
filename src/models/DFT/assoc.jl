@@ -263,6 +263,117 @@ end
     end
 end
 
+# ── @generated safeguarded Newton-Raphson step ──────────────────────────────
+#
+# Builds the NS×NS Wertheim Jacobian in flat scalar code (no closures, GPU-safe),
+# solves J*δX = F via Gaussian elimination (no pivoting; J is diagonally dominant
+# near the fixed point since J_{ss} = 1 + C_s ≥ 1), then applies the update.
+# If X_s - δX_s ∉ (0,1) for any site, that site falls back to the unblended SS
+# update — same safeguard as Clapeyron's assoc_matrix_solve_general.
+# Called FROM the regular @inline f_assoc so Enzyme traces f_assoc directly.
+@generated function _assoc_newton_step(X::NTuple{NS,Float64},
+                                        n0::NTuple{NC,Float64},
+                                        xi::NTuple{NC,Float64},
+                                        Δ_vals::NTuple{NP,Float64},
+                                        params) where {NS, NC, NP}
+    stmts = Expr[]
+    cnt = Ref(0)
+    new_sym() = (cnt[] += 1; Symbol("_nt_$(cnt[])"))
+
+    # Step A: per-site denominator C_s and unblended SS fallback x_ss_s
+    C_syms  = [new_sym() for _ in 1:NS]
+    ss_syms = [new_sym() for _ in 1:NS]
+    for s in 1:NS
+        parts = Expr[]
+        for p in 1:NP
+            push!(parts, :(ifelse(params.assoc_ia_global[$p] == $s,
+                params.assoc_n_jb[$p] *
+                _nti(n0, params.assoc_jcomp[$p]) * _nti(xi, params.assoc_jcomp[$p]) *
+                Δ_vals[$p] * _nti(X, params.assoc_jb_global[$p]), 0.0)))
+            push!(parts, :(ifelse(params.assoc_jb_global[$p] == $s,
+                params.assoc_n_ia[$p] *
+                _nti(n0, params.assoc_icomp[$p]) * _nti(xi, params.assoc_icomp[$p]) *
+                Δ_vals[$p] * _nti(X, params.assoc_ia_global[$p]), 0.0)))
+        end
+        C_expr = reduce((a, b) -> :($a + $b), parts)
+        push!(stmts, :($(C_syms[s]) = $C_expr))
+        push!(stmts, :($(ss_syms[s]) = 1.0 / (1.0 + $(C_syms[s]))))
+    end
+
+    # Step B: residuals F_s = X_s*(1 + C_s) - 1
+    F_syms = [new_sym() for _ in 1:NS]
+    for s in 1:NS
+        push!(stmts, :($(F_syms[s]) = X[$s] * (1.0 + $(C_syms[s])) - 1.0))
+    end
+
+    # Step C: Jacobian J_{st} = (1+C_s)*δ_{st} + X_s * ∂C_s/∂X_t
+    J_sym = [new_sym() for s in 1:NS, t in 1:NS]
+    for s in 1:NS, t in 1:NS
+        k_parts = Expr[]
+        for p in 1:NP
+            push!(k_parts, :(ifelse(params.assoc_ia_global[$p] == $s,
+                ifelse(params.assoc_jb_global[$p] == $t,
+                    params.assoc_n_jb[$p] *
+                    _nti(n0, params.assoc_jcomp[$p]) * _nti(xi, params.assoc_jcomp[$p]) *
+                    Δ_vals[$p], 0.0), 0.0)))
+            push!(k_parts, :(ifelse(params.assoc_jb_global[$p] == $s,
+                ifelse(params.assoc_ia_global[$p] == $t,
+                    params.assoc_n_ia[$p] *
+                    _nti(n0, params.assoc_icomp[$p]) * _nti(xi, params.assoc_icomp[$p]) *
+                    Δ_vals[$p], 0.0), 0.0)))
+        end
+        K_st  = reduce((a, b) -> :($a + $b), k_parts)
+        diag  = s == t ? :(1.0 + $(C_syms[s])) : :(0.0)
+        push!(stmts, :($(J_sym[s,t]) = $diag + X[$s] * $K_st))
+    end
+
+    # Step D: Gaussian elimination on augmented matrix [J | F]
+    J_aug = Matrix{Symbol}(undef, NS, NS + 1)
+    for s in 1:NS
+        for t in 1:NS; J_aug[s,t] = J_sym[s,t]; end
+        J_aug[s, NS+1] = F_syms[s]
+    end
+    for k in 1:NS
+        for i in k+1:NS
+            f = new_sym()
+            push!(stmts, :($f = $(J_aug[i,k]) / $(J_aug[k,k])))
+            for j in k+1:NS+1
+                t = new_sym()
+                push!(stmts, :($t = $(J_aug[i,j]) - $f * $(J_aug[k,j])))
+                J_aug[i,j] = t
+            end
+        end
+    end
+
+    # Step E: back substitution → δX
+    δX = Vector{Symbol}(undef, NS)
+    for k in NS:-1:1
+        rhs = J_aug[k, NS+1]
+        for j in k+1:NS
+            t = new_sym()
+            push!(stmts, :($t = $rhs - $(J_aug[k,j]) * $(δX[j])))
+            rhs = t
+        end
+        δX[k] = new_sym()
+        push!(stmts, :($(δX[k]) = $rhs / $(J_aug[k,k])))
+    end
+
+    # Step F: accept Newton if X_s - δX_s ∈ (0,1), else fall back to SS
+    res = [new_sym() for _ in 1:NS]
+    for s in 1:NS
+        cand = new_sym()
+        push!(stmts, :($cand = X[$s] - $(δX[s])))
+        push!(stmts, :($(res[s]) = ifelse($cand > 0.0,
+            ifelse($cand < 1.0, $cand, $(ss_syms[s])),
+            $(ss_syms[s]))))
+    end
+
+    return quote
+        $(stmts...)
+        tuple($(res...))
+    end
+end
+
 """
 Wertheim association free energy density at grid point `kk`.
 
@@ -270,11 +381,12 @@ The `::Val{1}` specialisation uses the analytical quadratic formula — pure sca
 arithmetic, fully GPU-safe with Enzyme forward mode. Dispatch via `params.assoc_n_pairs`
 which is stored as `Val(nn)` in preallocate_params.
 
-The `::Val{NP}` general method runs `10*NS` relaxed SS iterations. `f_assoc` is a
-regular `@inline` (not `@generated`) so Enzyme can inline and trace it without hitting
-`runtime_generic_fwd`. NTuple construction uses `@generated` helpers (`_assoc_n0`,
-`_assoc_xi`, `_assoc_delta_vals`, `_assoc_X0`) so no closures appear in `f_assoc`
-itself — closures that capture mutated locals would cause GPU heap allocation.
+The `::Val{NP}` general method runs `5*NS` relaxed SS warm-up then `5*NS` Newton steps.
+`f_assoc` is a regular `@inline` (not `@generated`) so Enzyme can inline and trace it
+without hitting `runtime_generic_fwd`. NTuple construction uses `@generated` helpers
+(`_assoc_n0`, `_assoc_xi`, `_assoc_delta_vals`, `_assoc_X0`, `_assoc_newton_step`) so
+no closures appear in `f_assoc` itself — closures that capture mutated locals cause GPU
+heap allocation.
 
 `_assoc_delta` is dispatched on `::Type{M}` so each model can supply its own Δ formula.
 """
@@ -346,7 +458,8 @@ end
 
 @inline function f_assoc(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND},
                           ::Val{NP}, ::Val{NS}) where {NC, ND, NP, NS, M}
-    it_ss = 10 * NS   # compile-time constant (NS is a type parameter)
+    it_ss     = 5 * NS   # compile-time constants (NS is a type parameter)
+    it_newton = 5 * NS
     F2 = 2; FV = 4
 
     # Mixture FMT densities (straight-line loops, no closures)
@@ -380,10 +493,13 @@ end
     Δ_vals = _assoc_delta_vals(n, params, T, kk, n3_mix, n2_mix, xi_mix,
                                 Val(NC), Val(ND), Val(NP), M)
 
-    # Relaxed SS: 10*NS fixed iterations
+    # 5*NS relaxed SS warm-up (gets X into convergence basin) + 5*NS Newton
     X = _assoc_X0(Val(NS))
     for _ in 1:it_ss
         X = _assoc_SS_step(X, n0, xi, Δ_vals, params)
+    end
+    for _ in 1:it_newton
+        X = _assoc_newton_step(X, n0, xi, Δ_vals, params)
     end
 
     # Accumulate f_assoc = Σᵢ Σₐ n₀ᵢ ξᵢ nᵢₐ (ln Xᵢₐ - Xᵢₐ/2 + 1/2)
