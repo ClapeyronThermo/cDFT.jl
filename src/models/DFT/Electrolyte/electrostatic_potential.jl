@@ -7,31 +7,32 @@ end
 
 export ElectrostaticPotential
 
-function ElectrostaticPotential(model::ElectrolyteModel, structure::DFTStructure, backend::Backend)
-    (_, T) = structure.conditions
+function ElectrostaticPotential(model::ElectrolyteModel, structure::DFTStructure, backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+    (_, temperature) = structure.conditions
     ρbulk = structure.ρbulk
-    ϵ_r = dielectric_constant(model.ionmodel.RSPmodel, 1., T, ρbulk)
-    ngrid = structure.ngrid     
+    ϵ_r = dielectric_constant(model.ionmodel.RSPmodel, 1., temperature, ρbulk)
+    ngrid = structure.ngrid
     nd = length(ngrid)
-   
-    ω = structure_ω(structure, backend)
 
-    ω_norm = allocate(CPU(), Float64, ngrid...)
+    ω = structure_ω(structure, backend, FP)
+
+    ω_norm = allocate(CPU(), FP, ngrid...)
 
     for kk in CartesianIndices(ngrid)
         ω_norm[kk] = norm(@view(ω[Tuple(kk)...,:]))
     end
 
-    ω̄ = allocate(backend, Float64, ngrid...)
+    ω̄ = allocate(backend, FP, ngrid...)
     copyto!(ω̄,Adapt.adapt(typeof(ω̄), ω_norm))
 
-    Ω = @. (ω̄ != 0.0) / (4*pi^2*ω̄^2 + (ω̄==0.0)) * N_A*e_c^2/ϵ_0/ϵ_r
+    _c  = FP(N_A * e_c^2 / ϵ_0) / FP(ϵ_r)
+    Ω   = @. (!iszero(ω̄)) / (FP(4)*π*π*ω̄^2 + iszero(ω̄)) * _c
     return ElectrostaticPotential(ϵ_r, Ω)
 end
 
 
 function evaluate_external_field!(structure::DFTStructure,external_field::ElectrostaticPotentialModel,model::ElectrolyteModel,ρ,δfδρ_res,P,iP,Vext)
-    T = structure.conditions[2]
+    temperature = structure.conditions[2]
     Z = model.charge
     ngrid = structure.ngrid
     bounds = structure.bounds
@@ -55,7 +56,7 @@ function evaluate_external_field!(structure::DFTStructure,external_field::Electr
     convolve!(Vext, Vext, map, P, iP, Vext)
 
     for i in 1:nbeads
-        selectdim(δfδρ_res,nd+1,i) .+= Z[i]*Vext / k_B / T
+        selectdim(δfδρ_res,nd+1,i) .+= Z[i]*Vext / k_B / temperature
     end
 end
 

@@ -1,33 +1,62 @@
-import GCIdentifier: get_expanded_groups, get_mol, get_atoms, __getbondlist, get_grouplist
+abstract type MolStructure end
 
-function get_connectivity(model::EoSModel, name::String)
-    smiles = search_chemical(name).smiles
-    mol = get_mol(smiles)
-    atoms = get_atoms(mol)
-    bondlist = __getbondlist(mol)
-    groups = get_grouplist(model)
-    group_id, mapping = get_expanded_groups(mol, groups, atoms, bondlist, false, smiles)
+struct SMILESStructure <: MolStructure
+    smiles::String
+end
+smiles(s::String) = SMILESStructure(s)
 
-    bond_mat = zeros(Int64, length(group_id), length(group_id))
+struct CustomStructure <: MolStructure
+    string::String
+end
+custom_structure(s::String) = CustomStructure(s)
 
-    for i in 1:length(bondlist)
-        bond = bondlist[i]
-        group_1 = mapping[:,bond[1]].==1
-        group_2 = mapping[:,bond[2]].==1
-        if group_1 == group_2
-            continue
+# Parser for single-letter group notation with SMILES-style branching.
+# Each non-paren character = one group instance; parentheses open/close branches.
+# Example: "AAAAABBBB" -> linear A₁-...-A₅-B₁-...-B₄
+#          "A(B)CCC"   -> B branches off A, then C-C-C continues from A
+function get_connectivity(::EoSModel, cs::CustomStructure)
+    s = cs.string
+    group_names = Char[]
+    bonds = Pair{Int,Int}[]
+    stack = Int[]
+    current = 0
+
+    for ch in s
+        if ch == '('
+            push!(stack, current)
+        elseif ch == ')'
+            current = pop!(stack)
         else
-            bond_mat[group_1, group_2] .+= 1
-            bond_mat[group_2, group_1] .+= 1
+            push!(group_names, ch)
+            idx = length(group_names)
+            if current != 0
+                push!(bonds, current => idx)
+            end
+            current = idx
         end
     end
 
-    group_names = String[]
-    
-    for i in group_id
-        pair = groups[i]
-        push!(group_names, GCIdentifier.name(pair))
+    n = length(group_names)
+    bond_mat = zeros(Int64, n, n)
+    for (i, j) in bonds
+        bond_mat[i, j] = 1
+        bond_mat[j, i] = 1
     end
-    return group_id, group_names, bond_mat
+
+    names = string.(group_names)
+    return 1:n, names, bond_mat
 end
 
+# Fallback when GCIdentifier/ChemicalIdentifiers extension is not loaded
+function get_connectivity(::EoSModel, name::String)
+    error("""
+    Auto-detection of GC connectivity from a chemical name requires GCIdentifier and
+    ChemicalIdentifiers. Either:
+      • load both packages before constructing the DFTSystem, or
+      • supply connectivity manually via `mol_structure`:
+          DFTSystem(model, structure, options;
+              mol_structure = Dict("$(name)" => custom_structure("AAAAABBBB")))
+          DFTSystem(model, structure, options;
+              mol_structure = Dict("$(name)" => smiles("CCCCCC")))
+    """)
+end

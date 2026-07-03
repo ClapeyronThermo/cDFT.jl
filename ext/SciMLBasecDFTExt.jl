@@ -11,26 +11,29 @@ module SciMLBasecDFTExt
         k        = cDFT.structure_ω(system.structure, system.options.device) .* cDFT.length_scale(system.model)
 
         ngrid    = system.structure.ngrid
+        FP       = cDFT.fptype(system.options)
 
         nd       = length(ngrid)
 
         map_grad =  2π .* k .* im
-        map_lapl = -(2π)^2 .* sum(k.^2, dims=nd+1)
+        map_lapl = dropdims(-(2π)^2 .* sum(k.^2, dims=nd+1), dims=nd+1)
 
-        tmp      = KA.allocate(system.options.device, Float64, ngrid...)
-        buf      = KA.allocate(system.options.device, ComplexF64, ngrid...)
-        buf_real = similar(tmp, Float64)
-        # ρ        = similar(ρ0, Float64)
+        tmp      = KA.allocate(system.options.device, FP, ngrid...)
+        buf      = KA.allocate(system.options.device, Complex{FP}, ngrid...)
+        buf_real = similar(tmp, FP)
+        # ρ        = similar(ρ0, FP)
         P        = FFTW.plan_fft!(buf)
         iP       = FFTW.plan_ifft!(buf)
         
         μ, cache_model, cache_external_field, cache_propagator = cDFT.preallocate(system, ρ)
 
         function ddft_rhs_log!(dη, η, params, t)
-            println(t, " ", minimum(η), " ", maximum(η))
-            @. ρ = exp(clamp(η, -100, 50))
+            @. ρ = exp(clamp(η, -50, 30))
+            # println(t, " ", minimum(ρ), " ", maximum(ρ))
+            # println(t, " ", minimum(μ), " ", maximum(μ))
 
             cDFT.δFδρ_res!(system, ρ, μ, cache_model...)
+            # println(t, " ", minimum(μ), " ", maximum(μ))
             cDFT.evaluate_external_field!(system, ρ, μ, cache_external_field)
             cDFT.propagate!(system, ρ, μ, cache_propagator)
 
@@ -51,38 +54,6 @@ module SciMLBasecDFTExt
 
                     cDFT.convolve!(buf_real, μ_α, selectdim(map_grad, nd+1, d), P, iP, buf)  # buf_real = ∇μd
                     @. dη_α += buf_real * tmp                          # ∇μ·∇η
-                end
-            end
-        end
-
-        function total_rhs!(dρ, ρ, params, t)
-            println(t, " ", minimum(ρ), " ", maximum(ρ))
-
-            # system, _, μ, cache_model, cache_external_field, cache_propagator, cache_ddft = params
-            # println(t, " ", minimum(ρ), " ", maximum(ρ))
-            clamp!(ρ, 1e-8, 1e8)   # prevent overflow in log or exp
-            cDFT.δFδρ_res!(system, ρ, μ, cache_model...)
-            cDFT.evaluate_external_field!(system, ρ, μ, cache_external_field)
-            cDFT.propagate!(system, ρ, μ, cache_propagator)
-
-            for α in axes(ρ, nd+1)
-                ρ_α  = selectdim(ρ,  nd+1, α)
-                dρ_α = selectdim(dρ, nd+1, α)
-                cDFT.convolve!(dρ_α, ρ_α, map_lapl, P, iP, buf)   # ∇²ρ
-
-                # ρ_α  = selectdim(ρ,  nd+1, α)
-                μ_α  = selectdim(μ,  nd+1, α)
-                # dρ_α = selectdim(dρ, nd+1, α)
-
-                # ∇²μ term — from expanding ∇·(ρ∇μ) = ρ∇²μ + ∇ρ·∇μ
-                cDFT.convolve!(tmp, μ_α, map_lapl, P, iP, buf)
-                @. dρ_α += ρ_α * tmp                                # ρ∇²μ
-
-                # ∇ρ·∇μ term
-                for d in 1:nd
-                    cDFT.convolve!(tmp,      ρ_α, selectdim(map_grad, nd+1, d), P, iP, buf)   # ∇ρ
-                    cDFT.convolve!(buf_real, μ_α, selectdim(map_grad, nd+1, d), P, iP, buf)   # ∇μ
-                    @. dρ_α += tmp * buf_real                      # ∇ρ·∇μ
                 end
             end
         end

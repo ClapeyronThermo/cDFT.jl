@@ -15,26 +15,33 @@ julia> using ThreadPinning
 julia> options = DFTOptions(CPU(4, [0,1,12,13]))
 ```
 """
-struct DFTOptions{D}
+struct DFTOptions{D, FP<:AbstractFloat}
     device::D
+    ad_mode::Symbol   # :reverse (default) or :forward
+
+    function DFTOptions(device::D, ad_mode::Symbol = :forward; precision::Type{FP} = Float64) where {D, FP<:AbstractFloat}
+        return new{D,FP}(device, ad_mode)
+    end
 end
 
-# function DFTOptions(device::Backend)
-#     return DFTOptions(device)
-# end
+DFTOptions() = DFTOptions(CPU(; static=true))
+DFTOptions(device::Backend; ad_mode::Symbol = :forward, precision::Type{FP} = Float64) where FP<:AbstractFloat =
+    DFTOptions(device, ad_mode; precision)
 
-function DFTOptions()
-    return DFTOptions(CPU(; static=true))
-end
+fptype(::DFTOptions{D,FP}) where {D,FP} = FP
+
+adapt_to_device(backend, ::Type{FP}, arr::AbstractArray) where FP<:AbstractFloat =
+    Adapt.adapt(backend, FP.(arr))
 
 function preallocate(system, ρ)
     backend = system.options.device
-    
+    FP = fptype(system.options)
+
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(ρ,nd+1)
 
-    δfδρ_res = allocate(backend, Float64, ngrid...,nb)
+    δfδρ_res = allocate(backend, FP, ngrid...,nb)
 
     cache_model = preallocate_model(system, ρ)
 
@@ -45,44 +52,6 @@ function preallocate(system, ρ)
     return δfδρ_res, cache_model, cache_external, cache_propagator
 end
 
-function preallocate_model(system, ρ)
-    backend = system.options.device
-    
-    nf = length_fields(system)
-    ngrid = system.structure.ngrid
-    nd = length(ngrid)
-    nb = size(ρ,nd+1)
-    n = allocate(CPU(), Float64, ngrid...,nf,nb)
-    δf = allocate(CPU(), Float64, ngrid...,nf,nb)
-
-    fft_buf = allocate(backend, Float64, ngrid...,nf,nb)
-
-    in_buf = allocate(backend, ComplexF64, ngrid...)
-    out_buf = similar(in_buf)              #
-
-    tmp = similar(in_buf)
-    if backend isa CPU
-        plan = plan_fft!(tmp, 1:length(ngrid); num_threads=Threads.nthreads())
-    else
-        plan = plan_fft!(tmp, 1:length(ngrid))
-    end
-
-    iplan = inv(plan)
-
-    f(x) = f_res(system,system.model,x)
-    idx_first = ntuple(Returns(1),nd)
-    n_first = @view(n[idx_first...,:,:])
-
-    chunksize = ForwardDiff.Chunk(system)
-
-    first_config = ForwardDiff.GradientConfig(f, n_first, chunksize)
-
-    cache_pool = Channel{typeof(first_config)}(Threads.nthreads())
-    for _ in 1:Threads.nthreads()
-        put!(cache_pool, ForwardDiff.GradientConfig(f, n_first, chunksize))
-    end
-    return n, δf, fft_buf, in_buf, out_buf, plan, iplan, f, cache_pool
-end
 
 function preallocate_external_potential(system, ρ)
     backend = system.options.device
@@ -129,5 +98,4 @@ function preallocate_propagator(system, ρ)
     return preallocate_propagator(system, propagtor, ρ, backend)
 end
 
-
-export CPU, DFTOptions
+export CPU, DFTOptions, fptype

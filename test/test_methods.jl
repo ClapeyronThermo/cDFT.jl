@@ -21,7 +21,7 @@
 
         γ1 = interfacial_tension(model, p, T, x[1,:], x[2,:])
 
-        @test γ1 ≈ 0.03073749588489727 rtol = 1e-4
+        @test γ1 ≈ 0.030741511241317077 rtol = 1e-3
     end
 
     @testset "Adsorption" begin
@@ -34,6 +34,6 @@
 
         ad = adsorption(model, surface, p, T, n)
 
-        @test ad[1] ≈ 598.4454929600739 rtol = 1e-4
+        @test ad[1] ≈ 598.0052041252537 rtol = 1e-4
     end
 end

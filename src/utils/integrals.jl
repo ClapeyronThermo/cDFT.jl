@@ -10,7 +10,9 @@ Integrates a collection of points `f`, with constant `dz`, using simpson rule.
 #    return 1/3*dz*(f[1]+f[end]+4*sum(@view(f[2:2:end-1]))+2*sum(@view(f[3:2:end-1])))
 #end
 
-function _∫(f::Array{Float64},dz)
+_∫(f::AbstractArray, dz) = _∫(Array(f), dz)
+
+function _∫(f::Array{T},dz) where T<:Real
     ∑f = zero(typeof(first(dz)))
     for i in CartesianIndices(size(f))
         k = Tuple(i)
@@ -24,9 +26,11 @@ function _∫(f::Array{Float64},dz)
 end
 
 function convolve!(result, profile, kernel, P, iP, buf)
-    copyto!(buf, complex.(profile))
-    P * buf                            # in-place: buf is overwritten with FFT result
-    elmul!(buf,buf,kernel)
-    iP * buf              # inverse transform on contiguous buffer
-    copyto!(result, real.(buf))      # copy result back
+    if profile !== buf
+        buf .= complex.(profile)
+    end
+    P * buf
+    elmul!(buf, buf, kernel)
+    iP * buf
+    result .= real.(buf)
 end

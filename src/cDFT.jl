@@ -1,7 +1,7 @@
 module cDFT
 
 using LinearAlgebra
-using ForwardDiff, NLSolvers, FFTW, LinearAlgebra
+using NLSolvers, FFTW, LinearAlgebra
 import AbstractFFTs: Plan
 using Clapeyron
 using Clapeyron: d, N_A, k_B, R̄, e_c, ϵ_0
@@ -12,10 +12,9 @@ using Clapeyron: issite, compute_index, complement_index, indices, diagvalues
 import Clapeyron.Solvers
 import Clapeyron: ElectrolyteModel
 using Clapeyron: SingleComp, PeTSModel, epsilon_LorentzBerthelot!
-using GCIdentifier, ChemicalIdentifiers
 using StaticArrays
 # using SIAMFANLEquations
-using KernelAbstractions, Adapt
+using KernelAbstractions, Adapt, Enzyme
 
 #if !isdefined(Clapeyron,Symbol("@sum"))
     include("utils/sum.jl")
@@ -43,5 +42,7 @@ include("methods/converge.jl")
 include("methods/surface_tension.jl")
 include("methods/interfacial_tension.jl")
 include("methods/adsorption.jl")
+
+export MolStructure, SMILESStructure, CustomStructure, smiles, custom_structure
 
 end

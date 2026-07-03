@@ -1,9 +1,9 @@
-function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTStructure,device::Backend)
+function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTStructure,device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     ngrid = structure.ngrid
     nbeads = sum(species.nbeads)
     nd = dimension(structure)
-    Ω = allocate(device,ComplexF64,ngrid...,nbeads,nbeads)
-    ω = structure_ω(structure, device)
+    Ω = allocate(device,Complex{FP},ngrid...,nbeads,nbeads)
+    ω = structure_ω(structure, device, FP)
     ω = Adapt.adapt(device, ω)
     for i in @comps
         l = 1
@@ -29,22 +29,24 @@ end
 function preallocate_propagator(system::AbstractcDFTSystem,propagator::TangentHSPropagator,ρ,backend::Backend)
     nd = dimension(system)
     ngrid = system.structure.ngrid
-    Gcα = allocate(backend, Float64, size(ρ)..., sum(system.species.nbeads))
+    FP = eltype(ρ)
+    Gcα = allocate(backend, FP, size(ρ)..., sum(system.species.nbeads))
     Gcα .= 1.0
-    Gp = allocate(backend, Float64, size(ρ)...)
+    Gp = allocate(backend, FP, size(ρ)...)
     Gp .= 1.0
-    buf = similar(selectdim(ρ,nd+1,1), ComplexF64)
+    buf = similar(selectdim(ρ,nd+1,1), Complex{FP})
+    scratch = allocate(backend, FP, ngrid...)
 
     if backend isa CPU
         plan = plan_fft!(buf, 1:length(ngrid); num_threads=Threads.nthreads())
     else
         plan = plan_fft!(buf, 1:length(ngrid))
     end
-    return Gcα, Gp, buf, plan, inv(plan)
+    return Gcα, Gp, buf, plan, inv(plan), scratch
 end
 
 
-function propagate!(system::AbstractcDFTSystem, propagate::TangentHSPropagator, ρ, δfδρ_res, Gcα, Gp, buf, P, iP)
+function propagate!(system::AbstractcDFTSystem, propagate::TangentHSPropagator, ρ, δfδρ_res, Gcα, Gp, buf, P, iP, scratch)
     nd = dimension(system)
     model = system.model
     structure = system.structure
@@ -59,12 +61,11 @@ function propagate!(system::AbstractcDFTSystem, propagate::TangentHSPropagator, 
         if system.species.nbeads[i] !== 1
             n_intergroups = model.groups.n_intergroups[i] .== 1
             i_groups = model.groups.i_groups[i]
-            # Get the levels
             n_levels = maximum(levels[i_groups])
 
             i_root = i_groups[levels[i_groups].==1][1]
             is_leaf = sum(n_intergroups,dims=1).==1 .&& (levels.!=1)'
-            # Get Gαk
+            # Bottom-up pass: compute Gcα
             for L in n_levels:-1:1
                 i_group_level = i_groups[findall(levels[i_groups].==L)]
                 for k in i_group_level
@@ -72,20 +73,17 @@ function propagate!(system::AbstractcDFTSystem, propagate::TangentHSPropagator, 
                     if !is_leaf[k]
                         for α in k_children
                             β = findall(n_intergroups[α,:] .&& levels.==L+2)
-                            if isempty(β)
-                                buf .= exp.(-selectdim(δfδρ_res,nd+1,α)) .+ 0im
-                            else
-                                buf .= exp.(-selectdim(δfδρ_res, nd+1, α)) .*
-                                        prod(view(Gcα, ntuple(Returns(:), nd)..., α, β), dims=nd+2) .+ 0im
+                            buf .= exp.(-selectdim(δfδρ_res, nd+1, α)) .+ 0im
+                            for β_k in β
+                                buf .*= selectdim(selectdim(Gcα, nd+1, α), nd+1, β_k)
                             end
-
                             convolve!(selectdim(selectdim(Gcα,nd+1,k),nd+1,α), buf, selectdim(selectdim(map,nd+1,k),nd+1,α), P, iP, buf)
                         end
                     end
                 end
             end
 
-            # Get I2
+            # Top-down pass: compute Gp
             for L in 1:n_levels
                 i_group_level = i_groups[findall(levels[i_groups].==L)]
                 for k in i_group_level
@@ -97,24 +95,30 @@ function propagate!(system::AbstractcDFTSystem, propagate::TangentHSPropagator, 
                         α = findall(n_intergroups[l,:] .&& levels.==L)
                         α = α[α.!=k]
 
-                        buf .= exp.(-selectdim(δfδρ_res, nd+1, l)) .*selectdim(Gp,nd+1,l).*prod(view(Gcα, ntuple(Returns(:), nd)..., l, α), dims=(nd+1,nd+2)) .+ 0im
-
+                        buf .= exp.(-selectdim(δfδρ_res, nd+1, l)) .* selectdim(Gp, nd+1, l) .+ 0im
+                        for α_k in α
+                            buf .*= selectdim(selectdim(Gcα, nd+1, l), nd+1, α_k)
+                        end
                         convolve!(selectdim(Gp,nd+1,k), buf, selectdim(selectdim(map,nd+1,l),nd+1,k), P, iP, buf)
-                        
                     end
                 end
             end
         end
     end
 
+    # Final update: subtract chain-bonding contributions from δfδρ_res
     for i in @comps
         for j in @chain(i)
             if system.species.nbeads[i] != 1
-                α = findall(model.groups.n_intergroups[i][j,:] .== 1 .&& species.levels .> species.levels[j])
+                α_vec = findall(model.groups.n_intergroups[i][j,:] .== 1 .&& species.levels .> species.levels[j])
             else
-                α = j
+                α_vec = (j,)
             end
-            selectdim(δfδρ_res, nd+1, j) .-= log.(selectdim(Gp, nd+1, j)) + sum(log.(view(Gcα, ntuple(Returns(:), nd)..., j, α)), dims=nd+1)
+            scratch .= log.(selectdim(Gp, nd+1, j))
+            for α_k in α_vec
+                scratch .+= log.(selectdim(selectdim(Gcα, nd+2, α_k), nd+1, j))
+            end
+            selectdim(δfδρ_res, nd+1, j) .-= scratch
         end
     end
 end

@@ -1,6 +1,8 @@
 using Test
 t1 = @elapsed using cDFT
-using cDFT.Clapeyron
+using Clapeyron
+using GCIdentifier
+using ChemicalIdentifiers
 @info "Loading cDFT took $(round(t1,digits = 2)) seconds"
 
 @testset "cDFT" begin

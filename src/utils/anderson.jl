@@ -301,6 +301,12 @@ function aasol(
     RP     = zeros(m, m)
     ThetA  = zeros(m)
     TmPReS = zeros(m)
+    # Device-side temporaries for the m-dimensional coefficient vectors.
+    # When gx lives on CPU these are plain Arrays; when on GPU they are device
+    # arrays, keeping the two large N-dim mul! calls on-device while the tiny
+    # m×m LAPACK solve (RA\tres) stays on CPU.
+    tres_dev  = similar(gx, m)
+    theta_dev = similar(gx, m)
 
     while ((k < maxit + picard_maxit) &&
            (resnorm > tol)            &&
@@ -318,12 +324,14 @@ function aasol(
             @views RA    = RP[1:mk, 1:mk]
             @views theta = ThetA[1:mk]
             @views tres  = TmPReS[1:mk]
-            mul!(tres, QA', res)
+            mul!(view(tres_dev, 1:mk), QA', res)
+            copyto!(tres, view(tres_dev, 1:mk))
             theta   .= RA \ tres
             condit   = cond(RA)
             alphanrm = falpha(alpha, theta, min(m, k))
             copy!(sol, gx)
-            @views mul!(sol, DG[:, 1:mk], theta, -1.0, 1.0)
+            copyto!(view(theta_dev, 1:mk), theta)
+            @views mul!(sol, DG[:, 1:mk], view(theta_dev, 1:mk), -1.0, 1.0)
         end
         updateStats!(ItData, condit, alphanrm)
         k += 1
@@ -441,8 +449,12 @@ function downdate_aaqr!(Q, R, m, Qd)
     Qx = Matrix(G.Q)
     @views R[1:m-1, 1:m-1] .= Rd
     @views R[:, m]          .= 0.0
+    # Qx is a small CPU Matrix (m×m); send it to the same device as Q so
+    # the large N×m matrix multiply stays on-device.
+    Qx_dev = similar(Q, size(Qx)...)
+    copyto!(Qx_dev, Qx)
     if (pd == nq)
-        mul!(Qd, Q, Qx)
+        mul!(Qd, Q, Qx_dev)
         @views Q[:, 1:m-1] .= Qd
     else
         blocksize = pd
@@ -452,7 +464,7 @@ function downdate_aaqr!(Q, R, m, Qd)
             asize = dhigh[il] - dlow[il] + 1
             @views QZ   = Qd[1:asize, :]
             @views Qsec = Q[dlow[il]:dhigh[il], :]
-            @views mul!(QZ, Qsec, Qx)
+            @views mul!(QZ, Qsec, Qx_dev)
             @views Qsec[:, 1:m-1] .= QZ
         end
     end
@@ -566,7 +578,7 @@ function Anderson_Init(x0, Vstore, m, maxit, beta, keepsolhist)
             # Low-storage mode: allocate Qd separately on the heap and warn once.
             @warn "Low storage mode: allocating Qd separately ($(blocksize)×$(m-1)). " *
                   "For best performance allocate Vstore with at least $(3*m+3) columns."
-            Qd      = zeros(blocksize, m - 1)
+            Qd      = similar(x0, blocksize, m - 1)
             nvblock = 2 * m + 1
         end
     end

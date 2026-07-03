@@ -2,3 +2,4 @@ Manifest.toml
 
 notebook
 .vscode
+/benchmark/*.h5

@@ -17,43 +17,44 @@ struct SWeightedDensity{M,P,iP} <: ScalarField
 end
 
 function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend)
-    R = Adapt.adapt(backend, 2π.*width')
+    nd = length(ngrid)
+    CT = eltype(ω)
+    FP = real(CT)
+    R = adapt_to_device(backend, FP, 2π.*width')
     # Reshape R based on the dimension of the system
     # R = reshape(R,length(width))
-    R = reshape(R, ntuple(i -> 1, length(ngrid))..., length(width))
-
-    nd = length(ngrid)
+    R = reshape(R, ntuple(i -> 1, nd)..., length(width))
 
     if type != :∫ρzdz
-        Ω = allocate(backend,ComplexF64,ngrid...,length(width))
+        Ω = allocate(backend,CT,ngrid...,length(width))
     else
-        Ω = allocate(backend,ComplexF64,ngrid...,length(ngrid),length(width))
+        Ω = allocate(backend,CT,ngrid...,length(ngrid),length(width))
     end
 
     if type == :∫ρdz
-        ω̄ = sqrt.(sum(abs2, ω, dims=nd+1)) 
+        ω̄ = sqrt.(sum(abs2, ω, dims=nd+1))
 
         ω̄R   = ω̄ .* R                                 # (Nx,Ny,Nz,Nb)
 
-        mask = ω̄ .== 0  
+        mask = ω̄ .== 0
 
         Ω .= ifelse.(mask,
                 2*R ,                                    # ω̄=0 case
                 2*sin.(ω̄.*R)./ω̄        # ω̄≠0 case
             )
-        Ω ./= 2π
+        Ω ./= FP(2π)
     elseif type == :∫ρz²dz
-        ω̄ = sqrt.(sum(abs2, ω, dims=nd+1)) 
+        ω̄ = sqrt.(sum(abs2, ω, dims=nd+1))
         ω̄R   = ω̄ .* R                                 # (Nx,Ny,Nz,Nb)
 
-        mask = ω̄ .== 0  
+        mask = ω̄ .== 0
         Ω .= ifelse.(mask,
-                4π*R.^3/3,                                    # ω̄=0 case
-                4π./ω̄.^3 .*(sin.(ω̄R)-R.*ω̄.*cos.(ω̄R))        # ω̄≠0 case
+                FP(4π)*R.^3/3,                                    # ω̄=0 case
+                FP(4π)./ω̄.^3 .*(sin.(ω̄R)-R.*ω̄.*cos.(ω̄R))        # ω̄≠0 case
             )
-        Ω ./= (2π)^3
+        Ω ./= FP(2π)^3
     elseif type == :ρ
-        Ω .= 1.0 + 0im
+        fill!(Ω, one(CT))
     else
         error("Invalid type of field")
     end
@@ -69,9 +70,10 @@ function evaluate_field!(system::AbstractcDFTSystem,field::SWeightedDensity, ρ,
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(ρ,nd+1)
+    NA = eltype(ρ)(N_A)
 
     if field.type == :ρ
-        @. n = ρ*N_A
+        @. n = ρ * NA
         return n
     end
 
@@ -82,7 +84,7 @@ function evaluate_field!(system::AbstractcDFTSystem,field::SWeightedDensity, ρ,
         convolve!(ni, selectdim(ρ, nd+1, i), selectdim(map,nd+1,i), P, iP, in_buf)
     end
     # synchronize(backend)
-    @. n = real(n)*N_A
+    @. n = real(n) * NA
 end
 
 function integrate_field!(system::AbstractcDFTSystem, field::SWeightedDensity, profile, δfδρ_res, in_buf, P, iP)
@@ -130,29 +132,30 @@ struct VWeightedDensity{M,P,iP} <: VectorField
 end
 
 function VWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend)
-    R = Adapt.adapt(backend, 2π.*width')
-    R = reshape(R, ntuple(i -> 1, length(ngrid))..., 1, length(width))
     nd = length(ngrid)
-
+    CT = eltype(ω)
+    FP = real(CT)
+    R = adapt_to_device(backend, FP, 2π.*width')
+    R = reshape(R, ntuple(i -> 1, nd)..., 1, length(width))
 
     if type != :∫ρzdz
-        Ω = allocate(backend,ComplexF64,ngrid...,length(width))
+        Ω = allocate(backend,CT,ngrid...,length(width))
     else
-        Ω = allocate(backend,ComplexF64,ngrid...,length(ngrid),length(width))
+        Ω = allocate(backend,CT,ngrid...,length(ngrid),length(width))
     end
 
     if type == :∇ρ
         Ω = 1im .* ω
-        Ω .*= (2π)
+        Ω .*= FP(2π)
     elseif type == :∫ρzdz
-        ω̄ = sqrt.(sum(abs2, ω, dims=nd+1)) 
+        ω̄ = sqrt.(sum(abs2, ω, dims=nd+1))
         ω̄R   = ω̄ .* R                                 # (Nx,Ny,Nz,Nb)
 
         mask = ω̄ .== 0                                      # (Nx,Ny,Nz,1)  broadcasts over Nb
 
         Ω .= ifelse.(mask,
-                4π*im*R,                                    # ω̄=0 case
-                4π*im*ω./ω̄.^3 .*(sin.(ω̄R)-R.*ω̄.*cos.(ω̄R))        # ω̄≠0 case
+                FP(4π)*im*R,                                    # ω̄=0 case
+                FP(4π)*im*ω./ω̄.^3 .*(sin.(ω̄R)-R.*ω̄.*cos.(ω̄R))        # ω̄≠0 case
             )
         # @time for kk in CartesianIndices(ngrid)
         #     k = Tuple(kk)
@@ -161,17 +164,17 @@ function VWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend
         # end
         # println("Time for ∫ρzdz: $t seconds")
         # Ω = 4π*im./ω.^2 .*(sin.(ω.*R)-R.*ω.*cos.(ω.*R)) .*(ω .!= 0.0) .+ 0.0
-        Ω ./= (2π)^3
+        Ω ./= FP(2π)^3
     elseif type == :∫ρz²dz
         for kk in CartesianIndices(ngrid)
             k = Tuple(kk)
-            ω̄ = norm(@view(ω[k...,:]))
-            Ω[k...,:] = 4π./ω̄.^3 .*(sin.(ω̄.*R)-R.*ω̄.*cos.(ω̄.*R)) .*(ω̄ .!= 0.0) + R.^3/3*4π .*(ω̄ .== 0.0)
+            ω̄ = FP(norm(@view(Array(ω)[k...,:])))
+            Ω[k...,:] = FP(4π)./ω̄.^3 .*(sin.(ω̄.*R)-R.*ω̄.*cos.(ω̄.*R)) .*(ω̄ .!= 0) + R.^3/3*FP(4π) .*(ω̄ .== 0)
         end
         # Ω = 4π./ω.^3 .*(sin.(ω.*R)-R.*ω.*cos.(ω.*R)) .*(ω .!= 0.0) + R.^3/3*4π .*(ω .== 0.0)
-        Ω ./= (2π)^3
+        Ω ./= FP(2π)^3
     elseif type == :ρ
-        Ω = ones(ngrid...,length(width))
+        fill!(Ω, one(CT))
     else
         error("Invalid type of field")
     end
@@ -188,6 +191,7 @@ function evaluate_field!(system::AbstractcDFTSystem,field::VWeightedDensity, ρ,
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(ρ,nd+1)
+    NA = eltype(ρ)(N_A)
 
     map = field.map
     # @show eltype(nV)
@@ -201,7 +205,7 @@ function evaluate_field!(system::AbstractcDFTSystem,field::VWeightedDensity, ρ,
         end
     end
     # synchronize(backend)
-    @. nV = real(nV)*N_A
+    @. nV = real(nV) * NA
 end
 
 function integrate_field!(system::AbstractcDFTSystem,field::VWeightedDensity, profile, δfδρ_res, in_buf, P, iP)

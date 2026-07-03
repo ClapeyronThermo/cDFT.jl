@@ -37,9 +37,9 @@ end
 function evaluate_external_field!(structure::DFTStructure,external_field::SteeleModel,model::SAFTModel,ρ,δfδρ_res,z,Vext=nothing)
 
     if Vext == nothing
-        Vext = zeros(Float64, size(ρ))
+        Vext = zeros(eltype(ρ), size(ρ))
         nd = dimension(structure)
-        (_,T) = structure.conditions
+        (_,temperature) = structure.conditions
         ϵs = external_field.params.epsilon.values
         σs = external_field.params.sigma.values
         Δ  = external_field.params.delta.values
@@ -62,7 +62,7 @@ function evaluate_external_field!(structure::DFTStructure,external_field::Steele
                 end
             end
         end
-        return Vext .*= 1/T
+        return Vext .*= 1/temperature
     else
         δfδρ_res .+= Vext
     end
