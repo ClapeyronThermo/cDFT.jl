@@ -8,4 +8,5 @@ using ChemicalIdentifiers
 @testset "cDFT" begin
     include("test_models.jl")
     include("test_methods.jl")
+    include("test_coordinate_systems.jl")
 end

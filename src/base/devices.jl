@@ -67,16 +67,11 @@ function preallocate_external_potential(system, ρ)
     for external_field in external_fields
     
         if external_field isa ElectrostaticPotentialModel
-            Vext = similar(selectdim(ρ, nd+1, 1), ComplexF64)
+            CT = transform_eltype(system.structure, fptype(system.options))
+            Vext = similar(selectdim(ρ, nd+1, 1), CT)
+            plan, iplan = build_transform(system.structure, Vext, nd, backend)
 
-            if backend isa CPU
-                plan = plan_fft!(Vext, 1:length(ngrid); num_threads=Threads.nthreads())
-            else
-                plan = plan_fft!(Vext, 1:length(ngrid))
-            end
-
-            
-            push!(cache_external, (plan, inv(plan), Vext))
+            push!(cache_external, (plan, iplan, Vext))
         else
             # Vext = allocate(backend, Float64, system.structure.ngrid...)
 

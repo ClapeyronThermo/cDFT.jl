@@ -35,8 +35,6 @@ function surface_tension(system::AbstractcDFTSystem,ρ)
     nd = dimension(system)
     _bounds = system.structure.bounds
 
-    dz = structure_dz(system.structure)
-
     F = free_energy(system,ρ)
 
     (pressure, temperature) = system.structure.conditions
@@ -48,10 +46,10 @@ function surface_tension(system::AbstractcDFTSystem,ρ)
     chem_pot_term = 0.
     for i in @comps
         for k in @chain(i)
-            chem_pot_term += μ[i]*∫(ρ[:,k],dz)/system.species.nbeads[i]
+            chem_pot_term += μ[i]*∫(ρ[:,k],system.structure)/system.species.nbeads[i]
         end
     end
-    return F*k_B*temperature-chem_pot_term+pressure*∫(ones(only(ngrid...)),dz)
+    return F*k_B*temperature-chem_pot_term+pressure*∫(ones(only(ngrid...)),system.structure)
 end
 
 export surface_tension

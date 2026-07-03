@@ -17,7 +17,7 @@ function F_res(system::Union{DFTSystem, DGTSystem}, ρ)
     δfδρ_res, cache_model, _, _ = preallocate(system, ρ)
     δFδρ_res!(system, ρ, δfδρ_res, cache_model...)
     f_val = cache_model[9]
-    return ∫(f_val, structure_dz(system.structure))
+    return ∫(f_val, system.structure)
 end
 
 """
@@ -28,7 +28,6 @@ Residual free energy fallback for systems that use the old scalar f_res path (e.
 function F_res(system::AbstractcDFTSystem, ρ)
     ngrid  = system.structure.ngrid
     model  = system.model
-    dz     = structure_dz(system.structure)
 
     δfδρ_res, cache_model, cache_external, cache_propagator = preallocate(system, ρ)
     n       = cache_model[1]
@@ -47,7 +46,7 @@ function F_res(system::AbstractcDFTSystem, ρ)
         k = Tuple(kk)
         ϕ[k...] = f_res(system, model, @view(n[k...,:,:]))
     end
-    return ∫(ϕ, dz)
+    return ∫(ϕ, system.structure)
 end
 
 """
@@ -132,15 +131,11 @@ function preallocate_model(system::DFTSystem, ρ)
     fill!(δf, 0)
     fft_buf = allocate(backend, FP, ngrid..., nf, nb)
 
-    in_buf  = allocate(backend, Complex{FP}, ngrid...)
+    CT      = transform_eltype(system.structure, FP)
+    in_buf  = allocate(backend, CT, ngrid...)
     out_buf = similar(in_buf)
     tmp     = similar(in_buf)
-    if backend isa CPU
-        plan = plan_fft!(tmp, 1:nd; num_threads = Threads.nthreads())
-    else
-        plan = plan_fft!(tmp, 1:nd)
-    end
-    iplan = inv(plan)
+    plan, iplan = build_transform(system.structure, tmp, nd, backend)
 
     f_val  = allocate(backend, FP, ngrid...)
     δf_val = allocate(backend, FP, ngrid...)
@@ -180,15 +175,11 @@ function preallocate_model(system::ElectrolyteDFTSystem, ρ)
     fill!(δf, 0)
     fft_buf = allocate(backend, FP, ngrid..., nf, nb)
 
-    in_buf  = allocate(backend, Complex{FP}, ngrid...)
+    CT      = transform_eltype(system.structure, FP)
+    in_buf  = allocate(backend, CT, ngrid...)
     out_buf = similar(in_buf)
     tmp     = similar(in_buf)
-    if backend isa CPU
-        plan = plan_fft!(tmp, 1:nd; num_threads = Threads.nthreads())
-    else
-        plan = plan_fft!(tmp, 1:nd)
-    end
-    iplan = inv(plan)
+    plan, iplan = build_transform(system.structure, tmp, nd, backend)
 
     f_val  = allocate(backend, FP, ngrid...)
     δf_val = allocate(backend, FP, ngrid...)

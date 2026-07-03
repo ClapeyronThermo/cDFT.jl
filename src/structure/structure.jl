@@ -3,6 +3,7 @@ cos_prof(x,start,stop,shift,coef) = 1/2*(start-stop)*cos((x-shift)*2π)*sqrt((1+
 
 # include("surface_tension.jl")
 # include("interfacial_tension.jl")
+include("transforms.jl")
 include("two_phase.jl")
 include("external_field.jl")
 
@@ -47,7 +48,7 @@ function initialize_profiles(system::AbstractcDFTSystem)
     end
 end
 
-function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel,structure::Union{Uniform1DCart,Uniform1DSphr,Uniform1DCyl}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     ngrid = structure.ngrid
     ρbulk = structure.ρbulk
 
@@ -150,4 +151,24 @@ function structure_dz(structure::DFTStructure)
         return (ub - lb)/ngrid[i]
     end
     return ntuple(ff,nd)
+end
+
+function structure_ω(structure::Union{DFTStructureSphr,DFTStructureCyl}, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+    device isa CPU || error("Spherical/cylindrical coordinate systems are CPU-only for now")
+    Q = radial_transform(structure)
+    return RadialFrequency{FP,typeof(Q)}(Q, FP.(Q.k ./ (2π)))
+end
+
+"""
+    structure_r(structure)
+
+The real-space radial grid of a spherical/cylindrical structure, i.e. the (non-uniform,
+Bessel-zero-derived) sample points `Q.r` of its underlying `Hankel.QDHT`.
+"""
+structure_r(structure::Union{DFTStructureSphr,DFTStructureCyl}) = radial_transform(structure).r
+export structure_r
+
+function get_coords(structure::Union{DFTStructureSphr,DFTStructureCyl})
+    r = structure_r(structure)
+    return reshape(r, length(r), 1)
 end

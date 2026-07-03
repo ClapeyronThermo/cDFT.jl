@@ -1,17 +1,20 @@
-abstract type DFTStructure end 
-abstract type DFTStructure1D <: DFTStructure end
-abstract type DFTStructure1DCart <: DFTStructure1D end
-abstract type DFTStructure1DSphr <: DFTStructure1D end
+abstract type DFTStructure end
+abstract type DFTStructureCart <: DFTStructure end
+abstract type DFTStructureSphr <: DFTStructure end
+abstract type DFTStructureCyl  <: DFTStructure end
 
-abstract type DFTStructure2D <: DFTStructure end
-abstract type DFTStructure2DCart <: DFTStructure2D end
-abstract type DFTStructure3D <: DFTStructure end
-abstract type DFTStructure3DCart <: DFTStructure3D end
+abstract type DFTStructure1DCart <: DFTStructureCart end
+abstract type DFTStructure2DCart <: DFTStructureCart end
+abstract type DFTStructure3DCart <: DFTStructureCart end
+abstract type DFTStructure1DSphr <: DFTStructureSphr end
+abstract type DFTStructure1DCyl  <: DFTStructureCyl  end
 
 dimension(x::DFTStructure) = dimension(typeof(x))
-dimension(::Type{<:DFTStructure1D}) = 1
-dimension(::Type{<:DFTStructure2D}) = 2
-dimension(::Type{<:DFTStructure3D}) = 3
+dimension(::Type{<:DFTStructure1DCart}) = 1
+dimension(::Type{<:DFTStructure2DCart}) = 2
+dimension(::Type{<:DFTStructure3DCart}) = 3
+dimension(::Type{<:DFTStructure1DSphr}) = 1
+dimension(::Type{<:DFTStructure1DCyl})  = 1
 
 struct DFTBounds{N}
     lb::NTuple{N,Float64}
@@ -165,22 +168,74 @@ end
 The generic structure type used when trying to simulate a uniform system in 1D-spherical coordinates. Contains:
 - `conditions`: The p, T conditions of the system.
 - `ρbulk`: The bulk density of each species in the system.
-- `bounds`: Specifies the location of the bounds of the system.
+- `bounds`: `[lb, ub]`. `ub` is used as the aperture of the underlying quasi-discrete Hankel transform (QDHT); `lb` (which may be `0.0`) is used only to place an excluded-volume/wall external field (e.g. a spherical nanoparticle of radius `lb`), not to truncate the grid — the radial grid always spans from near `0` to `ub`.
 - `ngrids`: The number of grid points used to represent the density profile.
-This structure should generally be used to benchmark the DFT code against the bulk calculations. As this is spherical coordinates, the lower bound must be greater than 0.
+- `transform`: The cached `Hankel.QDHT` used for all radial convolutions on this structure.
 Example:
 ```julia
-julia> structure = Uniform1DSphr((p, T), ρbulk, [0L, 10L], 201)
+julia> structure = Uniform1DSphr((p, T), ρbulk, [0.0, 10L], 201)
 ```
 """
-struct Uniform1DSphr <: DFTStructure1DSphr
-    conditions::Tuple{Float64,Float64,Vector{Float64}}
+struct Uniform1DSphr{Q} <: DFTStructure1DSphr
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
     bounds::Vector{Float64}
     ngrid::Tuple{Int64}
+    transform::Q
 end
 
-function Uniform1DSphr(conditions,ρbulk,ρbulk2,bounds,ngrid::Int64)
-    Uniform1DSphr(conditions,bounds,(ngrid,))
+function Uniform1DSphr(conditions,ρbulk,bounds::Vector{Float64},ngrid::Int64)
+    Q = Hankel.QDHT(0, 2, bounds[2], ngrid)
+    Uniform1DSphr(conditions,ρbulk,bounds,(ngrid,),Q)
+end
+
+"""
+    Uniform1DCyl(conditions::Tuple{Float64,Float64}, ρbulk::Vector{Float64}, bounds::Vector{Float64}, ngrid::Int64)
+
+The generic structure type used when trying to simulate a uniform system in 1D-cylindrical coordinates (radial coordinate only; translationally invariant along the cylinder axis and rotationally symmetric about it). Contains:
+- `conditions`: The p, T conditions of the system.
+- `ρbulk`: The bulk density of each species in the system.
+- `bounds`: `[lb, ub]`. `ub` is used as the aperture of the underlying quasi-discrete Hankel transform (QDHT); `lb` (which may be `0.0`, e.g. for fluid inside a pore) is used only to place an excluded-volume/wall external field (e.g. fluid outside a solid cylinder of radius `lb`), not to truncate the grid — the radial grid always spans from near `0` to `ub`.
+- `ngrids`: The number of grid points used to represent the density profile.
+- `transform`: The cached `Hankel.QDHT` used for all radial convolutions on this structure.
+Example:
+```julia
+julia> structure = Uniform1DCyl((p, T), ρbulk, [0.0, 20L], 201)
+```
+"""
+struct Uniform1DCyl{Q} <: DFTStructure1DCyl
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    bounds::Vector{Float64}
+    ngrid::Tuple{Int64}
+    transform::Q
+end
+
+function Uniform1DCyl(conditions,ρbulk,bounds::Vector{Float64},ngrid::Int64)
+    Q = Hankel.QDHT(0, 1, bounds[2], ngrid)
+    Uniform1DCyl(conditions,ρbulk,bounds,(ngrid,),Q)
+end
+
+radial_transform(structure::Union{Uniform1DSphr,Uniform1DCyl}) = structure.transform
+
+"""
+    RadialFrequency{FP,Q}
+
+Wraps the `Hankel.QDHT` used by a `Uniform1DSphr`/`Uniform1DCyl` structure together with
+the corresponding "ordinary frequency" vector `ω̄ = Q.k ./ 2π`. Using this convention
+(rather than `Q.k` directly) means the *same* closed-form kernel formulas already used
+for the Cartesian FFT path (e.g. `sin(ω̄R)/ω̄`-style expressions, with `R = 2π*width`)
+can be reused unchanged for the radial case, just substituting this `ω̄` in place of
+`sqrt.(sum(abs2,ω,dims=nd+1))`.
+
+Returned by `structure_ω` for spherical/cylindrical structures in place of the raw
+`Array{Complex}` returned for Cartesian ones; this lets `SWeightedDensity`/
+`VWeightedDensity`/etc. dispatch to the correct (QDHT-based) constructor without any
+change to the models' `get_fields` call sites, which just pass `ω` through positionally.
+"""
+struct RadialFrequency{FP<:AbstractFloat, Q<:Hankel.QDHT}
+    Q::Q
+    ω̄::Vector{FP}
 end
 
 """
@@ -311,6 +366,6 @@ function TwoPhase3DSphrCart(conditions,ρbulk,ρbulk2,bounds::Vector{Float64},ng
 end
 
 export Uniform1DCart, ExternalField1DCart
-export Uniform1DSphr
+export Uniform1DSphr, Uniform1DCyl
 export TwoPhase1DCart, TwoPhase2DLamCart, TwoPhase3DLamCart
 export TwoPhase2DHexCart

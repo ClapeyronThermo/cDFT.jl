@@ -26,6 +26,38 @@ function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTS
     return TangentHSPropagator(Ω)
 end
 
+"""
+    TangentHSPropagator(model, species, structure::Union{DFTStructureSphr,DFTStructureCyl}, device, FP)
+
+Spherical/cylindrical (QDHT-based) counterpart of the Cartesian `TangentHSPropagator`
+constructor above. Reuses the same tangent-sphere kernel formula, substituting
+`ω̄ = structure_ω(structure,...).ω̄` for the Cartesian `ω̄ = sqrt.(sum(abs2,ω,dims=nd+1))`
+and dropping the `ω̄=0` branch (QDHT never samples the origin in k-space).
+"""
+function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::Union{DFTStructureSphr,DFTStructureCyl},device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+    ngrid = structure.ngrid
+    nbeads = sum(species.nbeads)
+    nd = dimension(structure)
+    ω̄ = structure_ω(structure, device, FP).ω̄
+    Ω = allocate(device,FP,ngrid...,nbeads,nbeads)
+    for i in @comps
+        l = 1
+        for j in @chain(i)
+            for k in @chain(i)[l:end]
+                R = (species.size[j] + species.size[k])*π
+
+                val = @. 2*sin(ω̄*R)/ω̄ / R / 2
+
+                selectdim(selectdim(Ω, nd+1, j), nd+1, k) .= val
+                selectdim(selectdim(Ω, nd+1, k), nd+1, j) .= val
+            end
+            l += 1
+        end
+    end
+
+    return TangentHSPropagator(Ω)
+end
+
 function preallocate_propagator(system::AbstractcDFTSystem,propagator::TangentHSPropagator,ρ,backend::Backend)
     nd = dimension(system)
     ngrid = system.structure.ngrid
@@ -34,15 +66,11 @@ function preallocate_propagator(system::AbstractcDFTSystem,propagator::TangentHS
     Gcα .= 1.0
     Gp = allocate(backend, FP, size(ρ)...)
     Gp .= 1.0
-    buf = similar(selectdim(ρ,nd+1,1), Complex{FP})
+    CT = transform_eltype(system.structure, FP)
+    buf = similar(selectdim(ρ,nd+1,1), CT)
     scratch = allocate(backend, FP, ngrid...)
-
-    if backend isa CPU
-        plan = plan_fft!(buf, 1:length(ngrid); num_threads=Threads.nthreads())
-    else
-        plan = plan_fft!(buf, 1:length(ngrid))
-    end
-    return Gcα, Gp, buf, plan, inv(plan), scratch
+    plan, iplan = build_transform(system.structure, buf, length(ngrid), backend)
+    return Gcα, Gp, buf, plan, iplan, scratch
 end
 
 
@@ -73,7 +101,7 @@ function propagate!(system::AbstractcDFTSystem, propagate::TangentHSPropagator, 
                     if !is_leaf[k]
                         for α in k_children
                             β = findall(n_intergroups[α,:] .&& levels.==L+2)
-                            buf .= exp.(-selectdim(δfδρ_res, nd+1, α)) .+ 0im
+                            buf .= exp.(-selectdim(δfδρ_res, nd+1, α))
                             for β_k in β
                                 buf .*= selectdim(selectdim(Gcα, nd+1, α), nd+1, β_k)
                             end
@@ -95,7 +123,7 @@ function propagate!(system::AbstractcDFTSystem, propagate::TangentHSPropagator, 
                         α = findall(n_intergroups[l,:] .&& levels.==L)
                         α = α[α.!=k]
 
-                        buf .= exp.(-selectdim(δfδρ_res, nd+1, l)) .* selectdim(Gp, nd+1, l) .+ 0im
+                        buf .= exp.(-selectdim(δfδρ_res, nd+1, l)) .* selectdim(Gp, nd+1, l)
                         for α_k in α
                             buf .*= selectdim(selectdim(Gcα, nd+1, l), nd+1, α_k)
                         end

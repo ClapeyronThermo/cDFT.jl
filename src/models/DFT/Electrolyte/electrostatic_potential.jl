@@ -30,6 +30,29 @@ function ElectrostaticPotential(model::ElectrolyteModel, structure::DFTStructure
     return ElectrostaticPotential(ϵ_r, Ω)
 end
 
+"""
+    ElectrostaticPotential(model, structure::Union{DFTStructureSphr,DFTStructureCyl}, backend, FP)
+
+Spherical/cylindrical (QDHT-based) counterpart of the Cartesian `ElectrostaticPotential`
+constructor above. Reuses the same 3D-isotropic Coulomb Green's-function kernel formula
+unchanged — a `z`-translation-invariant 3D charge distribution only excites the `k_z=0`
+slice of the isotropic 3D Coulomb kernel, which has the same functional form, so no
+rescaling is needed between the spherical and cylindrical cases. `ω̄=0` never occurs on
+the QDHT grid, so the Cartesian version's zero-mode mask is unnecessary here.
+"""
+function ElectrostaticPotential(model::ElectrolyteModel, structure::Union{DFTStructureSphr,DFTStructureCyl}, backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+    backend isa CPU || error("Spherical/cylindrical coordinate systems are CPU-only for now")
+    (_, temperature) = structure.conditions
+    ρbulk = structure.ρbulk
+    ϵ_r = dielectric_constant(model.ionmodel.RSPmodel, 1., temperature, ρbulk)
+
+    ω̄ = structure_ω(structure, backend, FP).ω̄
+
+    _c = FP(N_A * e_c^2 / ϵ_0) / FP(ϵ_r)
+    Ω  = @. _c / (FP(4)*π*π*ω̄^2)
+    return ElectrostaticPotential(ϵ_r, Ω)
+end
+
 
 function evaluate_external_field!(structure::DFTStructure,external_field::ElectrostaticPotentialModel,model::ElectrolyteModel,ρ,δfδρ_res,P,iP,Vext)
     temperature = structure.conditions[2]

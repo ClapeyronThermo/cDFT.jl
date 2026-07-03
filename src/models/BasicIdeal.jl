@@ -13,8 +13,6 @@ function F_ideal(system::AbstractcDFTSystem,ρ)
     nd = length(ngrid)
     _bounds = system.structure.bounds
 
-    dz = structure_dz(system.structure)
-
     n = zeros(ngrid...,length(model))
     for i in @comps
         for k in @chain(i)
@@ -30,7 +28,7 @@ function F_ideal(system::AbstractcDFTSystem,ρ)
         ϕ[j...] = f(@view n[j...,:])
     end
 
-    return ∫(ϕ,dz)
+    return ∫(ϕ,system.structure)
 end
 
 function f_ideal(system::AbstractcDFTSystem,model::BasicIdealModel,n)
