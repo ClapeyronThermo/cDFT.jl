@@ -1,42 +1,33 @@
-module PlotscDFTExt
+module MakiecDFTExt
 
 using cDFT
-using Plots
-import Plots: Colors
+using Makie
 
 _maybe_texlabel(s, latex::Bool) = latex ? cDFT.texlabel(s) : s
 
-function Plots.plot(system::cDFT.AbstractcDFTSystem, profiles; x_units=:normalized, y_units=:normalized, latex=false)
-    return Plots.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units, latex=latex)
+function Makie.plot(system::cDFT.AbstractcDFTSystem, profiles; x_units=:normalized, y_units=:normalized, latex=false)
+    return Makie.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units, latex=latex)
 end
 
-function Plots.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure1DCart, profiles; x_units=:normalized, y_units=:mass, latex=false)
+function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure1DCart, profiles; x_units=:normalized, y_units=:mass, latex=false)
     structure = system.structure
     model = system.model
     if model isa cDFT.ElectrolyteModel
         model = model.neutralmodel
     end
     species = system.species
-    nb = length(profiles)
 
     bounds = structure.bounds
-
     z = cDFT.uniform_range(structure)
     L = cDFT.length_scale(model)
 
-    plt = Plots.plot(grid=:off,
-                    framestyle=:box,
-                    foreground_color_legend = nothing,
-                    xtickfontsize=12,
-                    ytickfontsize=12,
-                    xlabelfontsize=14,
-                    ylabelfontsize=14,
-                    legend_font=font(12),
-                    fontfamily = latex ? "Computer Modern" : :default)
+    fig = Figure()
+    ax = Axis(fig[1, 1];
+        xgridvisible=false, ygridvisible=false,
+        xticklabelsize=12, yticklabelsize=12,
+        xlabelsize=14, ylabelsize=14)
 
     ymax = 0.
-    species_id = 1
-    bead_id = 1
     for i in cDFT.@comps
         for k in cDFT.@chain(i)
             if species.nbeads[i] > 1
@@ -75,65 +66,58 @@ function Plots.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
                 y_norm = " / (mol/m³)"
             end
 
-            Plots.plot!(plt,X,Y,label=_maybe_texlabel(name,latex),linewidth=3)
+            Makie.lines!(ax, X, Y; label=_maybe_texlabel(name,latex), linewidth=3)
             ymax = max(ymax,maximum(Y))
         end
     end
 
-
     if x_units == :normalized
-        Plots.xlims!(plt,(bounds[1],bounds[2])./L)
+        Makie.xlims!(ax,(bounds[1],bounds[2])./L)
         x_norm = "σ"
     elseif x_units == :angstrom
-        Plots.xlims!(plt,(bounds[1],bounds[2]).*1e10)
+        Makie.xlims!(ax,(bounds[1],bounds[2]).*1e10)
         x_norm = "Å"
     elseif x_units == :nanometer
-        Plots.xlims!(plt,(bounds[1],bounds[2]).*1e9)
+        Makie.xlims!(ax,(bounds[1],bounds[2]).*1e9)
         x_norm = "nm"
     else
-        Plots.xlims!(plt,(bounds[1],bounds[2]))
+        Makie.xlims!(ax,(bounds[1],bounds[2]))
         x_norm = "m"
     end
 
-    Plots.ylims!(plt,(0,1.1*ymax))
-    Plots.xlabel!(plt,_maybe_texlabel("z / "*x_norm,latex))
+    Makie.ylims!(ax,(0,1.1*ymax))
+    ax.xlabel = _maybe_texlabel("z / "*x_norm,latex)
 
     if y_units == :normalized
-        Plots.ylabel!(plt,_maybe_texlabel("ρσ³",latex))
+        ax.ylabel = _maybe_texlabel("ρσ³",latex)
     elseif y_units == :mass
-        Plots.ylabel!(plt,_maybe_texlabel("ρ / (kg/m³)",latex))
+        ax.ylabel = _maybe_texlabel("ρ / (kg/m³)",latex)
     else
-        Plots.ylabel!(plt,_maybe_texlabel("ρ / (mol/m³)",latex))
+        ax.ylabel = _maybe_texlabel("ρ / (mol/m³)",latex)
     end
 
-    Plots.plot!(plt,legend=:topleft)
+    Makie.axislegend(ax; position=:lt)
 
-    return plt
+    return fig
 end
 
-function Plots.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTStructure1DSphr,cDFT.DFTStructure1DCyl}, profiles; x_units=:normalized, y_units=:mass, latex=false)
+function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTStructure1DSphr,cDFT.DFTStructure1DCyl}, profiles; x_units=:normalized, y_units=:mass, latex=false)
     structure = system.structure
     model = system.model
     if model isa cDFT.ElectrolyteModel
         model = model.neutralmodel
     end
     species = system.species
-    nb = length(profiles)
 
     bounds = structure.bounds
-
     z = cDFT.structure_r(structure)
     L = cDFT.length_scale(model)
 
-    plt = Plots.plot(grid=:off,
-                    framestyle=:box,
-                    foreground_color_legend = nothing,
-                    xtickfontsize=12,
-                    ytickfontsize=12,
-                    xlabelfontsize=14,
-                    ylabelfontsize=14,
-                    legend_font=font(12),
-                    fontfamily = latex ? "Computer Modern" : :default)
+    fig = Figure()
+    ax = Axis(fig[1, 1];
+        xgridvisible=false, ygridvisible=false,
+        xticklabelsize=12, yticklabelsize=12,
+        xlabelsize=14, ylabelsize=14)
 
     ymax = 0.
     for i in cDFT.@comps
@@ -174,78 +158,57 @@ function Plots.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTSt
                 y_norm = " / (mol/m³)"
             end
 
-            Plots.plot!(plt,X,Y,label=_maybe_texlabel(name,latex),linewidth=3)
+            Makie.lines!(ax, X, Y; label=_maybe_texlabel(name,latex), linewidth=3)
             ymax = max(ymax,maximum(Y))
         end
     end
 
     if x_units == :normalized
-        Plots.xlims!(plt,(bounds[1],bounds[2])./L)
+        Makie.xlims!(ax,(bounds[1],bounds[2])./L)
         x_norm = "σ"
     elseif x_units == :angstrom
-        Plots.xlims!(plt,(bounds[1],bounds[2]).*1e10)
+        Makie.xlims!(ax,(bounds[1],bounds[2]).*1e10)
         x_norm = "Å"
     elseif x_units == :nanometer
-        Plots.xlims!(plt,(bounds[1],bounds[2]).*1e9)
+        Makie.xlims!(ax,(bounds[1],bounds[2]).*1e9)
         x_norm = "nm"
     else
-        Plots.xlims!(plt,(bounds[1],bounds[2]))
+        Makie.xlims!(ax,(bounds[1],bounds[2]))
         x_norm = "m"
     end
 
-    Plots.ylims!(plt,(0,1.1*ymax))
-    Plots.xlabel!(plt,_maybe_texlabel("r / "*x_norm,latex))
+    Makie.ylims!(ax,(0,1.1*ymax))
+    ax.xlabel = _maybe_texlabel("r / "*x_norm,latex)
 
     if y_units == :normalized
-        Plots.ylabel!(plt,_maybe_texlabel("ρσ³",latex))
+        ax.ylabel = _maybe_texlabel("ρσ³",latex)
     elseif y_units == :mass
-        Plots.ylabel!(plt,_maybe_texlabel("ρ / (kg/m³)",latex))
+        ax.ylabel = _maybe_texlabel("ρ / (kg/m³)",latex)
     else
-        Plots.ylabel!(plt,_maybe_texlabel("ρ / (mol/m³)",latex))
+        ax.ylabel = _maybe_texlabel("ρ / (mol/m³)",latex)
     end
 
-    Plots.plot!(plt,legend=:topleft)
+    Makie.axislegend(ax; position=:lt)
 
-    return plt
+    return fig
 end
 
-function Plots.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure2DCart, profiles; x_units=:normalized, y_units=:normalized, latex=false)
-    colors = palette(:tab10)
+function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure2DCart, profiles; x_units=:normalized, y_units=:normalized, latex=false)
     structure = system.structure
     model = system.model
     species = system.species
-    nb = length(profiles)
 
     bounds = structure.bounds
 
     x = cDFT.uniform_range(structure,1)
     y = cDFT.uniform_range(structure,2)
-    X = zeros(length(x),length(y))
-    Y = zeros(length(x),length(y))
-
-    for i in 1:length(x)
-        X[i,:] .= x[i]
-    end
-
-    for i in 1:length(y)
-        Y[:,i] .= y[i]
-    end
-
     L = cDFT.length_scale(model)
 
-    plt = Plots.plot(grid=:off,
-                    framestyle=:box,
-                    foreground_color_legend = nothing,
-                    xtickfontsize=12,
-                    ytickfontsize=12,
-                    xlabelfontsize=14,
-                    ylabelfontsize=14,
-                    legend_font=font(12),
-                    fontfamily = latex ? "Computer Modern" : :default)
+    fig = Figure()
+    ax = Axis(fig[1, 1]; xgridvisible=false, ygridvisible=false, aspect=Makie.DataAspect())
 
-    ymax = 0.
-    species_id = 1
-    bead_id = 1
+    colors = Makie.wong_colors()
+
     for i in cDFT.@comps
         for k in cDFT.@chain(i)
             if species.nbeads[i] > 1
@@ -279,71 +242,106 @@ function Plots.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
                 Y = y
             end
 
+            # density is always shown normalized here (σ³ units), matching the existing
+            # Plots 2D method's behavior — y_units is accepted but unused for density.
             Z = profiles[:,:,k].*norm_const
-            z_norm = "σ³"
 
-            # if y_units == :normalized
-            #     Z = profiles[:,k].*norm_const
-            #     y_norm = "σ³"
-            # elseif y_units == :mass
-            #     Mw = model.params.Mw[k]
-            #     Y = profiles[:,k].*Mw/1e3
-            #     y_norm = " / (kg/m³)"
-            # elseif y_units == :angstrom
-            #     Y = profiles[:,k].*cDFT.N_A/1e30
-            #     y_norm = " / (kg/m³)"
-            # else
-            #     Y = profiles[:,k]
-            #     y_norm = " / (mol/m³)"
-            # end
-            csalpha = cgrad([Colors.RGBA(colors[k].r, colors[k].g, colors[k].b, 0), Colors.RGBA(colors[k].r, colors[k].g, colors[k].b, 1)])
-            Plots.heatmap!(plt,X,Y,Z,label=_maybe_texlabel(name,latex), c=csalpha)
+            c = colors[mod1(k, length(colors))]
+            csalpha = [Makie.RGBAf(c.r, c.g, c.b, 0.0), Makie.RGBAf(c.r, c.g, c.b, 1.0)]
+            Makie.heatmap!(ax, X, Y, Z; colormap=csalpha, label=_maybe_texlabel(name,latex))
         end
     end
-    
 
     if x_units == :normalized
-        Plots.xlims!(plt,(bounds[1,1],bounds[1,2])./L)
+        Makie.xlims!(ax,(bounds[1,1],bounds[1,2])./L)
         x_norm = "σ"
     elseif x_units == :angstrom
-        Plots.xlims!(plt,(bounds[1,1],bounds[1,2]).*1e10)
+        Makie.xlims!(ax,(bounds[1,1],bounds[1,2]).*1e10)
         x_norm = "Å"
     elseif x_units == :nanometer
-        Plots.xlims!(plt,(bounds[1,1],bounds[1,2]).*1e9)
+        Makie.xlims!(ax,(bounds[1,1],bounds[1,2]).*1e9)
         x_norm = "nm"
     else
-        Plots.xlims!(plt,(bounds[1,1],bounds[1,2]))
+        Makie.xlims!(ax,(bounds[1,1],bounds[1,2]))
         x_norm = "m"
     end
 
     if y_units == :normalized
-        Plots.ylims!(plt,(bounds[2,1],bounds[2,2])./L)
+        Makie.ylims!(ax,(bounds[2,1],bounds[2,2])./L)
         y_norm = "σ"
     elseif y_units == :angstrom
-        Plots.ylims!(plt,(bounds[2,1],bounds[2,2]).*1e10)
+        Makie.ylims!(ax,(bounds[2,1],bounds[2,2]).*1e10)
         y_norm = "Å"
     elseif y_units == :nanometer
-        Plots.ylims!(plt,(bounds[2,1],bounds[2,2]).*1e9)
+        Makie.ylims!(ax,(bounds[2,1],bounds[2,2]).*1e9)
         y_norm = "nm"
     else
-        Plots.ylims!(plt,(bounds[2,1],bounds[2,2]))
+        Makie.ylims!(ax,(bounds[2,1],bounds[2,2]))
         y_norm = "m"
     end
 
-    Plots.xlabel!(plt,_maybe_texlabel("x / "*x_norm,latex))
-    Plots.ylabel!(plt,_maybe_texlabel("y / "*y_norm,latex))
+    ax.xlabel = _maybe_texlabel("x / "*x_norm,latex)
+    ax.ylabel = _maybe_texlabel("y / "*y_norm,latex)
 
-    # if y_units == :normalized
-    #     Plots.ylabel!(plt,"ρσ³")
-    # elseif y_units == :mass
-    #     Plots.ylabel!(plt,"ρ / (kg/m³)")
-    # else
-    #     Plots.ylabel!(plt,"ρ / (mol/m³)")
-    # end
+    return fig
+end
 
-    # Plots.plot!(plt,legend=:topleft)
+function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure3DCart, profiles; x_units=:normalized, y_units=:normalized, latex=false)
+    structure = system.structure
+    model = system.model
+    species = system.species
 
-    return plt
+    x = cDFT.uniform_range(structure,1)
+    y = cDFT.uniform_range(structure,2)
+    z = cDFT.uniform_range(structure,3)
+    L = cDFT.length_scale(model)
+
+    if x_units == :normalized
+        X, Y, Z = x./L, y./L, z./L
+        x_norm = "σ"
+    elseif x_units == :angstrom
+        X, Y, Z = x.*1e10, y.*1e10, z.*1e10
+        x_norm = "Å"
+    elseif x_units == :nanometer
+        X, Y, Z = x.*1e9, y.*1e9, z.*1e9
+        x_norm = "nm"
+    else
+        X, Y, Z = x, y, z
+        x_norm = "m"
+    end
+
+    fig = Figure()
+    ax = Axis3(fig[1, 1];
+        aspect=:data,
+        xgridvisible=false, ygridvisible=false, zgridvisible=false,
+        xspinesvisible=false, yspinesvisible=false, zspinesvisible=false,
+        xlabel=_maybe_texlabel("x / "*x_norm,latex),
+        ylabel=_maybe_texlabel("y / "*x_norm,latex),
+        zlabel=_maybe_texlabel("z / "*x_norm,latex))
+
+    colors = Makie.wong_colors()
+
+    for i in cDFT.@comps
+        for k in cDFT.@chain(i)
+            if species.nbeads[i] > 1
+                norm_const = model.params.segment[k]*species.size[k]^3*cDFT.N_A
+            else
+                norm_const = model.params.segment[i]*species.size[i]^3*cDFT.N_A
+            end
+
+            ρk = profiles[:,:,:,k].*norm_const
+            ρmin, ρmax = extrema(ρk)
+            normed = (ρk .- ρmin) ./ (ρmax - ρmin + 1e-8)
+
+            c = colors[mod1(k, length(colors))]
+            cmap = [Makie.RGBAf(1 - a*(1-c.r), 1 - a*(1-c.g), 1 - a*(1-c.b), 0.45*a^2) for a in range(0,1;length=256)]
+
+            Makie.volume!(ax, extrema(X), extrema(Y), extrema(Z), normed;
+                algorithm=:absorption, absorption=5f0, colormap=cmap)
+        end
+    end
+
+    return fig
 end
 
 end
