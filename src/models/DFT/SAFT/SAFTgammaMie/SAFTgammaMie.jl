@@ -1,7 +1,7 @@
 using Clapeyron: SAFTgammaMieModel
 using Clapeyron: d_gc_av
 
-function DFTSystem(model::SAFTgammaMieModel, structure::DFTStructure, options::DFTOptions;
+function DFTSystem(model::SAFTgammaMieModel, structure::DFTStructure, options::DFTOptions = DFTOptions();
                    mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
     model = expand_model(model, mol_structure)
     species = get_species(model, structure)
@@ -12,7 +12,18 @@ function DFTSystem(model::SAFTgammaMieModel, structure::DFTStructure, options::D
     return DFTSystem(model, species, structure, fields, nothing, propagator, options, chunksize)
 end
 
-function DFTSystem(model::SAFTgammaMieModel, structure::DFTStructure, external_field, options::DFTOptions;
+function DFTSystem(model::SAFTgammaMieModel, structure::DFTStructure, external_field::ExternalFieldModel, options::DFTOptions = DFTOptions();
+                   mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
+    model = expand_model(model, mol_structure)
+    species = get_species(model, structure)
+    fields = get_fields(model, species, structure, options.device)
+    propagator = get_propagator(model, species, structure, options.device)
+    NF = compute_field_len(fields,dimension(structure))
+    chunksize = Val{NF}()
+    return DFTSystem(model, species, structure, fields, [external_field], propagator, options, chunksize)
+end
+
+function DFTSystem(model::SAFTgammaMieModel, structure::DFTStructure, external_field::Vector{ExternalFieldModel}, options::DFTOptions = DFTOptions();
                    mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
     model = expand_model(model, mol_structure)
     species = get_species(model, structure)
@@ -22,6 +33,7 @@ function DFTSystem(model::SAFTgammaMieModel, structure::DFTStructure, external_f
     chunksize = Val{NF}()
     return DFTSystem(model, species, structure, fields, external_field, propagator, options, chunksize)
 end
+
 
 
 struct SAFTgammaMieSpecies <: DFTSpecies

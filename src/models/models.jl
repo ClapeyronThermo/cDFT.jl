@@ -197,7 +197,21 @@ function preallocate_model(system::ElectrolyteDFTSystem, ρ)
     params, nc = preallocate_params(system)
 
     # Electrolyte uses its own f_res path; forward-mode batch not yet supported
-    fwd_cache = nothing
+    if system.options.ad_mode === :forward
+        batch = nf * nc
+        dn_seeds = ntuple(Val(batch)) do k
+            f_idx = (k - 1) ÷ nc + 1
+            c_idx = (k - 1) % nc + 1
+            seed = allocate(backend, FP, ngrid..., nf, nc)
+            fill!(seed, 0)
+            fill!(selectdim(selectdim(seed, nd+1, f_idx), nd+1, c_idx), 1)
+            seed
+        end
+        df_outs   = ntuple(_ -> allocate(backend, FP, ngrid...), Val(batch))
+        fwd_cache = (dn_seeds, df_outs, Val(batch))
+    else
+        fwd_cache = nothing
+    end
 
     return n, δf, fft_buf, in_buf, out_buf, plan, iplan, params, f_val, δf_val, nc, nd, fwd_cache
 end

@@ -21,7 +21,7 @@ function ElectrolyteDFTSystem(model::ElectrolyteModel, structure::DFTStructure, 
 
     typed_fields = tuple(fields...)
 
-    propagator = get_propagator(model.neutralmodel, species, structure)
+    propagator = get_propagator(model.neutralmodel, species, structure, options.device, FP)
 
     external_field = [external_field, ElectrostaticPotential(model, structure, options.device, FP)]
 
