@@ -1,10 +1,19 @@
 push!(LOAD_PATH,"../src/")
-using Documenter,cDFT
+using Documenter, DocumenterVitepress, Clapeyron, cDFT
 
 makedocs(sitename = "cDFT.jl",
-format = Documenter.HTML(
-    canonical = "https://ClapeyronThermo.github.io/cDFT.jl/"),
+format = DocumenterVitepress.MarkdownVitepress(
+    repo = "github.com/ClapeyronThermo/cDFT.jl",
+    devbranch = "main",
+    devurl = "dev"),
 warnonly = Documenter.except(),
+# cDFT re-exports/documents several bindings (e.g. `PCSAFT`) that are really Clapeyron's own
+# types. Clapeyron is installed via Pkg.add (a registry tarball, no local .git), so
+# Documenter can't auto-detect a remote to build "view source" links from — register it
+# manually (branch is a placeholder for URL construction only, not load-bearing).
+remotes = Dict(
+    dirname(dirname(pathof(Clapeyron))) => (Documenter.Remotes.GitHub("ClapeyronThermo", "Clapeyron.jl"), "master"),
+),
     authors = "Pierre J. Walker and Andrés Riedemann.",
     pages = [
         "Home" => "index.md",
@@ -40,6 +49,10 @@ warnonly = Documenter.except(),
         "FAQ" => "faq.md",
         ])
 
-        deploydocs(;
-    repo="github.com/ClapeyronThermo/cDFT.jl.git",
+        DocumenterVitepress.deploydocs(;
+    repo = "github.com/ClapeyronThermo/cDFT.jl",
+    target = joinpath(@__DIR__, "build"),
+    branch = "gh-pages",
+    devbranch = "main",
+    push_preview = true,
 )
