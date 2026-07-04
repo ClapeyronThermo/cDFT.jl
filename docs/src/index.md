@@ -53,12 +53,12 @@ inhomogeneous calculation — the two packages are meant to be used together.
 With cDFT you can compute density profiles, surface/interfacial tensions and adsorption
 isotherms for fluids next to walls, in pores, around solutes, at vapour-liquid and
 liquid-liquid interfaces, in microphase-separated copolymer melts, and for electrolytes
-near charged surfaces — in 1D, 2D or 3D, on the CPU or GPU, and (via Dynamic DFT) as a
+near surfaces — in 1D, 2D or 3D, on the CPU or GPU, and (via Dynamic DFT) as a
 function of time as well as space.
 
 ## Quick start guide
 
-### Installation
+### Minimal Installation
 
 ```julia
 using Pkg
