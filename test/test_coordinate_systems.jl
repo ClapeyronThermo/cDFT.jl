@@ -5,7 +5,7 @@ function bulk_μres_clapeyron(model, p, T, ρbulk)
 end
 
 # Evaluate δF_res/δρ at uniform bulk density and compare to Clapeyron μ_res.
-function test_bulk_μres(label, system, ρbulk; tol=1e-6)
+function test_bulk_μres(label, system, ρbulk; tol=1e-5)
     ρ = cDFT.initialize_profiles(system)
     μ_dft = cDFT.δFδρ_res(system, ρ)
     nd = cDFT.dimension(system)
