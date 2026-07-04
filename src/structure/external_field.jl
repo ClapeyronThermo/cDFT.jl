@@ -1,5 +1,5 @@
 include("external_fields/steele.jl")
-include("external_fields/lj.jl")
+# include("external_fields/lj.jl")
 
 evaluate_external_field!(system::DGTSystem, ρ, δfδρ_res, ::Nothing) = nothing
 
