@@ -6,13 +6,33 @@ Integrates a collection of points `f`, with constant `dz`, using simpson rule.
 
 """
 ∫(f,dz) = _∫(f,dz)
+
+"""
+    ∫(f, structure::DFTStructure)
+
+Coordinate-aware integral of `f` (sampled on `structure`'s grid) over the physical
+domain. For Cartesian structures this is Simpson's rule with the structure's uniform
+grid spacing (unchanged behavior, just re-routed through `structure_dz`). For
+spherical/cylindrical structures, this uses `Hankel.integrateR` (the radial quadrature
+matched to the structure's `QDHT`, which already incorporates the `r`/`r²` Jacobian)
+times the angular factor `Hankel.integrateR` itself omits (`4π` for a full sphere, `2π`
+for a cylinder's circular cross-section).
+"""
+∫(f, structure::DFTStructureCart) = ∫(f, structure_dz(structure))
+
+function ∫(f, structure::Union{DFTStructureSphr,DFTStructureCyl})
+    Q = radial_transform(structure)
+    angular = structure isa DFTStructureSphr ? 4π : 2π
+    return angular * Hankel.integrateR(f, Q)
+end
 #function _∫(f::AbstractArray,dz::Number,lastidx)
 #    return 1/3*dz*(f[1]+f[end]+4*sum(@view(f[2:2:end-1]))+2*sum(@view(f[3:2:end-1])))
 #end
 
-function _∫(f::AbstractArray{T}, dz) where {T<:AbstractFloat}
-    FT = promote_type(T, typeof(first(dz)))
-    ∑f = zero(FT)
+_∫(f::AbstractArray, dz) = _∫(Array(f), dz)
+
+function _∫(f::Array{T},dz) where T<:Real
+    ∑f = zero(typeof(first(dz)))
     for i in CartesianIndices(size(f))
         k = Tuple(i)
         # check if the indices in each dimension is even or odd
@@ -22,14 +42,6 @@ function _∫(f::AbstractArray{T}, dz) where {T<:AbstractFloat}
 
     ∑f *= FT(prod(dz ./ 3))
     return ∑f
-end
-
-function convolve!(result, profile, kernel, P, iP, buf_r, buf_c)
-    buf_r .= profile                   # copy real profile into real input buffer
-    mul!(buf_c, P,  buf_r)             # R2C FFT: buf_r → buf_c (no allocation)
-    buf_c .*= kernel                   # multiply by half-complex kernel in-place
-    mul!(buf_r, iP, buf_c)             # C2R IFFT: buf_c → buf_r (no allocation)
-    result .= buf_r                    # copy real result into output (no temporary)
 end
 
 """
@@ -82,4 +94,34 @@ function simpson_weights(ngrid::Tuple, dz, options::DFTOptions)
         weights .*= reshape(w1d[d], shape...)
     end
     return Adapt.adapt(options.device, weights)
+end
+function convolve!(result, profile, kernel, P, iP, buf)
+    if profile !== buf
+        buf .= complex.(profile)
+    end
+    P * buf
+    elmul!(buf, buf, kernel)
+    iP * buf
+    result .= real.(buf)
+end
+
+"""
+    convolve!(result, profile, kernel, P::Hankel.QDHT, iP::Hankel.QDHT, buf)
+
+Radial (spherical/cylindrical) analogue of the FFT-based `convolve!` above, using a
+quasi-discrete Hankel transform in place of the FFT. Unlike `plan_fft!`, `Hankel.QDHT`'s
+`mul!`/`ldiv!` cannot alias their input/output arrays, so a distinct scratch array `tmp`
+is used for the k-space intermediate. `P` and `iP` are always the same `QDHT` object
+(see `build_transform`) — there is no separate "inverse plan" the way `inv(plan_fft!(...))`
+is needed for FFTW.
+"""
+function convolve!(result, profile, kernel, P::Hankel.QDHT, iP::Hankel.QDHT, buf)
+    if profile !== buf
+        buf .= profile
+    end
+    tmp = similar(buf)
+    LinearAlgebra.mul!(tmp, P, buf)
+    tmp .*= kernel
+    LinearAlgebra.ldiv!(buf, iP, tmp)
+    result .= buf
 end

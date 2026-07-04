@@ -12,5 +12,9 @@ Depth = 1
 ## Types
 ```@docs
 cDFT.DFTOptions
-cDFT.CPU
+```
+
+## Functions
+```@docs
+cDFT.fptype
 ```

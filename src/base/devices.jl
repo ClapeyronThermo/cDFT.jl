@@ -1,48 +1,47 @@
 import KernelAbstractions: Backend, get_backend, synchronize
 using Base: ScopedValue
 
-# Default float precision per backend.
-# Metal does not support Float64, so GPU backends default to Float32.
-# Users can override via the `precision` keyword of DFTOptions.
-_default_precision(::CPU)     = Float64
-_default_precision(::Backend) = Float32
 
 """
-    DFTOptions(device, solver; precision)
+    DFTOptions(device, ad_mode::Symbol=:forward; precision::Type{FP}=Float64)
 
-Settings for convergence algorithms and the compute device.
-
-# Arguments
-- `device`: CPU or GPU backend (unpinned CPU by default).
-- `solver`: Fixed-point solver (`AndersonFixPoint` by default).
-
-# Keyword Arguments
-- `precision`: Element type for device arrays (`Float32` or `Float64`).
-  Defaults to `Float64` on CPU and `Float32` on GPU backends (Metal does not
-  support Float64). CUDA and ROCm support both; pass `precision=Float64` to
-  opt into double precision on those backends.
-
-# Examples
+A struct which includes all the settings that need to be set for the convergence algorithms and devices used:
+- `device`: Specification of either CPU (pinned or un-pinned) or GPU devices. (unpinned CPU by default)
+- `ad_mode`: Either `:forward` (default) or `:reverse`, specifying which automatic-differentiation mode Enzyme should use when differentiating the free-energy functional.
+- `precision`: The floating-point type (e.g. `Float64`, `Float32`) used to allocate and run the DFT calculation, retrievable via `fptype(options)`.
+Example usage:
 ```julia
-options = DFTOptions()                                    # CPU, Float64
-options = DFTOptions(CUDABackend())                       # CUDA, Float32
-options = DFTOptions(CUDABackend(); precision=Float64)    # CUDA, Float64
-options = DFTOptions(MetalBackend())                      # Metal, Float32
+julia> options = DFTOptions()
+
+julia> using ThreadPinning
+
+julia> options = DFTOptions(CPU(4, [0,1,12,13]))
+
+julia> options = DFTOptions(CPU(); precision = Float32)
 ```
 """
-struct DFTOptions{D, S, T<:AbstractFloat}
-    device    :: D
-    solver    :: S
-    precision :: Type{T}
+struct DFTOptions{D, FP<:AbstractFloat}
+    device::D
+    ad_mode::Symbol   # :reverse (default) or :forward
+
+    function DFTOptions(device::D, ad_mode::Symbol = :forward; precision::Type{FP} = Float64) where {D, FP<:AbstractFloat}
+        return new{D,FP}(device, ad_mode)
+    end
 end
 
-function DFTOptions(device::Backend, solver; precision::Type{<:AbstractFloat}=_default_precision(device))
-    return DFTOptions(device, solver, precision)
-end
+DFTOptions() = DFTOptions(CPU(; static=true))
+DFTOptions(device::Backend; ad_mode::Symbol = :forward, precision::Type{FP} = Float64) where FP<:AbstractFloat =
+    DFTOptions(device, ad_mode; precision)
 
-function DFTOptions(device::Backend; precision::Type{<:AbstractFloat}=_default_precision(device))
-    return DFTOptions(device, AndersonFixPoint(), precision)
-end
+"""
+    fptype(options::DFTOptions)
+
+Return the floating-point type (`Float64` by default) that `options` was configured with via the `precision` keyword, used throughout the DFT calculation to allocate arrays and dispatch kernels at the requested precision.
+"""
+fptype(::DFTOptions{D,FP}) where {D,FP} = FP
+
+adapt_to_device(backend, ::Type{FP}, arr::AbstractArray) where FP<:AbstractFloat =
+    Adapt.adapt(backend, FP.(arr))
 
 function DFTOptions(; precision::Type{<:AbstractFloat}=Float64)
     return DFTOptions(CPU(; static=true), AndersonFixPoint(), precision)
@@ -60,12 +59,13 @@ is_metal_backend(backend) = nameof(typeof(backend)) == :MetalBackend
 
 function preallocate(system, ρ)
     backend = system.options.device
-    
+    FP = fptype(system.options)
+
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(ρ,nd+1)
 
-    δfδρ_res = allocate(backend, Float64, ngrid...,nb)
+    δfδρ_res = allocate(backend, FP, ngrid...,nb)
 
     cache_model = preallocate_model(system, ρ)
 
@@ -76,44 +76,6 @@ function preallocate(system, ρ)
     return δfδρ_res, cache_model, cache_external, cache_propagator
 end
 
-function preallocate_model(system, ρ)
-    backend = system.options.device
-    
-    nf = length_fields(system)
-    ngrid = system.structure.ngrid
-    nd = length(ngrid)
-    nb = size(ρ,nd+1)
-    n = allocate(CPU(), Float64, ngrid...,nf,nb)
-    δf = allocate(CPU(), Float64, ngrid...,nf,nb)
-
-    fft_buf = allocate(backend, Float64, ngrid...,nf,nb)
-
-    in_buf = allocate(backend, ComplexF64, ngrid...)
-    out_buf = similar(in_buf)              #
-
-    tmp = similar(in_buf)
-    if backend isa CPU
-        plan = plan_fft!(tmp, 1:length(ngrid); num_threads=Threads.nthreads())
-    else
-        plan = plan_fft!(tmp, 1:length(ngrid))
-    end
-
-    iplan = inv(plan)
-
-    f(x) = f_res(system,system.model,x)
-    idx_first = ntuple(Returns(1),nd)
-    n_first = @view(n[idx_first...,:,:])
-
-    chunksize = ForwardDiff.Chunk(system)
-
-    first_config = ForwardDiff.GradientConfig(f, n_first, chunksize)
-
-    cache_pool = Channel{typeof(first_config)}(Threads.nthreads())
-    for _ in 1:Threads.nthreads()
-        put!(cache_pool, ForwardDiff.GradientConfig(f, n_first, chunksize))
-    end
-    return n, δf, fft_buf, in_buf, out_buf, plan, iplan, f, cache_pool
-end
 
 function preallocate_external_potential(system, ρ)
     backend = system.options.device
@@ -129,16 +91,11 @@ function preallocate_external_potential(system, ρ)
     for external_field in external_fields
     
         if external_field isa ElectrostaticPotentialModel
-            Vext = similar(selectdim(ρ, nd+1, 1), ComplexF64)
+            CT = transform_eltype(system.structure, fptype(system.options))
+            Vext = similar(selectdim(ρ, nd+1, 1), CT)
+            plan, iplan = build_transform(system.structure, Vext, nd, backend)
 
-            if backend isa CPU
-                plan = plan_fft!(Vext, 1:length(ngrid); num_threads=Threads.nthreads())
-            else
-                plan = plan_fft!(Vext, 1:length(ngrid))
-            end
-
-            
-            push!(cache_external, (plan, inv(plan), Vext))
+            push!(cache_external, (plan, iplan, Vext))
         else
             # Vext = allocate(backend, Float64, system.structure.ngrid...)
 
@@ -160,5 +117,4 @@ function preallocate_propagator(system, ρ)
     return preallocate_propagator(system, propagtor, ρ, backend)
 end
 
-
-export CPU, DFTOptions
+export CPU, DFTOptions, fptype

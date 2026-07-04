@@ -6,26 +6,32 @@ authors = ["Pierre Walker <pjwalker@caltech.edu>"]
 [deps]
 AbstractFFTs = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
-ChemicalIdentifiers = "fa4ea961-1416-484e-bda2-883ee1634ba5"
 Clapeyron = "7c7805af-46cc-48c9-995b-ed0ed2dc909a"
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
-ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-GCIdentifier = "b7ea765e-cbac-4e4a-9b0d-5427cc302506"
+Hankel = "74863788-d124-456e-a676-9b76578dd39e"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
 NLSolvers = "337daf1e-9722-11e9-073e-8b9effe078ba"
-ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
-SIAMFANLEquations = "084e46ad-d928-497d-ad5e-07fa361a48c4"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [weakdeps]
+ChemicalIdentifiers = "fa4ea961-1416-484e-bda2-883ee1634ba5"
+GCIdentifier = "b7ea765e-cbac-4e4a-9b0d-5427cc302506"
+LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 ThreadPinning = "811555cd-349b-4f26-b7bc-1f208b848042"
 
 [extensions]
+GCIdentifierCDFTExt = ["GCIdentifier", "ChemicalIdentifiers"]
+LaTeXStringscDFTExt = "LaTeXStrings"
+MakiecDFTExt = "Makie"
 PlotscDFTExt = "Plots"
+SciMLBasecDFTExt = "SciMLBase"
 ThreadPinningcDFTExt = "ThreadPinning"
 
 [compat]
@@ -34,22 +40,22 @@ Adapt = "4.5.0"
 BenchmarkTools = "1.6.3"
 ChemicalIdentifiers = "0.1"
 Clapeyron = "0.6.12"
+DelimitedFiles = "1.9.1"
+Enzyme = "0.13.150"
 FFTW = "1.8.0"
-ForwardDiff = "^0.10, 1"
 GCIdentifier = "0.3"
+Hankel = "0.5.10"
 KernelAbstractions = "0.9.40"
+LaTeXStrings = "1.4.0"
 LinearAlgebra = "1"
-Metal = "1.9.3"
+Makie = "0.24.12"
 NLSolvers = "0.5"
-Plots = "1"
-ReverseDiff = "1.16.2"
-SIAMFANLEquations = "1.0.2"
+Plots = "1.41.6"
 StaticArrays = "^1.5.9"
-ThreadPinning = "0.7, 1"
 julia = "1.6"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["Test", "GCIdentifier", "ChemicalIdentifiers"]

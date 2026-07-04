@@ -25,9 +25,6 @@ function converge!(system::AbstractcDFTSystem,ρ)
         ln_x = reshape(ln_x, (ngrid..., nbeads))
         ln_Gx = reshape(ln_G, (ngrid..., nbeads))
 
-        ln_x = Adapt.adapt(device, ln_x)
-        ln_Gx = Adapt.adapt(device, ln_Gx)
-        
         ρ .= exp.(ln_x)
          
 
@@ -66,13 +63,9 @@ function converge!(system::AbstractcDFTSystem,ρ)
         end
 
         clamp!(ln_Gx, -100, Inf)
-        
-        ln_G = vec(ln_Gx)
-        # println(ln_G)
-        # If any < -100, set to -100 to avoid overflow
 
-        ln_G = Adapt.adapt(CPU(), ln_G)
-        
+        ln_G = vec(ln_Gx)
+
         return ln_G
     end
 
@@ -80,13 +73,11 @@ function converge!(system::AbstractcDFTSystem,ρ)
     f(ln_x) = obj(system, ln_GX0, ln_x)
     f!(ln_G, ln_x) = obj(system, ln_G, ln_x)
 
-    ln_X0 = Adapt.adapt(CPU(), vec(log.(ρ)))
+    ln_X0 = vec(log.(ρ))
 
-    ρ_new = SIAMFANLEquations.aasol(f!, ln_X0, 0, zeros(length(ln_X0),4); beta=1e-3, rtol=1e-1, atol=1e-1, maxit=1000)
-    ρ_new = SIAMFANLEquations.aasol(f!, ρ_new.solution, 5, zeros(length(ln_X0),14); beta=1e-3, rtol=1e-4, atol=1e-4, maxit=10000)
-    # println(ρ_new.history)
+    ρ_new = aasol(f!, ln_X0, 0, similar(ln_X0, length(ln_X0), 4); beta=1e-3, rtol=1e-4, atol=1e-4, maxit=10000, picard_maxit=1000, picard_beta = 1e-3, picard_rtol=1e-1, picard_atol=1e-1)
 
-    ρ .= Adapt.adapt(device, reshape(exp.(ρ_new.solution),(ngrid...,nbeads)))
+    ρ .= reshape(exp.(ρ_new.solution), (ngrid..., nbeads))
 end
 
 export converge!

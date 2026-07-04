@@ -29,31 +29,27 @@ function surface_tension(model::EoSModel, T, x = [1.0])
 end
 
 function surface_tension(system::AbstractcDFTSystem,ρ)
+    ρ = Array(ρ)
     model = system.model
     ngrid = system.structure.ngrid
     nd = dimension(system)
-    # bounds = system.structure.bounds
     _bounds = system.structure.bounds
-
-    dz = structure_dz(system.structure)
 
     F = free_energy(system,ρ)
 
-    (p, T) = system.structure.conditions
-    n = zeros(length(model))
-    
+    (pressure, temperature) = system.structure.conditions
     ρl = system.structure.ρbulk
     x = ρl/sum(ρl)
     vl = 1/sum(ρl)
 
-    μ = Clapeyron.VT_chemical_potential(model,vl,T,x)
+    μ = Clapeyron.VT_chemical_potential(model,vl,temperature,x)
     chem_pot_term = 0.
     for i in @comps
         for k in @chain(i)
-            chem_pot_term += μ[i]*∫(ρ[:,k],dz)/system.species.nbeads[i]
+            chem_pot_term += μ[i]*∫(ρ[:,k],system.structure)/system.species.nbeads[i]
         end
     end
-    return F*k_B*T-chem_pot_term+p*∫(ones(only(ngrid...)),dz)
+    return F*k_B*temperature-chem_pot_term+pressure*∫(ones(only(ngrid...)),system.structure)
 end
 
 export surface_tension

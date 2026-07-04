@@ -2,12 +2,6 @@ Manifest.toml
 
 notebook
 .vscode
-CLAUDE.md
-src/propagator/DGCTHEORY.md
-src/models/SCFT/SCFTTHEORY.md
-.mcp.json
-.swarm
-.claude
-.claude-flow
-.claude*
-TUNING.md
+/benchmark/*.h5
+/docs/build/*
+/docs/node_modules/*

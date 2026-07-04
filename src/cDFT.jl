@@ -1,7 +1,21 @@
+"""
+    cDFT
+
+A comprehensive library of classical Density Functional Theory (cDFT) models, along with a simple framework for developing your own. `cDFT` builds on top of [Clapeyron.jl](https://github.com/ClapeyronThermo/Clapeyron.jl) models (`PCSAFT`, `SAFTVRMie`, `SAFTgammaMie`, electrolyte models, ...) to compute inhomogeneous density profiles, surface/interfacial tensions and adsorption isotherms.
+
+Example usage:
+```julia
+julia> using Clapeyron, cDFT
+
+julia> model = PCSAFT(["water","octane"])
+
+julia> interfacial_tension(model,1e5,298.15,[0.5,0.5])
+```
+"""
 module cDFT
 
 using LinearAlgebra
-using ForwardDiff, NLSolvers, FFTW, LinearAlgebra
+using NLSolvers, FFTW, LinearAlgebra
 import AbstractFFTs: Plan
 using Clapeyron
 using Clapeyron: d, N_A, k_B, R̄, e_c, ϵ_0
@@ -12,10 +26,10 @@ using Clapeyron: issite, compute_index, complement_index, indices, diagvalues
 import Clapeyron.Solvers
 import Clapeyron: ElectrolyteModel
 using Clapeyron: SingleComp, PeTSModel, epsilon_LorentzBerthelot!
-using GCIdentifier, ChemicalIdentifiers
 using StaticArrays
-using SIAMFANLEquations
-using KernelAbstractions, Adapt
+# using SIAMFANLEquations
+using KernelAbstractions, Adapt, Enzyme
+using Hankel
 
 #if !isdefined(Clapeyron,Symbol("@sum"))
     include("utils/sum.jl")
@@ -31,6 +45,7 @@ include("utils/expand_model.jl")
 include("utils/integrals.jl")
 include("utils/anderson.jl")
 include("utils/matmul.jl")
+include("utils/plot_labels.jl")
 
 include("fields/fields.jl")
 include("models/models.jl")
@@ -43,5 +58,7 @@ include("methods/converge.jl")
 include("methods/surface_tension.jl")
 include("methods/interfacial_tension.jl")
 include("methods/adsorption.jl")
+
+export MolStructure, SMILESStructure, CustomStructure, smiles, custom_structure
 
 end

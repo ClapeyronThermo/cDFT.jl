@@ -10,9 +10,12 @@ end
 """
     DH(components::Vector{String})
 
-The PC-SAFT equation of state developed by Gross and Sadowski (2001). Our DFT implementation follows the work of Sauer and Gross (2017) which uses a Weighted Density Functional approach and does not use a chain propagator. The only additional information required in `DHSpecies` is the bead size at a given temperature.
+The (restricted primitive model) Debye-Hückel ion-ion electrostatic correction. This is
+used as the `ionmodel` of a Clapeyron `ElectrolyteModel` (e.g. `ePCSAFT`), together with a
+neutral bulk model, to build an [`ElectrolyteDFTSystem`](@ref cDFT.ElectrolyteDFTSystem).
+No chain propagator is required — ions are treated with an `IdealPropagator`.
 
-The bulk model can be obtained from Clapeyron. 
+The bulk model can be obtained from Clapeyron.
 """
 DH
 
@@ -28,13 +31,13 @@ end
 
 For a given `model`, obtain all of the fields that will be needed to perform the DFT calculation. This function should return a vector of `DFTField`s.
 """
-function get_fields(ionmodel::DHModel, species::DFTSpecies, structure::DFTStructure, device::Backend)
-    (p,T) = structure.conditions
+function get_fields(ionmodel::DHModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+    (pressure, temperature) = structure.conditions
     ρbulk = structure.ρbulk
     ngrid = structure.ngrid
     Z = species.charges
-    ω = structure_ω(structure, device)
-    κ = screening_length(ionmodel, 1., T, ρbulk, Z, dielectric_constant(ionmodel.RSPmodel, 1., T, ρbulk))
+    ω = structure_ω(structure, device, FP)
+    κ = screening_length(ionmodel, 1., temperature, ρbulk, Z, dielectric_constant(ionmodel.RSPmodel, 1., temperature, ρbulk))
     d = species.size
     return [SWeightedDensity(:∫ρdz,d/2 .+ 1/κ,ω,ngrid,device)]
 end
@@ -46,9 +49,9 @@ end
 For a given `model` and `structure`, define the relevant parameters for each species. These structs will contain additional information not present by default in the inital `model`, such as the bead size, the number of beads and the connectivity of the beads.
 """
 function get_species(ionmodel::DHModel,model::EoSModel,charges::Vector{Int64},structure::DFTStructure)
-    (p,T) = structure.conditions
+    (pressure, temperature) = structure.conditions
     ρbulk = structure.ρbulk
-    size = get_sigma(ionmodel, 1., T, ρbulk, model)
+    size = get_sigma(ionmodel, 1., temperature, ρbulk, model)
     nc = length(ionmodel)
     return DHSpecies(ones(Int64,nc),charges,size,ρbulk)
 end
@@ -58,42 +61,82 @@ end
 
 For a given `model`, define the relevant propagator. 
 """
-function get_propagator(model::DHModel, species::DFTSpecies, structure::DFTStructure)
+function get_propagator(model::DHModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     return IdealPropagator()
 end
 
+function preallocate_params(system::ElectrolyteDFTSystem, model::DHModel)
+    nd         = dimension(system)
+    FP         = fptype(system.options)
+    NF_neutral = compute_field_len(Base.front(system.fields), nd)
+    temperature = system.structure.conditions[2]
+    ρbulk_ion  = system.ion_species.bulk_density
+    eps_r      = FP(dielectric_constant(model.RSPmodel, 1., temperature, ρbulk_ion))
 
-function f_res(system::ElectrolyteDFTSystem, model::DHModel,n)
-    return f_dh(system,model,n)
+    nc        = length(model)
+    Z_vec     = system.ion_species.charges
+    σ_vec     = system.ion_species.size
+    width_vec = last(system.fields).width
+
+    Z_t = ntuple(i -> i <= nc ? FP(Z_vec[i]) : zero(FP), Val(10))
+    σ_t = ntuple(i -> i <= nc ? FP(σ_vec[i]) : zero(FP), Val(10))
+    w_t = ntuple(i -> i <= nc ? FP(width_vec[i]) : zero(FP), Val(10))
+
+    return (;
+        dh_eps_r      = eps_r,
+        dh_Z          = Z_t,
+        dh_sigma      = σ_t,
+        dh_width      = w_t,
+        dh_nf_neutral = Val(NF_neutral),
+    )
 end
 
-function f_dh(system::ElectrolyteDFTSystem, model::DHModel,n)
-    (_,T) = system.structure.conditions
-    σ = system.ion_species.size
-    Z = system.ion_species.charges
-    ρ = n ./ system.fields[end].width /2 ./ N_A
-
-    ϵ_r = dielectric_constant(model.RSPmodel, 1., T, ρ)
-    
-    κ = screening_length(model, 1., T, ρ, Z, ϵ_r)
-    res = zero(Base.promote_eltype(κ,σ))
-    count = 0
-    nc = length(model)
-    for i in 1:nc
-        Zi = Z[i]
-        if Z[i] != 0 && !iszero(Clapeyron.primalval(ρ[i]))
-            count +=1
-            χi = dh_term(σ[i]*κ)
-            res +=ρ[i]*Zi*Zi*χi
-        end
-    end
-    s = e_c*e_c/(4π*ϵ_0*ϵ_r*k_B*T) 
-    if iszero(count)
-        return -1*s*res
-    end
-    return -1*s*res*κ*N_A
+@inline function f_res(::Type{M}, kk, out, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: DHModel}
+    out[kk] += f_dh(M, kk, n, params, T, Val(NC), params.dh_nf_neutral)
+    return nothing
 end
 
+"""
+GPU/Enzyme-compatible Debye-Hückel free energy density at grid point `kk`.
+
+`NF_NEUTRAL` is the number of neutral-model field slots in `n`; the DH field
+is at index `NF_NEUTRAL + 1`.  Neutral components (Z=0) contribute zero to
+`I` and `res` automatically via the Zᵢ² factor — no branching needed.
+`ε_r` is pre-computed at bulk density and stored in `params.dh_eps_r`.
+"""
+@inline function f_dh(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{NF_NEUTRAL}) where {M, NC, NF_NEUTRAL}
+    FP    = eltype(n)
+    F_dh  = NF_NEUTRAL + 1
+    ε_r   = params.dh_eps_r
+    _NA   = FP(N_A)
+    _ec   = FP(e_c)
+    _kB   = FP(k_B)
+    _ϵ0   = FP(ϵ_0)
+
+    I = zero(FP)
+    @inbounds for i in 1:NC
+        Zi = _nti(params.dh_Z, i)
+        wi = _nti(params.dh_width, i)
+        ρi = n[kk, F_dh, i] / (wi * 2) / _NA
+        I += ρi * Zi * Zi
+    end
+
+    s0 = _ec * _ec / (_ϵ0 * ε_r * _kB * T)
+    κ  = sqrt(s0 * _NA * I)
+
+    res = zero(FP)
+    @inbounds for i in 1:NC
+        Zi = _nti(params.dh_Z, i)
+        wi = _nti(params.dh_width, i)
+        σi = _nti(params.dh_sigma, i)
+        ρi = n[kk, F_dh, i] / (wi * 2) / _NA
+        χi = dh_term(σi * κ)
+        res += ρi * Zi * Zi * χi
+    end
+
+    s = _ec * _ec / (4 * π * _ϵ0 * ε_r * _kB * T)
+    return -s * res * κ * _NA
+end
 
 """
     length_scale(model::EoSModel)

@@ -7,31 +7,60 @@ end
 
 export ElectrostaticPotential
 
-function ElectrostaticPotential(model::ElectrolyteModel, structure::DFTStructure, backend::Backend)
-    (_, T) = structure.conditions
-    ρbulk = structure.ρbulk
-    ϵ_r = dielectric_constant(model.ionmodel.RSPmodel, 1., T, ρbulk)
-    ngrid = structure.ngrid     
-    nd = length(ngrid)
-   
-    ω = structure_ω(structure, backend)
+"""
+    ElectrostaticPotential(model::ElectrolyteModel, structure::DFTStructure, backend::Backend, ::Type{FP}=Float64)
 
-    ω_norm = allocate(CPU(), Float64, ngrid...)
+External field representing the mean-field electrostatic (Coulomb) interaction between charged species in a Cartesian `DFTStructure`. Precomputes the Fourier-space Coulomb Green's-function kernel (scaled by the solvent's dielectric constant) that is convolved with the ionic charge density profile during `evaluate_external_field!`. This field is added automatically whenever an `ElectrolyteDFTSystem` is constructed, and should not typically need to be constructed directly by users.
+"""
+function ElectrostaticPotential(model::ElectrolyteModel, structure::DFTStructure, backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+    (_, temperature) = structure.conditions
+    ρbulk = structure.ρbulk
+    ϵ_r = dielectric_constant(model.ionmodel.RSPmodel, 1., temperature, ρbulk)
+    ngrid = structure.ngrid
+    nd = length(ngrid)
+
+    ω = structure_ω(structure, backend, FP)
+
+    ω_norm = allocate(CPU(), FP, ngrid...)
 
     for kk in CartesianIndices(ngrid)
         ω_norm[kk] = norm(@view(ω[Tuple(kk)...,:]))
     end
 
-    ω̄ = allocate(backend, Float64, ngrid...)
+    ω̄ = allocate(backend, FP, ngrid...)
     copyto!(ω̄,Adapt.adapt(typeof(ω̄), ω_norm))
 
-    Ω = @. (ω̄ != 0.0) / (4*pi^2*ω̄^2 + (ω̄==0.0)) * N_A*e_c^2/ϵ_0/ϵ_r
+    _c  = FP(N_A * e_c^2 / ϵ_0) / FP(ϵ_r)
+    Ω   = @. (!iszero(ω̄)) / (FP(4)*π*π*ω̄^2 + iszero(ω̄)) * _c
+    return ElectrostaticPotential(ϵ_r, Ω)
+end
+
+"""
+    ElectrostaticPotential(model, structure::Union{DFTStructureSphr,DFTStructureCyl}, backend, FP)
+
+Spherical/cylindrical (QDHT-based) counterpart of the Cartesian `ElectrostaticPotential`
+constructor above. Reuses the same 3D-isotropic Coulomb Green's-function kernel formula
+unchanged — a `z`-translation-invariant 3D charge distribution only excites the `k_z=0`
+slice of the isotropic 3D Coulomb kernel, which has the same functional form, so no
+rescaling is needed between the spherical and cylindrical cases. `ω̄=0` never occurs on
+the QDHT grid, so the Cartesian version's zero-mode mask is unnecessary here.
+"""
+function ElectrostaticPotential(model::ElectrolyteModel, structure::Union{DFTStructureSphr,DFTStructureCyl}, backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+    backend isa CPU || error("Spherical/cylindrical coordinate systems are CPU-only for now")
+    (_, temperature) = structure.conditions
+    ρbulk = structure.ρbulk
+    ϵ_r = dielectric_constant(model.ionmodel.RSPmodel, 1., temperature, ρbulk)
+
+    ω̄ = structure_ω(structure, backend, FP).ω̄
+
+    _c = FP(N_A * e_c^2 / ϵ_0) / FP(ϵ_r)
+    Ω  = @. _c / (FP(4)*π*π*ω̄^2)
     return ElectrostaticPotential(ϵ_r, Ω)
 end
 
 
 function evaluate_external_field!(structure::DFTStructure,external_field::ElectrostaticPotentialModel,model::ElectrolyteModel,ρ,δfδρ_res,P,iP,Vext)
-    T = structure.conditions[2]
+    temperature = structure.conditions[2]
     Z = model.charge
     ngrid = structure.ngrid
     bounds = structure.bounds
@@ -55,7 +84,7 @@ function evaluate_external_field!(structure::DFTStructure,external_field::Electr
     convolve!(Vext, Vext, map, P, iP, Vext)
 
     for i in 1:nbeads
-        selectdim(δfδρ_res,nd+1,i) .+= Z[i]*Vext / k_B / T
+        selectdim(δfδρ_res,nd+1,i) .+= Z[i]*Vext / k_B / temperature
     end
 end
 

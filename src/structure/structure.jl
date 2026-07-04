@@ -3,13 +3,23 @@ cos_prof(x,start,stop,shift,coef) = 1/2*(start-stop)*cos((x-shift)*2π)*sqrt((1+
 
 # include("surface_tension.jl")
 # include("interfacial_tension.jl")
+include("transforms.jl")
 include("two_phase.jl")
+include("morphology.jl")
 include("external_field.jl")
 
 """
-    initialize_profiles(system::DFTSystem)
+    initialize_profiles(system::DFTSystem; noise::Real=0.0)
 
 Based on the system specifications, this function will initialize the density profiles for each of the species / beads in the model. The output will be an array of size `(ngrid,nb)` where `ngrid` is the number of grid points used and `nb` is the number of beads.
+
+If `noise` is nonzero, the profile is perturbed by independent, per-grid-point,
+per-bead multiplicative noise `ρ *= 1 + noise*U(-1,1)` — useful for seeding an unstable
+uniform profile (e.g. inside a miscibility gap) before a Dynamic DFT time evolution, since
+a perfectly uniform profile is otherwise an exact (if unstable) fixed point that never
+starts phase-separating on its own. Being multiplicative rather than additive, this keeps
+the perturbed density strictly positive everywhere for any `noise < 1`, regardless of the
+local (possibly near-zero) density.
 
 Example:
 ```julia
@@ -24,27 +34,44 @@ julia> structure = Uniform1DCart((1e5, 298.15), ρbulk, [0, 20L], 201)
 julia> system = DFTSystem(model, structure)
 
 julia> profiles = initialize_profiles(system)
+
+julia> profiles_perturbed = initialize_profiles(system; noise=0.01)  # for DDFT
 ```
 """
-function initialize_profiles(system::AbstractcDFTSystem)
-    ρ = initialize_profiles(system.model,system.structure,system.species,system.options.device)
+function initialize_profiles(system::AbstractcDFTSystem; noise::Real=0.0)
+    ρ = initialize_profiles(system.model,system.structure,system.species,system.options.device,fptype(system.options))
     if system.external_field == nothing
-        return ρ
+        # pass
     else
         for i in system.external_field
             if !(i isa ElectrostaticPotentialModel)
                  initialize_profiles!(system, i, ρ)
             end
         end
-        return ρ
+
+        if any(typeof.(system.external_field) .<: ElectrostaticPotentialModel)
+            ψ = find_ψ_const(system.structure, system.external_field[findfirst(typeof.(system.external_field) .<: ElectrostaticPotentialModel)], system.model, ρ) ./ k_B / system.structure.conditions[2]
+            Z = system.model.charge
+            ρ .*= exp.(-ψ*Z')
+        end
     end
+
+    if !iszero(noise)
+        FP = fptype(system.options)
+        ξ = adapt_to_device(system.options.device, FP, rand(FP, size(ρ)...))
+        ρ .*= 1 .+ FP(noise) .* (2 .* ξ .- 1)
+    end
+
+    clamp!(ρ, 1e-30, 1e30)
+
+    return ρ
 end
 
-function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species, device)
+function initialize_profiles(model::EoSModel,structure::Union{Uniform1DCart,Uniform1DSphr,Uniform1DCyl}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     ngrid = structure.ngrid
     ρbulk = structure.ρbulk
 
-    ρ = allocate(device, Float64, ngrid..., sum(species.nbeads))
+    ρ = allocate(device, FP, ngrid..., sum(species.nbeads))
 
     for i in @comps
         for j in @chain(i)
@@ -54,13 +81,29 @@ function initialize_profiles(model::EoSModel,structure::Uniform1DCart, species, 
     return ρ
 end
 
-function initialize_profiles(model::EoSModel,structure::Uniform3DCart, species, device)
+function initialize_profiles(model::EoSModel,structure::Uniform2DCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     nd = dimension(structure)
     ngrid = structure.ngrid
 
 
     ρbulk = structure.ρbulk
-    ρ = allocate(device, Float64, ngrid..., sum(species.nbeads))
+    ρ = allocate(device, FP, ngrid..., sum(species.nbeads))
+    for i in @comps
+        for j in @chain(i)
+            ρ[:,:,j] .= ρbulk[i]
+        end
+    end
+
+    return ρ
+end
+
+function initialize_profiles(model::EoSModel,structure::Uniform3DCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+    nd = dimension(structure)
+    ngrid = structure.ngrid
+
+
+    ρbulk = structure.ρbulk
+    ρ = allocate(device, FP, ngrid..., sum(species.nbeads))
     for i in @comps
         for j in @chain(i)
             ρ[:,:,:,j] .= ρbulk[i]
@@ -96,7 +139,7 @@ function structure_fftfreq(structure::DFTStructure)
     ω = fftfreq.(ngrid, f)
 end
 
-function structure_ω(structure::DFTStructure, device::Backend)
+function structure_ω(structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     ngrid = structure.ngrid
     nd = dimension(structure)
     ω̂ = structure_fftfreq(structure)  # ntuple of fftfreq vectors, one per dimension
@@ -104,12 +147,12 @@ function structure_ω(structure::DFTStructure, device::Backend)
     # Move each 1D frequency vector to GPU, then reshape for broadcasting
     # dim 1: (Nx,1,1,...), dim 2: (1,Ny,1,...), dim 3: (1,1,Nz,...) etc.
     ω_components = ntuple(nd) do i
-        vec = adapt(device, ComplexF64.(ω̂[i]))   # move to GPU
+        vec = adapt(device, Complex{FP}.(ω̂[i]))   # move to GPU
         shape = ntuple(d -> d == i ? ngrid[d] : 1, nd)  # e.g. (Nx,1,1) for i=1
         reshape(vec, shape)                               # ready to broadcast
     end
 
-    ω = allocate(device, ComplexF64, ngrid..., nd)
+    ω = allocate(device, Complex{FP}, ngrid..., nd)
 
     # Fill each α slice via broadcast — no scalar indexing
     for α in 1:nd
@@ -128,3 +171,25 @@ function structure_dz(structure::DFTStructure)
     end
     return ntuple(ff,nd)
 end
+
+function structure_ω(structure::Union{DFTStructureSphr,DFTStructureCyl}, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+    device isa CPU || error("Spherical/cylindrical coordinate systems are CPU-only for now")
+    Q = radial_transform(structure)
+    return RadialFrequency{FP,typeof(Q)}(Q, FP.(Q.k ./ (2π)))
+end
+
+"""
+    structure_r(structure)
+
+The real-space radial grid of a spherical/cylindrical structure, i.e. the (non-uniform,
+Bessel-zero-derived) sample points `Q.r` of its underlying `Hankel.QDHT`.
+"""
+structure_r(structure::Union{DFTStructureSphr,DFTStructureCyl}) = radial_transform(structure).r
+export structure_r
+
+function get_coords(structure::Union{DFTStructureSphr,DFTStructureCyl})
+    r = structure_r(structure)
+    return reshape(r, length(r), 1)
+end
+
+export get_coords, initialize_profiles

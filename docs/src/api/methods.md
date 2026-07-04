@@ -18,4 +18,5 @@ cDFT.converge!
 ```@docs
 cDFT.surface_tension
 cDFT.interfacial_tension
+cDFT.adsorption
 ```

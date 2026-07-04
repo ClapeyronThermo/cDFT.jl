@@ -4,12 +4,13 @@ using cDFT
 using Plots
 import Plots: Colors
 
+_maybe_texlabel(s, latex::Bool) = latex ? cDFT.texlabel(s) : s
 
-function Plots.plot(system::cDFT.AbstractcDFTSystem, profiles; x_units=:normalized, y_units=:normalized)
-    return Plots.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units)
+function Plots.plot(system::cDFT.AbstractcDFTSystem, profiles; x_units=:normalized, y_units=:normalized, latex=false)
+    return Plots.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units, latex=latex)
 end
 
-function Plots.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure1DCart, profiles; x_units=:normalized, y_units=:mass)
+function Plots.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure1DCart, profiles; x_units=:normalized, y_units=:mass, latex=false)
     structure = system.structure
     model = system.model
     if model isa cDFT.ElectrolyteModel
@@ -30,7 +31,8 @@ function Plots.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
                     ytickfontsize=12,
                     xlabelfontsize=14,
                     ylabelfontsize=14,
-                    legend_font=font(12))
+                    legend_font=font(12),
+                    fontfamily = latex ? "Computer Modern" : :default)
 
     ymax = 0.
     species_id = 1
@@ -72,12 +74,12 @@ function Plots.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
                 Y = profiles[:,k]
                 y_norm = " / (mol/m³)"
             end
-        
-            Plots.plot!(plt,X,Y,label="$name",linewidth=3)
+
+            Plots.plot!(plt,X,Y,label=_maybe_texlabel(name,latex),linewidth=3)
             ymax = max(ymax,maximum(Y))
         end
     end
-    
+
 
     if x_units == :normalized
         Plots.xlims!(plt,(bounds[1],bounds[2])./L)
@@ -94,18 +96,14 @@ function Plots.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
     end
 
     Plots.ylims!(plt,(0,1.1*ymax))
-    if typeof(system.structure) <: cDFT.DFTStructure1DSphr 
-        Plots.xlabel!(plt,"r / "*x_norm)
-    elseif typeof(system.structure) <: cDFT.DFTStructure1DCart
-        Plots.xlabel!(plt,"z / "*x_norm)
-    end
+    Plots.xlabel!(plt,_maybe_texlabel("z / "*x_norm,latex))
 
     if y_units == :normalized
-        Plots.ylabel!(plt,"ρσ³")
+        Plots.ylabel!(plt,_maybe_texlabel("ρσ³",latex))
     elseif y_units == :mass
-        Plots.ylabel!(plt,"ρ / (kg/m³)")
+        Plots.ylabel!(plt,_maybe_texlabel("ρ / (kg/m³)",latex))
     else
-        Plots.ylabel!(plt,"ρ / (mol/m³)")
+        Plots.ylabel!(plt,_maybe_texlabel("ρ / (mol/m³)",latex))
     end
 
     Plots.plot!(plt,legend=:topleft)
@@ -113,7 +111,105 @@ function Plots.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
     return plt
 end
 
-function Plots.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure2DCart, profiles; x_units=:normalized, y_units=:normalized)
+function Plots.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTStructure1DSphr,cDFT.DFTStructure1DCyl}, profiles; x_units=:normalized, y_units=:mass, latex=false)
+    structure = system.structure
+    model = system.model
+    if model isa cDFT.ElectrolyteModel
+        model = model.neutralmodel
+    end
+    species = system.species
+    nb = length(profiles)
+
+    bounds = structure.bounds
+
+    z = cDFT.structure_r(structure)
+    L = cDFT.length_scale(model)
+
+    plt = Plots.plot(grid=:off,
+                    framestyle=:box,
+                    foreground_color_legend = nothing,
+                    xtickfontsize=12,
+                    ytickfontsize=12,
+                    xlabelfontsize=14,
+                    ylabelfontsize=14,
+                    legend_font=font(12),
+                    fontfamily = latex ? "Computer Modern" : :default)
+
+    ymax = 0.
+    for i in cDFT.@comps
+        for k in cDFT.@chain(i)
+            if species.nbeads[i] > 1
+                species_name = model.components[i]
+                group_name = model.groups.flattenedgroups[k]
+                name = "$species_name $group_name"
+                norm_const = model.params.segment[k]*species.size[k]^3*cDFT.N_A
+            else
+                species_name = model.components[i]
+                name = "$species_name"
+                norm_const = model.params.segment[i]*species.size[i]^3*cDFT.N_A
+            end
+
+            if x_units == :normalized
+                X = z./L
+            elseif x_units == :angstrom
+                X = z.*1e10
+            elseif x_units == :nanometer
+                X = z.*1e9
+            else
+                X = z
+            end
+
+            if y_units == :normalized
+                Y = profiles[:,k].*norm_const
+                y_norm = "σ³"
+            elseif y_units == :mass
+                Mw = model.params.Mw[k]
+                Y = profiles[:,k].*Mw/1e3
+                y_norm = " / (kg/m³)"
+            elseif y_units == :angstrom
+                Y = profiles[:,k].*cDFT.N_A/1e30
+                y_norm = " / (kg/m³)"
+            else
+                Y = profiles[:,k]
+                y_norm = " / (mol/m³)"
+            end
+
+            Plots.plot!(plt,X,Y,label=_maybe_texlabel(name,latex),linewidth=3)
+            ymax = max(ymax,maximum(Y))
+        end
+    end
+
+    if x_units == :normalized
+        Plots.xlims!(plt,(bounds[1],bounds[2])./L)
+        x_norm = "σ"
+    elseif x_units == :angstrom
+        Plots.xlims!(plt,(bounds[1],bounds[2]).*1e10)
+        x_norm = "Å"
+    elseif x_units == :nanometer
+        Plots.xlims!(plt,(bounds[1],bounds[2]).*1e9)
+        x_norm = "nm"
+    else
+        Plots.xlims!(plt,(bounds[1],bounds[2]))
+        x_norm = "m"
+    end
+
+    Plots.ylims!(plt,(0,1.1*ymax))
+    Plots.xlabel!(plt,_maybe_texlabel("r / "*x_norm,latex))
+
+    if y_units == :normalized
+        Plots.ylabel!(plt,_maybe_texlabel("ρσ³",latex))
+    elseif y_units == :mass
+        Plots.ylabel!(plt,_maybe_texlabel("ρ / (kg/m³)",latex))
+    else
+        Plots.ylabel!(plt,_maybe_texlabel("ρ / (mol/m³)",latex))
+    end
+
+    Plots.plot!(plt,legend=:topleft)
+
+    return plt
+end
+
+function Plots.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure2DCart, profiles; x_units=:normalized, y_units=:normalized, latex=false)
     colors = palette(:tab10)
     structure = system.structure
     model = system.model
@@ -144,7 +240,8 @@ function Plots.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
                     ytickfontsize=12,
                     xlabelfontsize=14,
                     ylabelfontsize=14,
-                    legend_font=font(12))
+                    legend_font=font(12),
+                    fontfamily = latex ? "Computer Modern" : :default)
 
     ymax = 0.
     species_id = 1
@@ -200,7 +297,7 @@ function Plots.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
             #     y_norm = " / (mol/m³)"
             # end
             csalpha = cgrad([Colors.RGBA(colors[k].r, colors[k].g, colors[k].b, 0), Colors.RGBA(colors[k].r, colors[k].g, colors[k].b, 1)])
-            Plots.heatmap!(plt,X,Y,Z,label="$name", c=csalpha)
+            Plots.heatmap!(plt,X,Y,Z,label=_maybe_texlabel(name,latex), c=csalpha)
         end
     end
     
@@ -233,11 +330,8 @@ function Plots.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
         y_norm = "m"
     end
 
-    # if typeof(system.structure) <: cDFT.DFTStructure1DSphr 
-    #     Plots.xlabel!(plt,"r / "*x_norm)
-    # elseif typeof(system.structure) <: cDFT.DFTStructure1DCart
-    Plots.xlabel!(plt,"x / "*x_norm)
-    Plots.ylabel!(plt,"y / "*y_norm)
+    Plots.xlabel!(plt,_maybe_texlabel("x / "*x_norm,latex))
+    Plots.ylabel!(plt,_maybe_texlabel("y / "*y_norm,latex))
 
     # if y_units == :normalized
     #     Plots.ylabel!(plt,"ρσ³")
