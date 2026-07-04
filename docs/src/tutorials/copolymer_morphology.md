@@ -151,5 +151,4 @@ These structures only seed and converge a *static* profile at the box size you c
 they don't search for the equilibrium domain spacing itself (that would require sweeping
 the box size, or letting the pattern emerge dynamically). For the latter, starting from a
 near-uniform profile and letting the microphase pattern emerge on its own under
-[Dynamic DFT](@ref) is often more robust than assuming a symmetry up front, exactly as
-`examples/dynamic_dft_3d_copolymer.jl` does.
+[Dynamic DFT](@ref) is often more robust than assuming a symmetry up front.

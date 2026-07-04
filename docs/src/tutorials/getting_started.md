@@ -34,12 +34,14 @@ julia> ρbulk = [1/v]
 julia> L = cDFT.length_scale(model)  # a characteristic length (≈ σ) for choosing grid bounds
 ```
 
-Build the wall, then a 1D Cartesian structure spanning from the wall out to bulk fluid:
+Build the walls, then a 1D Cartesian structure:
 
 ```julia
-julia> surface = Steele(["graphite"])
+julia> width = 5L
 
-julia> structure = Uniform1DCart((p, T), ρbulk, [0.5L, 20L], 201)
+julia> surface = Steele(["graphite"], width)
+
+julia> structure = Uniform1DCart((p, T), ρbulk, [0.5L, width-0.5L], 201)
 ```
 
 Compose the system and converge it:
