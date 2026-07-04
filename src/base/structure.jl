@@ -113,17 +113,17 @@ function Uniform1DCart(conditions,ρbulk,bounds,ngrid::Int64)
 end
 
 """
-    Uniform1DCart(conditions::Tuple{Float64,Float64}, ρbulk, bounds::Vector{Float64}, ngrid::Int64)
+    Uniform3DCart(conditions::Tuple{Float64,Float64}, ρbulk, bounds::Matrix{Float64}, ngrid::Int64)
 
-The generic structure type used when trying to simulate a uniform system in 1D-cartesian coordinates. Contains:
+The generic structure type used when trying to simulate a uniform system in 3D-cartesian coordinates. Contains:
 - `conditions`: The p, T conditions of the system.
 - `ρbulk`: The bulk density of each species in the system.
-- `bounds`: Specifies the location of the bounds of the system.
-- `ngrids`: The number of grid points used to represent the density profile.
+- `bounds`: A 3×2 matrix specifying the bounds of the system along each dimension.
+- `ngrids`: The number of grid points used to represent the density profile along each dimension.
 This structure should generally be used to benchmark the DFT code against the bulk calculations.
 Example:
 ```julia
-julia> structure = Uniform1DCart((p, T) , ρbulk, [-10L, 10L], 201)
+julia> structure = Uniform3DCart((p, T), ρbulk, [-10L 10L; -10L 10L; -10L 10L], 51)
 ```
 """
 struct Uniform3DCart <: DFTStructure3DCart
@@ -138,17 +138,17 @@ function Uniform3DCart(conditions,ρbulk,bounds,ngrid::Int64)
 end
 
 """
-    Uniform1DCart(conditions::Tuple{Float64,Float64}, ρbulk, bounds::Vector{Float64}, ngrid::Int64)
+    Uniform2DCart(conditions::Tuple{Float64,Float64}, ρbulk, bounds::Matrix{Float64}, ngrid::Int64)
 
-The generic structure type used when trying to simulate a uniform system in 1D-cartesian coordinates. Contains:
+The generic structure type used when trying to simulate a uniform system in 2D-cartesian coordinates. Contains:
 - `conditions`: The p, T conditions of the system.
 - `ρbulk`: The bulk density of each species in the system.
-- `bounds`: Specifies the location of the bounds of the system.
-- `ngrids`: The number of grid points used to represent the density profile.
+- `bounds`: A 2×2 matrix specifying the bounds of the system along each dimension.
+- `ngrids`: The number of grid points used to represent the density profile along each dimension.
 This structure should generally be used to benchmark the DFT code against the bulk calculations.
 Example:
 ```julia
-julia> structure = Uniform1DCart((p, T) , ρbulk, [-10L, 10L], 201)
+julia> structure = Uniform2DCart((p, T), ρbulk, [-10L 10L; -10L 10L], 101)
 ```
 """
 struct Uniform2DCart <: DFTStructure2DCart
@@ -346,7 +346,19 @@ function TwoPhase2DHexCart(conditions,ρbulk,ρbulk2,bounds::Vector{Float64},ngr
     TwoPhase2DHexCart(conditions,ρbulk,ρbulk2,[bounds[1] bounds[2]; bounds[1] bounds[2]],(ngrid[1],ngrid[1]))
 end
 
-struct TwoPhase3DHexCart <: DFTStructure3DCart 
+"""
+    TwoPhase3DHexCart(conditions::Tuple{Float64,Float64}, ρbulk, ρbulk2, bounds::Vector{Float64}, ngrid::Tuple{Int64})
+
+The generic structure type used when trying to simulate a two-phase interface with hexagonal (cylindrical-domain) symmetry in 3D-cartesian coordinates (e.g. a hexagonally-packed array of cylindrical copolymer microdomains, extruded along the third, translationally-invariant dimension). Contains:
+- `conditions`: The p, T conditions at which the calculations are performed.
+- `ρbulk`: The bulk density of each species in the first phase (domain center).
+- `ρbulk2`: The bulk density of each species in the second phase (matrix).
+- `bounds`: Specifies the (cubic) bounds of the system; the same `[lb, ub]` is applied to all three dimensions.
+- `ngrids`: The number of grid points used along each dimension (same for all three).
+
+The profile is initialised as a radially-symmetric sigmoidal (`tanh_prof`) in the cross-section spanned by the first two dimensions, uniform along the third.
+"""
+struct TwoPhase3DHexCart <: DFTStructure3DCart
     conditions::Tuple{Float64,Float64}
     ρbulk::Vector{Float64}
     ρbulk2::Vector{Float64}
@@ -358,7 +370,19 @@ function TwoPhase3DHexCart(conditions,ρbulk,ρbulk2,bounds::Vector{Float64},ngr
     TwoPhase3DHexCart(conditions,ρbulk,ρbulk2,[bounds[1] bounds[2]; bounds[1] bounds[2]; bounds[1] bounds[2]],(ngrid[1],ngrid[1],ngrid[1]))
 end
 
-struct TwoPhase3DSphrCart <: DFTStructure3DCart 
+"""
+    TwoPhase3DSphrCart(conditions::Tuple{Float64,Float64}, ρbulk, ρbulk2, bounds::Vector{Float64}, ngrid::Tuple{Int64})
+
+The generic structure type used when trying to simulate a two-phase interface with spherical symmetry (e.g. a droplet or bubble) embedded in a 3D-cartesian box. Contains:
+- `conditions`: The p, T conditions at which the calculations are performed.
+- `ρbulk`: The bulk density of each species in the first phase (droplet/bubble interior).
+- `ρbulk2`: The bulk density of each species in the second phase (surrounding bulk).
+- `bounds`: Specifies the (cubic) bounds of the system; the same `[lb, ub]` is applied to all three dimensions.
+- `ngrids`: The number of grid points used along each dimension (same for all three).
+
+The profile is initialised as a radially-symmetric sigmoidal (`tanh_prof`) centered on the box, i.e. a sphere of the first phase surrounded by the second.
+"""
+struct TwoPhase3DSphrCart <: DFTStructure3DCart
     conditions::Tuple{Float64,Float64}
     ρbulk::Vector{Float64}
     ρbulk2::Vector{Float64}
@@ -370,7 +394,171 @@ function TwoPhase3DSphrCart(conditions,ρbulk,ρbulk2,bounds::Vector{Float64},ng
     TwoPhase3DSphrCart(conditions,ρbulk,ρbulk2,[bounds[1] bounds[2]; bounds[1] bounds[2]; bounds[1] bounds[2]],(ngrid[1],ngrid[1],ngrid[1]))
 end
 
+# ── Block-copolymer microphase morphologies ─────────────────────────────────
+#
+# Unlike the TwoPhase* structures above (one scalar profile per *component*,
+# transitioning between two bulk phases), these represent a single periodic unit cell of
+# a microphase-separated block-copolymer melt, in which *different groups within the same
+# component* (e.g. "A" vs "B" from a `custom_structure`) enrich in different spatial
+# domains. `core_groups` names which groups form the minority/core domain (spheres for
+# BCC, cylinders for Hex, the network for Gyroid, one set of layers for Lamellar); every
+# other group in the model is treated as the surrounding matrix. Requires a
+# group-contribution model (anything with `model.groups`, e.g. `HeterogcPCPSAFT`) — see
+# `src/structure/morphology.jl` for the seed-profile math.
+
+"""
+    LamellarStack1DCart(conditions, ρbulk, bounds::Vector{Float64}, ngrid::Int64; core_groups, amplitude=0.3)
+
+Seeds a periodic lamellar (alternating-layer) block-copolymer morphology in 1D-cartesian
+coordinates: `core_groups` enrich in one set of layers, every other group in the
+alternating layers, with period equal to the full box (`bounds`).
+"""
+struct LamellarStack1DCart <: DFTStructure1DCart
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    bounds::Vector{Float64}
+    ngrid::Tuple{Int64}
+    core_groups::Vector{String}
+    amplitude::Float64
+end
+
+function LamellarStack1DCart(conditions,ρbulk,bounds::Vector{Float64},ngrid::Int64; core_groups::Vector{String}, amplitude::Float64=0.3)
+    LamellarStack1DCart(conditions,ρbulk,bounds,(ngrid,),core_groups,amplitude)
+end
+
+"""
+    LamellarStack2DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64}; core_groups, amplitude=0.3)
+
+2D-cartesian counterpart of [`LamellarStack1DCart`](@ref cDFT.LamellarStack1DCart): layers
+alternate along the first dimension, uniform along the second.
+"""
+struct LamellarStack2DCart <: DFTStructure2DCart
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    bounds::Matrix{Float64}
+    ngrid::Tuple{Int64,Int64}
+    core_groups::Vector{String}
+    amplitude::Float64
+end
+
+function LamellarStack2DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3)
+    LamellarStack2DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude)
+end
+
+"""
+    LamellarStack3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=0.3)
+
+3D-cartesian counterpart of [`LamellarStack1DCart`](@ref cDFT.LamellarStack1DCart): layers
+alternate along the first dimension, uniform along the other two.
+"""
+struct LamellarStack3DCart <: DFTStructure3DCart
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    bounds::Matrix{Float64}
+    ngrid::Tuple{Int64,Int64,Int64}
+    core_groups::Vector{String}
+    amplitude::Float64
+end
+
+function LamellarStack3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3)
+    LamellarStack3DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude)
+end
+
+"""
+    HexLattice2DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64}; core_groups, amplitude=0.3)
+
+Seeds a periodic hexagonally-packed-cylinder block-copolymer morphology (2D cross-section):
+`core_groups` enrich into two cylindrical domains per unit cell, matching the standard
+rectangular 2-cylinder supercell that reproduces a true hexagonal lattice under periodic
+(FFT) boundary conditions on a Cartesian grid. `bounds`' second dimension should span
+`√3 ×` the first (a warning is emitted otherwise — this only affects the quality of the
+initial guess, not the correctness of a subsequently converged/evolved profile).
+"""
+struct HexLattice2DCart <: DFTStructure2DCart
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    bounds::Matrix{Float64}
+    ngrid::Tuple{Int64,Int64}
+    core_groups::Vector{String}
+    amplitude::Float64
+end
+
+function HexLattice2DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3)
+    Lx, Ly = bounds[1,2]-bounds[1,1], bounds[2,2]-bounds[2,1]
+    isapprox(Ly, sqrt(3)*Lx; rtol=0.05) || @warn "HexLattice2DCart: bounds[2] should span ≈√3×bounds[1] for a clean hexagonal supercell (got Ly/Lx=$(Ly/Lx)); the initial guess will be distorted."
+    HexLattice2DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude)
+end
+
+"""
+    HexLattice3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=0.3)
+
+3D-cartesian counterpart of [`HexLattice2DCart`](@ref cDFT.HexLattice2DCart): the hexagonal
+cylinder lattice is extruded, uniform, along the third dimension.
+"""
+struct HexLattice3DCart <: DFTStructure3DCart
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    bounds::Matrix{Float64}
+    ngrid::Tuple{Int64,Int64,Int64}
+    core_groups::Vector{String}
+    amplitude::Float64
+end
+
+function HexLattice3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3)
+    Lx, Ly = bounds[1,2]-bounds[1,1], bounds[2,2]-bounds[2,1]
+    isapprox(Ly, sqrt(3)*Lx; rtol=0.05) || @warn "HexLattice3DCart: bounds[2] should span ≈√3×bounds[1] for a clean hexagonal supercell (got Ly/Lx=$(Ly/Lx)); the initial guess will be distorted."
+    HexLattice3DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude)
+end
+
+"""
+    BCC3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=0.3)
+
+Seeds a periodic body-centered-cubic (BCC, Im-3m) sphere block-copolymer morphology:
+`core_groups` enrich into spheres at the corners and body-center of the cubic unit cell
+(`bounds`, expected cubic — a warning is emitted otherwise).
+"""
+struct BCC3DCart <: DFTStructure3DCart
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    bounds::Matrix{Float64}
+    ngrid::Tuple{Int64,Int64,Int64}
+    core_groups::Vector{String}
+    amplitude::Float64
+end
+
+function BCC3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3)
+    L = bounds[:,2] .- bounds[:,1]
+    isapprox(L[1],L[2];rtol=0.02) && isapprox(L[2],L[3];rtol=0.02) || @warn "BCC3DCart: bounds should be cubic (equal extent in all 3 dimensions) for a clean BCC unit cell; got extents $(L)."
+    BCC3DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude)
+end
+
+"""
+    Gyroid3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=0.3)
+
+Seeds a periodic gyroid (Ia-3d) block-copolymer morphology, using the standard Schoen
+gyroid level-set as the initial guess: `core_groups` enrich on one side of the level set
+(one of the two mutually-interpenetrating networks), the rest of the model on the other.
+`bounds` is expected cubic (a warning is emitted otherwise).
+"""
+struct Gyroid3DCart <: DFTStructure3DCart
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    bounds::Matrix{Float64}
+    ngrid::Tuple{Int64,Int64,Int64}
+    core_groups::Vector{String}
+    amplitude::Float64
+end
+
+function Gyroid3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3)
+    L = bounds[:,2] .- bounds[:,1]
+    isapprox(L[1],L[2];rtol=0.02) && isapprox(L[2],L[3];rtol=0.02) || @warn "Gyroid3DCart: bounds should be cubic (equal extent in all 3 dimensions) for a clean gyroid unit cell; got extents $(L)."
+    Gyroid3DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude)
+end
+
 export Uniform1DCart, ExternalField1DCart
 export Uniform1DSphr, Uniform1DCyl
 export TwoPhase1DCart, TwoPhase2DLamCart, TwoPhase3DLamCart
 export TwoPhase2DHexCart
+export LamellarStack1DCart, LamellarStack2DCart, LamellarStack3DCart
+export HexLattice2DCart, HexLattice3DCart
+export BCC3DCart, Gyroid3DCart

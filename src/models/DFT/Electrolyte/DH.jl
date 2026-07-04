@@ -10,9 +10,12 @@ end
 """
     DH(components::Vector{String})
 
-The PC-SAFT equation of state developed by Gross and Sadowski (2001). Our DFT implementation follows the work of Sauer and Gross (2017) which uses a Weighted Density Functional approach and does not use a chain propagator. The only additional information required in `DHSpecies` is the bead size at a given temperature.
+The (restricted primitive model) Debye-Hückel ion-ion electrostatic correction. This is
+used as the `ionmodel` of a Clapeyron `ElectrolyteModel` (e.g. `ePCSAFT`), together with a
+neutral bulk model, to build an [`ElectrolyteDFTSystem`](@ref cDFT.ElectrolyteDFTSystem).
+No chain propagator is required — ions are treated with an `IdealPropagator`.
 
-The bulk model can be obtained from Clapeyron. 
+The bulk model can be obtained from Clapeyron.
 """
 DH
 

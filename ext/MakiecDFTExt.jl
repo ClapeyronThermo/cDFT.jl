@@ -5,11 +5,94 @@ using Makie
 
 _maybe_texlabel(s, latex::Bool) = latex ? cDFT.texlabel(s) : s
 
-function Makie.plot(system::cDFT.AbstractcDFTSystem, profiles; x_units=:normalized, y_units=:normalized, latex=false)
-    return Makie.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units, latex=latex)
+# ── Aggregation ("profile_by") / coloring ("color_by") ──────────────────────
+#
+# Both are ∈ (:bead, :group, :molecule), from finest to coarsest granularity. `:bead`
+# matches today's default (one curve per flattened bead index, e.g. "A_1"/"A_2"/"B_1");
+# `:group` averages instances of the same named group within a component together (e.g.
+# all "A_*" beads into one "A" curve); `:molecule` averages every bead of a component into
+# one curve. `color_by` controls color assignment only, independent of aggregation, but
+# can't be finer than `profile_by` (no per-bead data survives once beads are averaged
+# away).
+
+const _LEVEL_RANK = (bead = 1, group = 2, molecule = 3)
+
+function _check_profile_color_by(profile_by::Symbol, color_by::Symbol)
+    haskey(_LEVEL_RANK, profile_by) || error("profile_by must be :bead, :group or :molecule, got :$profile_by")
+    haskey(_LEVEL_RANK, color_by) || error("color_by must be :bead, :group or :molecule, got :$color_by")
+    _LEVEL_RANK[color_by] >= _LEVEL_RANK[profile_by] || error(
+        "color_by=:$color_by cannot be finer-grained than profile_by=:$profile_by " *
+        "(granularity order: bead < group < molecule) — there's no per-$(color_by) data " *
+        "left once beads have been averaged to the :$profile_by level.")
 end
 
-function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure1DCart, profiles; x_units=:normalized, y_units=:mass, latex=false)
+function _group_key(species, model, i::Int, k::Int, level::Symbol)
+    if level === :molecule
+        return (i,)
+    elseif level === :group
+        return species.nbeads[i] > 1 ? (i, cDFT._group_letter(model.groups.flattenedgroups[k])) : (i,)
+    else # :bead
+        return (i, k)
+    end
+end
+
+function _profile_label(species, model, i::Int, k::Int, level::Symbol)
+    species_name = model.components[i]
+    if level === :molecule || species.nbeads[i] == 1
+        return species_name
+    elseif level === :group
+        return "$species_name $(cDFT._group_letter(model.groups.flattenedgroups[k]))"
+    else # :bead
+        return "$species_name $(model.groups.flattenedgroups[k])"
+    end
+end
+
+# One entry per curve/field to draw: (label, [(i,k) beads to average together]).
+function _plot_groups(species, model, profile_by::Symbol)
+    members = Dict{Any,Vector{Tuple{Int,Int}}}()
+    order = Any[]
+    for i in cDFT.@comps
+        for k in cDFT.@chain(i)
+            key = _group_key(species, model, i, k, profile_by)
+            if !haskey(members, key)
+                members[key] = Tuple{Int,Int}[]
+                push!(order, key)
+            end
+            push!(members[key], (i, k))
+        end
+    end
+    return [(_profile_label(species, model, members[key][1]..., profile_by), members[key]) for key in order]
+end
+
+# Dict{color_key,color}, assigned in first-encountered order from Makie.wong_colors().
+function _assign_colors(color_keys)
+    palette = Makie.wong_colors()
+    colors = Dict{Any,Any}()
+    idx = 0
+    for key in color_keys
+        if !haskey(colors, key)
+            idx += 1
+            colors[key] = palette[mod1(idx, length(palette))]
+        end
+    end
+    return colors
+end
+
+# For each (label, members) group from `_plot_groups`, its assigned color (keyed at
+# `color_by` granularity, which may be coarser than `profile_by` so several groups can
+# share one color).
+function _group_colors(groups, species, model, color_by::Symbol)
+    color_keys = [_group_key(species, model, members[1]..., color_by) for (_, members) in groups]
+    colors = _assign_colors(color_keys)
+    return [colors[key] for key in color_keys]
+end
+
+function Makie.plot(system::cDFT.AbstractcDFTSystem, profiles; x_units=:normalized, y_units=:normalized, latex=false, profile_by=:bead, color_by=:bead)
+    return Makie.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units, latex=latex, profile_by=profile_by, color_by=color_by)
+end
+
+function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure1DCart, profiles; x_units=:normalized, y_units=:mass, latex=false, profile_by=:bead, color_by=:bead)
+    _check_profile_color_by(profile_by, color_by)
     structure = system.structure
     model = system.model
     if model isa cDFT.ElectrolyteModel
@@ -27,48 +110,38 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
         xticklabelsize=12, yticklabelsize=12,
         xlabelsize=14, ylabelsize=14)
 
-    ymax = 0.
-    for i in cDFT.@comps
-        for k in cDFT.@chain(i)
-            if species.nbeads[i] > 1
-                species_name = model.components[i]
-                group_name = model.groups.flattenedgroups[k]
-                name = "$species_name $group_name"
-                norm_const = model.params.segment[k]*species.size[k]^3*cDFT.N_A
-            else
-                species_name = model.components[i]
-                name = "$species_name"
-                norm_const = model.params.segment[i]*species.size[i]^3*cDFT.N_A
-            end
+    if x_units == :normalized
+        X = z./L
+    elseif x_units == :angstrom
+        X = z.*1e10
+    elseif x_units == :nanometer
+        X = z.*1e9
+    else
+        X = z
+    end
 
-            if x_units == :normalized
-                X = z./L
-            elseif x_units == :angstrom
-                X = z.*1e10
-            elseif x_units == :nanometer
-                X = z.*1e9
-            else
-                X = z
-            end
-
-            if y_units == :normalized
-                Y = profiles[:,k].*norm_const
-                y_norm = "σ³"
-            elseif y_units == :mass
-                Mw = model.params.Mw[k]
-                Y = profiles[:,k].*Mw/1e3
-                y_norm = " / (kg/m³)"
-            elseif y_units == :angstrom
-                Y = profiles[:,k].*cDFT.N_A/1e30
-                y_norm = " / (kg/m³)"
-            else
-                Y = profiles[:,k]
-                y_norm = " / (mol/m³)"
-            end
-
-            Makie.lines!(ax, X, Y; label=_maybe_texlabel(name,latex), linewidth=3)
-            ymax = max(ymax,maximum(Y))
+    function bead_Y(i, k)
+        norm_const = species.nbeads[i] > 1 ? model.params.segment[k]*species.size[k]^3*cDFT.N_A : model.params.segment[i]*species.size[i]^3*cDFT.N_A
+        if y_units == :normalized
+            return profiles[:,k].*norm_const
+        elseif y_units == :mass
+            Mw = model.params.Mw[k]
+            return profiles[:,k].*Mw/1e3
+        elseif y_units == :angstrom
+            return profiles[:,k].*cDFT.N_A/1e30
+        else
+            return profiles[:,k]
         end
+    end
+
+    groups = _plot_groups(species, model, profile_by)
+    colors = _group_colors(groups, species, model, color_by)
+
+    ymax = 0.
+    for ((label, members), c) in zip(groups, colors)
+        Y = sum(bead_Y(i,k) for (i,k) in members) ./ length(members)
+        Makie.lines!(ax, X, Y; label=_maybe_texlabel(label,latex), linewidth=3, color=c)
+        ymax = max(ymax,maximum(Y))
     end
 
     if x_units == :normalized
@@ -101,7 +174,8 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
     return fig
 end
 
-function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTStructure1DSphr,cDFT.DFTStructure1DCyl}, profiles; x_units=:normalized, y_units=:mass, latex=false)
+function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTStructure1DSphr,cDFT.DFTStructure1DCyl}, profiles; x_units=:normalized, y_units=:mass, latex=false, profile_by=:bead, color_by=:bead)
+    _check_profile_color_by(profile_by, color_by)
     structure = system.structure
     model = system.model
     if model isa cDFT.ElectrolyteModel
@@ -119,48 +193,38 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTSt
         xticklabelsize=12, yticklabelsize=12,
         xlabelsize=14, ylabelsize=14)
 
-    ymax = 0.
-    for i in cDFT.@comps
-        for k in cDFT.@chain(i)
-            if species.nbeads[i] > 1
-                species_name = model.components[i]
-                group_name = model.groups.flattenedgroups[k]
-                name = "$species_name $group_name"
-                norm_const = model.params.segment[k]*species.size[k]^3*cDFT.N_A
-            else
-                species_name = model.components[i]
-                name = "$species_name"
-                norm_const = model.params.segment[i]*species.size[i]^3*cDFT.N_A
-            end
+    if x_units == :normalized
+        X = z./L
+    elseif x_units == :angstrom
+        X = z.*1e10
+    elseif x_units == :nanometer
+        X = z.*1e9
+    else
+        X = z
+    end
 
-            if x_units == :normalized
-                X = z./L
-            elseif x_units == :angstrom
-                X = z.*1e10
-            elseif x_units == :nanometer
-                X = z.*1e9
-            else
-                X = z
-            end
-
-            if y_units == :normalized
-                Y = profiles[:,k].*norm_const
-                y_norm = "σ³"
-            elseif y_units == :mass
-                Mw = model.params.Mw[k]
-                Y = profiles[:,k].*Mw/1e3
-                y_norm = " / (kg/m³)"
-            elseif y_units == :angstrom
-                Y = profiles[:,k].*cDFT.N_A/1e30
-                y_norm = " / (kg/m³)"
-            else
-                Y = profiles[:,k]
-                y_norm = " / (mol/m³)"
-            end
-
-            Makie.lines!(ax, X, Y; label=_maybe_texlabel(name,latex), linewidth=3)
-            ymax = max(ymax,maximum(Y))
+    function bead_Y(i, k)
+        norm_const = species.nbeads[i] > 1 ? model.params.segment[k]*species.size[k]^3*cDFT.N_A : model.params.segment[i]*species.size[i]^3*cDFT.N_A
+        if y_units == :normalized
+            return profiles[:,k].*norm_const
+        elseif y_units == :mass
+            Mw = model.params.Mw[k]
+            return profiles[:,k].*Mw/1e3
+        elseif y_units == :angstrom
+            return profiles[:,k].*cDFT.N_A/1e30
+        else
+            return profiles[:,k]
         end
+    end
+
+    groups = _plot_groups(species, model, profile_by)
+    colors = _group_colors(groups, species, model, color_by)
+
+    ymax = 0.
+    for ((label, members), c) in zip(groups, colors)
+        Y = sum(bead_Y(i,k) for (i,k) in members) ./ length(members)
+        Makie.lines!(ax, X, Y; label=_maybe_texlabel(label,latex), linewidth=3, color=c)
+        ymax = max(ymax,maximum(Y))
     end
 
     if x_units == :normalized
@@ -193,7 +257,8 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTSt
     return fig
 end
 
-function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure2DCart, profiles; x_units=:normalized, y_units=:normalized, latex=false)
+function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure2DCart, profiles; x_units=:normalized, y_units=:normalized, latex=false, profile_by=:bead, color_by=:bead)
+    _check_profile_color_by(profile_by, color_by)
     structure = system.structure
     model = system.model
     species = system.species
@@ -207,49 +272,38 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
     fig = Figure()
     ax = Axis(fig[1, 1]; xgridvisible=false, ygridvisible=false, aspect=Makie.DataAspect())
 
-    colors = Makie.wong_colors()
+    if x_units == :normalized
+        X = x./L
+    elseif x_units == :angstrom
+        X = x.*1e10
+    elseif x_units == :nanometer
+        X = x.*1e9
+    else
+        X = x
+    end
 
-    for i in cDFT.@comps
-        for k in cDFT.@chain(i)
-            if species.nbeads[i] > 1
-                species_name = model.components[i]
-                group_name = model.groups.flattenedgroups[k]
-                name = "$species_name $group_name"
-                norm_const = model.params.segment[k]*species.size[k]^3*cDFT.N_A
-            else
-                species_name = model.components[i]
-                name = "$species_name"
-                norm_const = model.params.segment[i]*species.size[i]^3*cDFT.N_A
-            end
+    if y_units == :normalized
+        Y = y./L
+    elseif y_units == :angstrom
+        Y = y.*1e10
+    elseif y_units == :nanometer
+        Y = y.*1e9
+    else
+        Y = y
+    end
 
-            if x_units == :normalized
-                X = x./L
-            elseif x_units == :angstrom
-                X = x.*1e10
-            elseif x_units == :nanometer
-                X = x.*1e9
-            else
-                X = x
-            end
+    function bead_Z(i, k)
+        norm_const = species.nbeads[i] > 1 ? model.params.segment[k]*species.size[k]^3*cDFT.N_A : model.params.segment[i]*species.size[i]^3*cDFT.N_A
+        return profiles[:,:,k].*norm_const
+    end
 
-            if y_units == :normalized
-                Y = y./L
-            elseif x_units == :angstrom
-                Y = y.*1e10
-            elseif x_units == :nanometer
-                Y = y.*1e9
-            else
-                Y = y
-            end
+    groups = _plot_groups(species, model, profile_by)
+    colors = _group_colors(groups, species, model, color_by)
 
-            # density is always shown normalized here (σ³ units), matching the existing
-            # Plots 2D method's behavior — y_units is accepted but unused for density.
-            Z = profiles[:,:,k].*norm_const
-
-            c = colors[mod1(k, length(colors))]
-            csalpha = [Makie.RGBAf(c.r, c.g, c.b, 0.0), Makie.RGBAf(c.r, c.g, c.b, 1.0)]
-            Makie.heatmap!(ax, X, Y, Z; colormap=csalpha, label=_maybe_texlabel(name,latex))
-        end
+    for ((label, members), c) in zip(groups, colors)
+        Z = sum(bead_Z(i,k) for (i,k) in members) ./ length(members)
+        csalpha = [Makie.RGBAf(c.r, c.g, c.b, 0.0), Makie.RGBAf(c.r, c.g, c.b, 1.0)]
+        Makie.heatmap!(ax, X, Y, Z; colormap=csalpha, label=_maybe_texlabel(label,latex))
     end
 
     if x_units == :normalized
@@ -286,7 +340,8 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
     return fig
 end
 
-function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure3DCart, profiles; x_units=:normalized, y_units=:normalized, latex=false)
+function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure3DCart, profiles; x_units=:normalized, y_units=:normalized, latex=false, profile_by=:bead, color_by=:bead)
+    _check_profile_color_by(profile_by, color_by)
     structure = system.structure
     model = system.model
     species = system.species
@@ -319,26 +374,23 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
         ylabel=_maybe_texlabel("y / "*x_norm,latex),
         zlabel=_maybe_texlabel("z / "*x_norm,latex))
 
-    colors = Makie.wong_colors()
+    function bead_ρ(i, k)
+        norm_const = species.nbeads[i] > 1 ? model.params.segment[k]*species.size[k]^3*cDFT.N_A : model.params.segment[i]*species.size[i]^3*cDFT.N_A
+        return profiles[:,:,:,k].*norm_const
+    end
 
-    for i in cDFT.@comps
-        for k in cDFT.@chain(i)
-            if species.nbeads[i] > 1
-                norm_const = model.params.segment[k]*species.size[k]^3*cDFT.N_A
-            else
-                norm_const = model.params.segment[i]*species.size[i]^3*cDFT.N_A
-            end
+    groups = _plot_groups(species, model, profile_by)
+    colors = _group_colors(groups, species, model, color_by)
 
-            ρk = profiles[:,:,:,k].*norm_const
-            ρmin, ρmax = extrema(ρk)
-            normed = (ρk .- ρmin) ./ (ρmax - ρmin + 1e-8)
+    for ((label, members), c) in zip(groups, colors)
+        ρk = sum(bead_ρ(i,k) for (i,k) in members) ./ length(members)
+        ρmin, ρmax = extrema(ρk)
+        normed = (ρk .- ρmin) ./ (ρmax - ρmin + 1e-8)
 
-            c = colors[mod1(k, length(colors))]
-            cmap = [Makie.RGBAf(1 - a*(1-c.r), 1 - a*(1-c.g), 1 - a*(1-c.b), 0.45*a^2) for a in range(0,1;length=256)]
+        cmap = [Makie.RGBAf(c.r, c.g, c.b, 0.45*a^2) for a in range(0,1;length=256)]
 
-            Makie.volume!(ax, extrema(X), extrema(Y), extrema(Z), normed;
-                algorithm=:absorption, absorption=5f0, colormap=cmap)
-        end
+        Makie.volume!(ax, extrema(X), extrema(Y), extrema(Z), normed;
+            algorithm=:absorption, absorption=5f0, colormap=cmap)
     end
 
     return fig

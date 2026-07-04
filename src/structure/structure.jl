@@ -5,12 +5,21 @@ cos_prof(x,start,stop,shift,coef) = 1/2*(start-stop)*cos((x-shift)*2π)*sqrt((1+
 # include("interfacial_tension.jl")
 include("transforms.jl")
 include("two_phase.jl")
+include("morphology.jl")
 include("external_field.jl")
 
 """
-    initialize_profiles(system::DFTSystem)
+    initialize_profiles(system::DFTSystem; noise::Real=0.0)
 
 Based on the system specifications, this function will initialize the density profiles for each of the species / beads in the model. The output will be an array of size `(ngrid,nb)` where `ngrid` is the number of grid points used and `nb` is the number of beads.
+
+If `noise` is nonzero, the profile is perturbed by independent, per-grid-point,
+per-bead multiplicative noise `ρ *= 1 + noise*U(-1,1)` — useful for seeding an unstable
+uniform profile (e.g. inside a miscibility gap) before a Dynamic DFT time evolution, since
+a perfectly uniform profile is otherwise an exact (if unstable) fixed point that never
+starts phase-separating on its own. Being multiplicative rather than additive, this keeps
+the perturbed density strictly positive everywhere for any `noise < 1`, regardless of the
+local (possibly near-zero) density.
 
 Example:
 ```julia
@@ -25,27 +34,37 @@ julia> structure = Uniform1DCart((1e5, 298.15), ρbulk, [0, 20L], 201)
 julia> system = DFTSystem(model, structure)
 
 julia> profiles = initialize_profiles(system)
+
+julia> profiles_perturbed = initialize_profiles(system; noise=0.01)  # for DDFT
 ```
 """
-function initialize_profiles(system::AbstractcDFTSystem)
+function initialize_profiles(system::AbstractcDFTSystem; noise::Real=0.0)
     ρ = initialize_profiles(system.model,system.structure,system.species,system.options.device,fptype(system.options))
     if system.external_field == nothing
-        return ρ
+        # pass
     else
         for i in system.external_field
             if !(i isa ElectrostaticPotentialModel)
                  initialize_profiles!(system, i, ρ)
             end
         end
-        
+
         if any(typeof.(system.external_field) .<: ElectrostaticPotentialModel)
             ψ = find_ψ_const(system.structure, system.external_field[findfirst(typeof.(system.external_field) .<: ElectrostaticPotentialModel)], system.model, ρ) ./ k_B / system.structure.conditions[2]
             Z = system.model.charge
-            ρ .*= exp.(-ψ*Z')           
+            ρ .*= exp.(-ψ*Z')
         end
-
-        return ρ
     end
+
+    if !iszero(noise)
+        FP = fptype(system.options)
+        ξ = adapt_to_device(system.options.device, FP, rand(FP, size(ρ)...))
+        ρ .*= 1 .+ FP(noise) .* (2 .* ξ .- 1)
+    end
+
+    clamp!(ρ, 1e-30, 1e30)
+
+    return ρ
 end
 
 function initialize_profiles(model::EoSModel,structure::Union{Uniform1DCart,Uniform1DSphr,Uniform1DCyl}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
@@ -172,3 +191,5 @@ function get_coords(structure::Union{DFTStructureSphr,DFTStructureCyl})
     r = structure_r(structure)
     return reshape(r, length(r), 1)
 end
+
+export get_coords, initialize_profiles

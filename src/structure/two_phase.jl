@@ -219,17 +219,17 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DSphrCart, spec
     end
 
     r = sqrt.(X.^2 + Y.^2 + Z.^2)
-  
+
     L = length_scale(model)
     H = ub-lb
+    R = H*(3/(8π))^(1/3)
 
     ρ = allocate(device, FP, ngrid...,sum(species.nbeads))
     for i in @comps
         (Tc, pc, vc) = crit_pure(pure[i])
-        coef = (2.4728-2.3625*temperature/Tc)*H/L
-        coef = sqrt(coef^2-1)/4
+        coef = (2.4728-2.3625*temperature/Tc)/L
         for j in @chain(i)
-            ρ_points = @. cos_prof(r / H, ρ1[i], ρ2[i], (ub / 4 + 3 * lb / 4), coef)
+            ρ_points = @. tanh_prof(r, ρ1[i], ρ2[i], R, coef)
             ρ_points = adapt_to_device(device, FP, ρ_points)
 
             selectdim(ρ,nd+1,j) .= ρ_points

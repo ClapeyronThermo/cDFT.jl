@@ -9,8 +9,12 @@ function cDFT.get_connectivity(model::EoSModel, ss::cDFT.SMILESStructure)
     _get_connectivity_from_smiles(model, ss.smiles)
 end
 
-# Auto-detect from chemical name — both GCIdentifier and ChemicalIdentifiers needed
-function cDFT.get_connectivity(model::EoSModel, name::String)
+# Auto-detect from chemical name — both GCIdentifier and ChemicalIdentifiers needed.
+# Deliberately *not* named `cDFT.get_connectivity(::EoSModel, ::String)`: cDFT's own
+# connectivity.jl already defines that exact signature as an error fallback for when this
+# extension isn't loaded, and it looks up and calls this function via `Base.get_extension`
+# at runtime instead.
+function get_connectivity_from_name(model::EoSModel, name::String)
     _get_connectivity_from_smiles(model, search_chemical(name).smiles)
 end
 
