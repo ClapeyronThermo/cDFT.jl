@@ -3,3 +3,5 @@ Manifest.toml
 notebook
 .vscode
 /benchmark/*.h5
+/docs/build/*
+/docs/node_modules/*
