@@ -407,7 +407,7 @@ end
 # `src/structure/morphology.jl` for the seed-profile math.
 
 """
-    LamellarStack1DCart(conditions, ρbulk, bounds::Vector{Float64}, ngrid::Int64; core_groups, amplitude=0.3)
+    LamellarStack1DCart(conditions, ρbulk, bounds::Vector{Float64}, ngrid::Int64; core_groups, amplitude=1.0)
 
 Seeds a periodic lamellar (alternating-layer) block-copolymer morphology in 1D-cartesian
 coordinates: `core_groups` enrich in one set of layers, every other group in the
@@ -427,7 +427,7 @@ function LamellarStack1DCart(conditions,ρbulk,bounds::Vector{Float64},ngrid::In
 end
 
 """
-    LamellarStack2DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64}; core_groups, amplitude=0.3)
+    LamellarStack2DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64}; core_groups, amplitude=1.0)
 
 2D-cartesian counterpart of [`LamellarStack1DCart`](@ref cDFT.LamellarStack1DCart): layers
 alternate along the first dimension, uniform along the second.
@@ -446,7 +446,7 @@ function LamellarStack2DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tu
 end
 
 """
-    LamellarStack3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=0.3)
+    LamellarStack3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=1.0)
 
 3D-cartesian counterpart of [`LamellarStack1DCart`](@ref cDFT.LamellarStack1DCart): layers
 alternate along the first dimension, uniform along the other two.
@@ -465,7 +465,7 @@ function LamellarStack3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tu
 end
 
 """
-    HexLattice2DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64}; core_groups, amplitude=0.3)
+    HexLattice2DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64}; core_groups, amplitude=1.0)
 
 Seeds a periodic hexagonally-packed-cylinder block-copolymer morphology (2D cross-section):
 `core_groups` enrich into two cylindrical domains per unit cell, matching the standard
@@ -490,7 +490,7 @@ function HexLattice2DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple
 end
 
 """
-    HexLattice3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=0.3)
+    HexLattice3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=1.0)
 
 3D-cartesian counterpart of [`HexLattice2DCart`](@ref cDFT.HexLattice2DCart): the hexagonal
 cylinder lattice is extruded, uniform, along the third dimension.
@@ -511,7 +511,7 @@ function HexLattice3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple
 end
 
 """
-    BCC3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=0.3)
+    BCC3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=1.0)
 
 Seeds a periodic body-centered-cubic (BCC, Im-3m) sphere block-copolymer morphology:
 `core_groups` enrich into spheres at the corners and body-center of the cubic unit cell
@@ -533,7 +533,7 @@ function BCC3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,
 end
 
 """
-    Gyroid3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=0.3)
+    Gyroid3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=1.0)
 
 Seeds a periodic gyroid (Ia-3d) block-copolymer morphology, using the standard Schoen
 gyroid level-set as the initial guess: `core_groups` enrich on one side of the level set

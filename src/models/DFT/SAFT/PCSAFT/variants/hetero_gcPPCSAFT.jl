@@ -31,7 +31,7 @@ function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, external_fie
     return DFTSystem(model, species, structure, fields, external_fields, propagator, options, chunksize)
 end
 
-function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, external_fields::ExternalFieldModel, options::DFTOptions=DFTOptions();
+function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, external_fields::ExternalFieldModel=nothing, options::DFTOptions=DFTOptions();
                    mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
     model = expand_model(model, mol_structure)
     species = get_species(model, structure)

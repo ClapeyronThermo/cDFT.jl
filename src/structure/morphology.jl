@@ -42,7 +42,7 @@ function hex_ψ(structure::DFTStructure)
     coords, Ls = _morph_coords(structure)
     X, Y = coords[1], coords[2]
     Lx, Ly = Ls[1], Ls[2]
-    return @. (1/3)*(cos(2π*X/Lx) + cos(2π*(X/(2Lx) + sqrt(3)*Y/(2Ly))) + cos(2π*(X/(2Lx) - sqrt(3)*Y/(2Ly))))
+    return @. (1/3)*(cos(2π*(X/Lx + Y/Ly)) + cos(2π*(X/Lx - Y/Ly)) + cos(4π*Y/Ly))
 end
 
 function bcc_ψ(structure::DFTStructure)
