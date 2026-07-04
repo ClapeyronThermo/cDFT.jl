@@ -1,5 +1,14 @@
 import Clapeyron: pharmaPCSAFTModel, Δσh20, water08_k
 
+"""
+    pharmaPCSAFT(components::Vector{String})
+
+A PC-SAFT variant aimed at pharmaceutical/aqueous systems (Held et al.), which applies a temperature-dependent correction to the water segment diameter and temperature-dependent binary corrections to the dispersion energy cross-parameters. As with `PCSAFT`, our DFT implementation uses a Weighted Density Functional approach and does not use a chain propagator.
+
+The bulk model can be obtained from Clapeyron.
+"""
+pharmaPCSAFT
+
 function preallocate_params(system::DFTSystem{<:pharmaPCSAFTModel})
     params_base, nc = invoke(preallocate_params, Tuple{DFTSystem{<:PCSAFTModel}}, system)
 

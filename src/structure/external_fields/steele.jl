@@ -8,6 +8,13 @@ end
 
 abstract type SteeleModel <: ExternalFieldModel end
 
+"""
+    Steele <: ExternalFieldModel
+
+External field representing a structureless, smeared-out planar (or, via the spherical/cylindrical `evaluate_external_field!` method, curved) solid wall, using the Steele 9-3 potential (Steele, 1973). The wall material is characterized by an effective Lennard-Jones `sigma`/`epsilon`, an interlayer spacing `delta` and a number density `rho`.
+
+The bulk model can be obtained via the `Steele(surface, width)` constructor below.
+"""
 struct Steele <: SteeleModel
     surface::Array{String,1}
     params::SteeleParam
@@ -16,6 +23,11 @@ end
 
 export Steele
 
+"""
+    Steele(surface::Array{String,1}, width::Float64=0.0; userlocations = String[], verbose = false)
+
+Construct a `Steele` external field for the given `surface` material(s) (looked up from the Steele parameter database, or `userlocations` if provided). If `width` is nonzero, a second wall is placed at `width`, forming a slit pore; if `width == 0.0`, only a single wall is present.
+"""
 function Steele(surface::Array{String,1}, width::Float64=0.0; userlocations = String[], verbose = false)
     params = getparams(surface, ["$DB_PATH/Steele/"]; userlocations = userlocations, verbose = verbose)
     references = ["10.1016/0039-6028(73)90264-1"]

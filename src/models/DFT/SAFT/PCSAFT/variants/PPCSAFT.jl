@@ -1,5 +1,14 @@
 using Clapeyron: PCPSAFTModel, pcp_sigma, pcp_dipole, pcp_dipole2, pcp_epsilon, pcp_segment
 
+"""
+    PCPSAFT(components::Vector{String})
+
+The polar PC-SAFT (PCP-SAFT) equation of state, which augments PC-SAFT with a dipole-dipole polar term (Gross and Vrabec, 2006). As with `PCSAFT`, our DFT implementation uses a Weighted Density Functional approach and does not use a chain propagator.
+
+The bulk model can be obtained from Clapeyron.
+"""
+PCPSAFT
+
 const DD_consts = (
     corr_a =
     ((0.3043504,0.9534641,-1.161008),

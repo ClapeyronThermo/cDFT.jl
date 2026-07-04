@@ -7,6 +7,11 @@ end
 
 export ElectrostaticPotential
 
+"""
+    ElectrostaticPotential(model::ElectrolyteModel, structure::DFTStructure, backend::Backend, ::Type{FP}=Float64)
+
+External field representing the mean-field electrostatic (Coulomb) interaction between charged species in a Cartesian `DFTStructure`. Precomputes the Fourier-space Coulomb Green's-function kernel (scaled by the solvent's dielectric constant) that is convolved with the ionic charge density profile during `evaluate_external_field!`. This field is added automatically whenever an `ElectrolyteDFTSystem` is constructed, and should not typically need to be constructed directly by users.
+"""
 function ElectrostaticPotential(model::ElectrolyteModel, structure::DFTStructure, backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     (_, temperature) = structure.conditions
     ρbulk = structure.ρbulk

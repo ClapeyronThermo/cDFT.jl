@@ -71,10 +71,10 @@ julia> H = 10L
 
 julia> surface = Steele(["graphite"])
 
-julia> structure = InterfacialTension1DCart((p, T), ρbulk, [0.5L, H-0.5L], 201, surface, H)
+julia> structure = ExternalField1DCart((p, T), ρbulk, [0.5L, H-0.5L], 201, surface, H)
 ```
 """
-struct ExternalField1DCart <: DFTStructure1DCart 
+struct ExternalField1DCart <: DFTStructure1DCart
     conditions::Tuple{Float64,Float64}
     ρbulk::Vector{Float64}
     bounds::Vector{Float64}
@@ -283,37 +283,18 @@ end
 
 
 """
-    TwoPhase1DCart(conditions::Tuple{Float64,Float64}, ρbulk, ρbulk2, bounds::Vector{Float64}, ngrid::Int64)
+    TwoPhase2DLamCart(conditions::Tuple{Float64,Float64}, ρbulk, ρbulk2, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64})
 
-The generic structure type used when trying to simulate two-phase interfaces in 1D-cartesian coordinates. Contains:
+The generic structure type used when trying to simulate a lamellar two-phase interface in 2D-cartesian coordinates (e.g. for a copolymer melt that microphase-separates into planar lamellae, or a slab-geometry vapour-liquid interface with a second transverse dimension). Contains:
 - `conditions`: The p, T conditions at which the calculations are performed.
 - `ρbulk`: The bulk density of each species in the first phase.
 - `ρbulk2`: The bulk density of each species in the second phase.
-- `bounds`: Specifies the location of the bounds of the system. The interface will be located in the middle.
-- `ngrids`: The number of grid points used to represent the density profile.
-In the case of the surface tension calculation, the pressure specified must be the saturation pressure at T and x. As the density profiles in the liquid and vapour phases are expected to reach their bulk values, the densities at the bounds are _fixed_ at their bulk values. In general, it is recommends to use a width of about `20L` (`L` being the length scale of the model) and about 201 grid points.
+- `bounds`: A 2×2 matrix specifying the bounds of the system along each dimension. The interface is located along the first dimension, with the second dimension left uniform/periodic.
+- `ngrids`: The number of grid points used to represent the density profile along each dimension.
 
-The profiles will be initialised as generic sigmoidals of the form:
-`tanh_prof(x,start,stop,shift,coef) = 1/2*(start-stop)*tanh((x-shift)*coef)+1/2*(start+stop)`
-
-Example:
-```julia
-julia> model = PCSAFT(["water"])
-
-julia> T = 298.15
-
-julia> (p, vl, vv) = saturation_pressure(model, T)
-
-julia> ρ1 = [1.0]./vl
-
-julia> ρ2 = [1.0]./vv
-
-julia> L = length_scale(model)
-
-julia> structure = TwoPhase1DCart((p, T), ρ1, ρ2, [-10L, 10L], 201)
-```
+As with `TwoPhase1DCart`, the profiles are initialised as generic sigmoidals along the interface dimension, uniform along the other.
 """
-struct TwoPhase2DLamCart <: DFTStructure2DCart 
+struct TwoPhase2DLamCart <: DFTStructure2DCart
     conditions::Tuple{Float64,Float64}
     ρbulk::Vector{Float64}
     ρbulk2::Vector{Float64}
@@ -321,7 +302,19 @@ struct TwoPhase2DLamCart <: DFTStructure2DCart
     ngrid::Tuple{Int64,Int64}
 end
 
-struct TwoPhase3DLamCart <: DFTStructure3DCart 
+"""
+    TwoPhase3DLamCart(conditions::Tuple{Float64,Float64}, ρbulk, ρbulk2, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64})
+
+The generic structure type used when trying to simulate a lamellar two-phase interface in 3D-cartesian coordinates. Contains:
+- `conditions`: The p, T conditions at which the calculations are performed.
+- `ρbulk`: The bulk density of each species in the first phase.
+- `ρbulk2`: The bulk density of each species in the second phase.
+- `bounds`: A 3×2 matrix specifying the bounds of the system along each dimension. The interface is located along the first dimension, with the other two left uniform/periodic.
+- `ngrids`: The number of grid points used to represent the density profile along each dimension.
+
+As with `TwoPhase1DCart`, the profiles are initialised as generic sigmoidals along the interface dimension, uniform along the other two.
+"""
+struct TwoPhase3DLamCart <: DFTStructure3DCart
     conditions::Tuple{Float64,Float64}
     ρbulk::Vector{Float64}
     ρbulk2::Vector{Float64}
@@ -329,7 +322,19 @@ struct TwoPhase3DLamCart <: DFTStructure3DCart
     ngrid::Tuple{Int64,Int64,Int64}
 end
 
-struct TwoPhase2DHexCart <: DFTStructure2DCart 
+"""
+    TwoPhase2DHexCart(conditions::Tuple{Float64,Float64}, ρbulk, ρbulk2, bounds::Vector{Float64}, ngrid::Tuple{Int64})
+
+The generic structure type used when trying to simulate a two-phase interface with hexagonal (cylindrical-domain) symmetry in a 2D-cartesian cross-section (e.g. a hexagonally-packed cylindrical copolymer microdomain viewed end-on). Contains:
+- `conditions`: The p, T conditions at which the calculations are performed.
+- `ρbulk`: The bulk density of each species in the first phase (domain center).
+- `ρbulk2`: The bulk density of each species in the second phase (matrix).
+- `bounds`: Specifies the (square) bounds of the 2D cross-section; the same `[lb, ub]` is applied to both dimensions.
+- `ngrids`: The number of grid points used along each dimension (same for both).
+
+The profile is initialised as a radially-symmetric sigmoidal (`tanh_prof`) centered on the cross-section.
+"""
+struct TwoPhase2DHexCart <: DFTStructure2DCart
     conditions::Tuple{Float64,Float64}
     ρbulk::Vector{Float64}
     ρbulk2::Vector{Float64}

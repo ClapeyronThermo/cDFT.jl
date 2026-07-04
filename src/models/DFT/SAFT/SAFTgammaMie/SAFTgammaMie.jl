@@ -1,6 +1,15 @@
 using Clapeyron: SAFTgammaMieModel
 using Clapeyron: d_gc_av
 
+"""
+    SAFTgammaMie(components::Vector{String})
+
+The SAFT-γ Mie group-contribution equation of state (Papaioannou et al., 2014). Since groups can carry heterogeneous segment properties, the DFT implementation expands the model into individual bonded beads (see `expand_model`) and uses a `TangentHSPropagator` chain propagator to enforce connectivity between them.
+
+The bulk model can be obtained from Clapeyron.
+"""
+SAFTgammaMie
+
 function DFTSystem(model::SAFTgammaMieModel, structure::DFTStructure, options::DFTOptions = DFTOptions();
                    mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
     model = expand_model(model, mol_structure)

@@ -81,28 +81,26 @@ function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions
 end
 
 """
-    DGTSystem(model::EoSModel, species::DFTSpecies, structure::DFTStructure, fields::Vector{DFTField}, options::DFTOptions)
+    DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStructure, external_field, options::DFTOptions)
 
-Generic struct which includes all the information needed to perform DFT / SCFT calculations:
+Generic struct which includes all the information needed to perform Density Gradient Theory (DGT/SCFT) calculations, i.e. a square-gradient functional built on top of a bulk `model` rather than a full weighted-density DFT functional:
 - `model`: A model object that should be obtained from Clapeyron.jl, and contains all information regarding species parameters.
-- `species`: A `DFTSpecies` object which is model-dependent. Typically contains the number of beads in each species and the bead sizes.
+- `gradient`: A `GradientModel` (e.g. `ConstGradient`) which supplies the influence parameter(s) `κ` for the square-gradient term.
+- `species`: A `DGTSpecies` object containing the bulk densities, chemical potentials and length scales for each species.
 - `structure`: A `DFTStructure` object which provides information regarding the geometry (including bounds) and conditions (n, p, T) of the DFT calculations.
-- `fields`: A vector of `DFTField`s for each field used in the DFT-calculation. This is typically model-dependent. 
-- `options`: A `DFTOptions` object which contains information regarding the convergence settings and the devices used as part of the DFT calculation.
+- `fields`: A vector of `DFTField`s for each field used in the calculation (density and its gradient).
+- `options`: A `DFTOptions` object which contains information regarding the convergence settings and the devices used as part of the calculation.
 Example usage:
 ```julia
 julia> model = PCSAFT(["water"])
+
+julia> gradient = ConstGradient(["water"])
 
 julia> L = length_scale(model)
 
 julia> structure = Uniform1DCart((1e5, 298.15, [1.]), [0, 20L], 201)
 
-julia> system = DFTSystem(model, structure)
-DFTSystem
-  model: PCSAFT{BasicIdeal, Float64}
-         with 1 component: "water"
-  structure: Uniform1DCart
-  device: CPU
+julia> system = DGTSystem(model, gradient, structure)
 ```
 """
 struct DGTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,EF,G<:GradientModel,O<:DFTOptions,C}
@@ -183,28 +181,26 @@ function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStruc
 end
 
 """
-    DFTSystem(model::ElectrolyteModel, species::DFTSpecies, structure::DFTStructure, fields::Vector{DFTField}, options::DFTOptions)
+    ElectrolyteDFTSystem(model::ElectrolyteModel, structure::DFTStructure, external_field, options::DFTOptions)
 
-Generic struct which includes all the information needed to perform DFT / SCFT calculations:
-- `model`: A model object that should be obtained from Clapeyron.jl, and contains all information regarding species parameters.
-- `species`: A `DFTSpecies` object which is model-dependent. Typically contains the number of beads in each species and the bead sizes.
+Generic struct which includes all the information needed to perform DFT / SCFT calculations for electrolyte systems:
+- `model`: An `ElectrolyteModel` obtained from Clapeyron.jl, combining a neutral bulk model (`model.neutralmodel`) with an ion model (`model.ionmodel`) and the species charges.
+- `species`: A `DFTSpecies` object for the neutral species, obtained from `model.neutralmodel`.
+- `ion_species`: A `DFTSpecies` object for the ionic species, obtained from `model.ionmodel`.
 - `structure`: A `DFTStructure` object which provides information regarding the geometry (including bounds) and conditions (n, p, T) of the DFT calculations.
-- `fields`: A vector of `DFTField`s for each field used in the DFT-calculation. This is typically model-dependent. 
+- `fields`: A vector of `DFTField`s for the neutral and ionic species combined.
+- `external_field`: In addition to any user-supplied external field(s), an `ElectrostaticPotential` field is always appended automatically to account for the mean-field electrostatic interactions between ions.
+- `propagator`: The `DFTPropagator` used for the neutral model (ions use an `IdealPropagator`).
 - `options`: A `DFTOptions` object which contains information regarding the convergence settings and the devices used as part of the DFT calculation.
 Example usage:
 ```julia
-julia> model = PCSAFT(["water"])
+julia> model = SPCSAFT(["water"]) + DH(["water"],["Na","Cl"])
 
 julia> L = length_scale(model)
 
 julia> structure = Uniform1DCart((1e5, 298.15, [1.]), [0, 20L], 201)
 
-julia> system = DFTSystem(model, structure)
-DFTSystem
-  model: PCSAFT{BasicIdeal, Float64}
-         with 1 component: "water"
-  structure: Uniform1DCart
-  device: CPU
+julia> system = ElectrolyteDFTSystem(model, structure)
 ```
 """
 struct ElectrolyteDFTSystem{M<:ElectrolyteModel,S<:DFTSpecies,iS<:DFTSpecies,T<:DFTStructure,F,EF,P<:DFTPropagator,O<:DFTOptions,C}

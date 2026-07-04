@@ -13,7 +13,7 @@ warnonly = Documenter.except(),
         "Methods" => "api/methods.md",
         "Structure" => "api/structure.md",
         "Fields" => "api/fields.md",
-        "Profiles" => "api/profiles.md",
+        "External Fields" => "api/external_fields.md",
         "Utils" => "api/utils.md",
         "Options" => "api/options.md"
         ]])

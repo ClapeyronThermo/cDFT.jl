@@ -1,11 +1,14 @@
 import KernelAbstractions: Backend, get_backend, synchronize
 using Base: ScopedValue
+
+
 """
-    DFTOptions(device::Device, solver::Solvers.AbstractFixPoint)
+    DFTOptions(device, ad_mode::Symbol=:forward; precision::Type{FP}=Float64)
 
 A struct which includes all the settings that need to be set for the convergence algorithms and devices used:
 - `device`: Specification of either CPU (pinned or un-pinned) or GPU devices. (unpinned CPU by default)
-- `solver`: Specification of the solver type and solver settings used. Must be a fixed-point method. (`AndersonFixPoint` by default)
+- `ad_mode`: Either `:forward` (default) or `:reverse`, specifying which automatic-differentiation mode Enzyme should use when differentiating the free-energy functional.
+- `precision`: The floating-point type (e.g. `Float64`, `Float32`) used to allocate and run the DFT calculation, retrievable via `fptype(options)`.
 Example usage:
 ```julia
 julia> options = DFTOptions()
@@ -13,6 +16,8 @@ julia> options = DFTOptions()
 julia> using ThreadPinning
 
 julia> options = DFTOptions(CPU(4, [0,1,12,13]))
+
+julia> options = DFTOptions(CPU(); precision = Float32)
 ```
 """
 struct DFTOptions{D, FP<:AbstractFloat}
@@ -28,6 +33,11 @@ DFTOptions() = DFTOptions(CPU(; static=true))
 DFTOptions(device::Backend; ad_mode::Symbol = :forward, precision::Type{FP} = Float64) where FP<:AbstractFloat =
     DFTOptions(device, ad_mode; precision)
 
+"""
+    fptype(options::DFTOptions)
+
+Return the floating-point type (`Float64` by default) that `options` was configured with via the `precision` keyword, used throughout the DFT calculation to allocate arrays and dispatch kernels at the requested precision.
+"""
 fptype(::DFTOptions{D,FP}) where {D,FP} = FP
 
 adapt_to_device(backend, ::Type{FP}, arr::AbstractArray) where FP<:AbstractFloat =

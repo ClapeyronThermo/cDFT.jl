@@ -1,5 +1,14 @@
 using Clapeyron: HeterogcPCPSAFT, pcp_segment, pcp_sigma, pcp_epsilon, pcp_dipole2
 
+"""
+    HeterogcPCPSAFT(components::Vector{String})
+
+The heterosegmented group-contribution polar PC-SAFT equation of state. Unlike `HomogcPCPSAFT`, each group in a molecule can carry distinct segment properties, so the DFT implementation expands the model into individual bonded beads (see `expand_model`) and uses a `TangentHSPropagator` chain propagator to enforce connectivity between them.
+
+The bulk model can be obtained from Clapeyron.
+"""
+HeterogcPCPSAFT
+
 function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, options::DFTOptions;
                    mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
     model = expand_model(model, mol_structure)

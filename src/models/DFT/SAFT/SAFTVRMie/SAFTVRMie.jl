@@ -3,7 +3,16 @@ using Clapeyron: aS_1, B, KHS, Cλ, f123456
 using Clapeyron: KHS_fdf, aS_1_fdf, B_fdf, g_HS
 using Clapeyron: SAFTVRMieconsts
 
-struct SAFTVRMieSpecies <: DFTSpecies 
+"""
+    SAFTVRMie(components::Vector{String})
+
+The SAFT-VR Mie equation of state (Lafitte et al., 2013), which uses a variable-range Mie potential for the segment-segment interactions. As with `PCSAFT`, our DFT implementation uses a Weighted Density Functional approach and does not use a chain propagator.
+
+The bulk model can be obtained from Clapeyron.
+"""
+SAFTVRMie
+
+struct SAFTVRMieSpecies <: DFTSpecies
     nbeads::Vector{Int64}
     size::Vector{Float64}
     bulk_density::Vector{Float64}

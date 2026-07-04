@@ -9,10 +9,23 @@ Pages = ["models.md"]
 Depth = 1
 ```
 
-## Models
+## DFT Models
 ```@docs
 cDFT.PCSAFT
 cDFT.PCPSAFT
+cDFT.HomogcPCPSAFT
+cDFT.HeterogcPCPSAFT
+cDFT.QPCPSAFT
+cDFT.pharmaPCSAFT
+cDFT.SAFTVRMie
+cDFT.SAFTgammaMie
+cDFT.COFFEE
+cDFT.PeTS
+```
+
+## DGT Gradient Models
+```@docs
+cDFT.ConstGradient
 ```
 
 ## Functions

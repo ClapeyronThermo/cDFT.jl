@@ -12,7 +12,5 @@ Depth = 1
 ## Functions
 ```@docs
 cDFT.∫
-cDFT.∫ρz²dz
-cDFT.∫ρzdz
-cDFT.∫ρdz
+cDFT.texlabel
 ```

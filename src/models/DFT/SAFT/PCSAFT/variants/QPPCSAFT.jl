@@ -1,5 +1,14 @@
 using Clapeyron: QPCPSAFTModel, pcp_sigma, pcp_dipole2, pcp_epsilon, pcp_segment
 
+"""
+    QPCPSAFT(components::Vector{String})
+
+The quadrupolar polar PC-SAFT (QPCP-SAFT) equation of state, which extends `PCPSAFT` with quadrupole-quadrupole and dipole-quadrupole polar terms in addition to the dipole-dipole term. As with `PCSAFT`, our DFT implementation uses a Weighted Density Functional approach and does not use a chain propagator.
+
+The bulk model can be obtained from Clapeyron.
+"""
+QPCPSAFT
+
 const QQ_consts = (
     corr_a = 
     ((1.2378308, 1.2854109,	1.7942954),

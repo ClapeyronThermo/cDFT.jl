@@ -12,10 +12,12 @@ Depth = 1
 ## Types
 ```@docs
 cDFT.Uniform1DCart
-cDFT.SurfaceTension1DCart
-cDFT.InterfacialTension1DCart
 cDFT.Uniform1DSphr
-cDFT.InterfacialTension1DSphr
+cDFT.Uniform1DCyl
+cDFT.TwoPhase1DCart
+cDFT.TwoPhase2DLamCart
+cDFT.TwoPhase3DLamCart
+cDFT.TwoPhase2DHexCart
 ```
 
 ## Functions

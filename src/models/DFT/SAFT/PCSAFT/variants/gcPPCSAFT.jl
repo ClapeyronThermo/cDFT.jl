@@ -1,5 +1,14 @@
 using Clapeyron: HomogcPCPSAFTModel, pcp_segment, pcp_sigma, pcp_epsilon, pcp_dipole2
 
+"""
+    HomogcPCPSAFT(components::Vector{String})
+
+The homosegmented group-contribution polar PC-SAFT equation of state. Groups are assigned identical (homogeneous) segment properties within a molecule, so this variant reuses the underlying `PCPSAFT` DFT machinery directly (same fields, same `IdealPropagator`, no chain propagator needed).
+
+The bulk model can be obtained from Clapeyron.
+"""
+HomogcPCPSAFT
+
 function get_species(model::HomogcPCPSAFTModel,structure::DFTStructure)
     return get_species(model.ppcmodel,structure)
 end

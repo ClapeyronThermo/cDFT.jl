@@ -12,4 +12,6 @@ Depth = 1
 ## System type
 ```@docs
 cDFT.DFTSystem
+cDFT.DGTSystem
+cDFT.ElectrolyteDFTSystem
 ```

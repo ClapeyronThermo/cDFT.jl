@@ -11,11 +11,12 @@ Depth = 1
 
 ## Types
 ```@docs
-cDFT.WeightedDensity
+cDFT.SWeightedDensity
+cDFT.VWeightedDensity
 ```
 
 ## Functions
 ```@docs
-cDFT.evaluate_field
-cDFT.integrate_field
+cDFT.evaluate_field!
+cDFT.integrate_field!
 ```
