@@ -44,6 +44,24 @@ cDFT.TwoPhase3DHexCart
 cDFT.TwoPhase3DSphrCart
 ```
 
+## Block-Copolymer Microphase Morphologies
+
+Seed (and, via `initialize_profiles`, converge) a single periodic unit cell of a
+crystallographic microphase morphology, in which different named groups of one
+group-contribution component (see [Group-Contribution & Heterosegmented Chains](@ref))
+enrich in different spatial domains — see [Copolymer Microphase Morphologies](@ref) for a
+worked example.
+
+```@docs
+cDFT.LamellarStack1DCart
+cDFT.LamellarStack2DCart
+cDFT.LamellarStack3DCart
+cDFT.HexLattice2DCart
+cDFT.HexLattice3DCart
+cDFT.BCC3DCart
+cDFT.Gyroid3DCart
+```
+
 ## Functions
 
 ```@docs

@@ -45,7 +45,7 @@ julia> T, p = 298.15, 1e5
 
 julia> v = volume(model, p, T, [1.0])
 
-julia> ρb = [1.0]./v .* 0.05
+julia> ρb = [1.0]./v
 
 julia> L = cDFT.length_scale(model)
 ```

@@ -20,6 +20,5 @@ Depth = 1
 
 ```@docs
 cDFT.Steele
-cDFT.LJField
 cDFT.ElectrostaticPotential
 ```

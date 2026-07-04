@@ -5,25 +5,25 @@ using Makie
 
 _maybe_texlabel(s, latex::Bool) = latex ? cDFT.texlabel(s) : s
 
-# ── Aggregation ("profile_by") / coloring ("color_by") ──────────────────────
+# ── Aggregation ("plot_by") / coloring ("color_by") ──────────────────────
 #
 # Both are ∈ (:bead, :group, :molecule), from finest to coarsest granularity. `:bead`
 # matches today's default (one curve per flattened bead index, e.g. "A_1"/"A_2"/"B_1");
 # `:group` averages instances of the same named group within a component together (e.g.
 # all "A_*" beads into one "A" curve); `:molecule` averages every bead of a component into
 # one curve. `color_by` controls color assignment only, independent of aggregation, but
-# can't be finer than `profile_by` (no per-bead data survives once beads are averaged
+# can't be finer than `plot_by` (no per-bead data survives once beads are averaged
 # away).
 
 const _LEVEL_RANK = (bead = 1, group = 2, molecule = 3)
 
-function _check_profile_color_by(profile_by::Symbol, color_by::Symbol)
-    haskey(_LEVEL_RANK, profile_by) || error("profile_by must be :bead, :group or :molecule, got :$profile_by")
+function _check_profile_color_by(plot_by::Symbol, color_by::Symbol)
+    haskey(_LEVEL_RANK, plot_by) || error("plot_by must be :bead, :group or :molecule, got :$plot_by")
     haskey(_LEVEL_RANK, color_by) || error("color_by must be :bead, :group or :molecule, got :$color_by")
-    _LEVEL_RANK[color_by] >= _LEVEL_RANK[profile_by] || error(
-        "color_by=:$color_by cannot be finer-grained than profile_by=:$profile_by " *
+    _LEVEL_RANK[color_by] >= _LEVEL_RANK[plot_by] || error(
+        "color_by=:$color_by cannot be finer-grained than plot_by=:$plot_by " *
         "(granularity order: bead < group < molecule) — there's no per-$(color_by) data " *
-        "left once beads have been averaged to the :$profile_by level.")
+        "left once beads have been averaged to the :$plot_by level.")
 end
 
 function _group_key(species, model, i::Int, k::Int, level::Symbol)
@@ -48,12 +48,12 @@ function _profile_label(species, model, i::Int, k::Int, level::Symbol)
 end
 
 # One entry per curve/field to draw: (label, [(i,k) beads to average together]).
-function _plot_groups(species, model, profile_by::Symbol)
+function _plot_groups(species, model, plot_by::Symbol)
     members = Dict{Any,Vector{Tuple{Int,Int}}}()
     order = Any[]
     for i in cDFT.@comps
         for k in cDFT.@chain(i)
-            key = _group_key(species, model, i, k, profile_by)
+            key = _group_key(species, model, i, k, plot_by)
             if !haskey(members, key)
                 members[key] = Tuple{Int,Int}[]
                 push!(order, key)
@@ -61,7 +61,7 @@ function _plot_groups(species, model, profile_by::Symbol)
             push!(members[key], (i, k))
         end
     end
-    return [(_profile_label(species, model, members[key][1]..., profile_by), members[key]) for key in order]
+    return [(_profile_label(species, model, members[key][1]..., plot_by), members[key]) for key in order]
 end
 
 # Dict{color_key,color}, assigned in first-encountered order from Makie.wong_colors().
@@ -79,7 +79,7 @@ function _assign_colors(color_keys)
 end
 
 # For each (label, members) group from `_plot_groups`, its assigned color (keyed at
-# `color_by` granularity, which may be coarser than `profile_by` so several groups can
+# `color_by` granularity, which may be coarser than `plot_by` so several groups can
 # share one color).
 function _group_colors(groups, species, model, color_by::Symbol)
     color_keys = [_group_key(species, model, members[1]..., color_by) for (_, members) in groups]
@@ -87,12 +87,12 @@ function _group_colors(groups, species, model, color_by::Symbol)
     return [colors[key] for key in color_keys]
 end
 
-function Makie.plot(system::cDFT.AbstractcDFTSystem, profiles; x_units=:normalized, y_units=:normalized, latex=false, profile_by=:bead, color_by=:bead)
-    return Makie.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units, latex=latex, profile_by=profile_by, color_by=color_by)
+function Makie.plot(system::cDFT.AbstractcDFTSystem, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead)
+    return Makie.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units, latex=latex, plot_by=plot_by, color_by=color_by)
 end
 
-function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure1DCart, profiles; x_units=:normalized, y_units=:mass, latex=false, profile_by=:bead, color_by=:bead)
-    _check_profile_color_by(profile_by, color_by)
+function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure1DCart, profiles; x_units=:normalized, y_units=:mass, latex=false, plot_by=:bead, color_by=:bead)
+    _check_profile_color_by(plot_by, color_by)
     structure = system.structure
     model = system.model
     if model isa cDFT.ElectrolyteModel
@@ -134,7 +134,7 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
         end
     end
 
-    groups = _plot_groups(species, model, profile_by)
+    groups = _plot_groups(species, model, plot_by)
     colors = _group_colors(groups, species, model, color_by)
 
     ymax = 0.
@@ -174,8 +174,8 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
     return fig
 end
 
-function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTStructure1DSphr,cDFT.DFTStructure1DCyl}, profiles; x_units=:normalized, y_units=:mass, latex=false, profile_by=:bead, color_by=:bead)
-    _check_profile_color_by(profile_by, color_by)
+function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTStructure1DSphr,cDFT.DFTStructure1DCyl}, profiles; x_units=:normalized, y_units=:mass, latex=false, plot_by=:bead, color_by=:bead)
+    _check_profile_color_by(plot_by, color_by)
     structure = system.structure
     model = system.model
     if model isa cDFT.ElectrolyteModel
@@ -217,7 +217,7 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTSt
         end
     end
 
-    groups = _plot_groups(species, model, profile_by)
+    groups = _plot_groups(species, model, plot_by)
     colors = _group_colors(groups, species, model, color_by)
 
     ymax = 0.
@@ -257,8 +257,8 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTSt
     return fig
 end
 
-function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure2DCart, profiles; x_units=:normalized, y_units=:normalized, latex=false, profile_by=:bead, color_by=:bead)
-    _check_profile_color_by(profile_by, color_by)
+function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure2DCart, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead)
+    _check_profile_color_by(plot_by, color_by)
     structure = system.structure
     model = system.model
     species = system.species
@@ -297,7 +297,7 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
         return profiles[:,:,k].*norm_const
     end
 
-    groups = _plot_groups(species, model, profile_by)
+    groups = _plot_groups(species, model, plot_by)
     colors = _group_colors(groups, species, model, color_by)
 
     for ((label, members), c) in zip(groups, colors)
@@ -340,8 +340,8 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
     return fig
 end
 
-function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure3DCart, profiles; x_units=:normalized, y_units=:normalized, latex=false, profile_by=:bead, color_by=:bead)
-    _check_profile_color_by(profile_by, color_by)
+function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure3DCart, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead)
+    _check_profile_color_by(plot_by, color_by)
     structure = system.structure
     model = system.model
     species = system.species
@@ -379,7 +379,7 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
         return profiles[:,:,:,k].*norm_const
     end
 
-    groups = _plot_groups(species, model, profile_by)
+    groups = _plot_groups(species, model, plot_by)
     colors = _group_colors(groups, species, model, color_by)
 
     for ((label, members), c) in zip(groups, colors)
