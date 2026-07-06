@@ -1,3 +1,4 @@
+````@raw html
 ---
 # https://vitepress.dev/reference/default-theme-home-page
 layout: home
@@ -6,7 +7,7 @@ hero:
   name: cDFT.jl
   text: Classical Density Functional Theory in Julia
   image:
-    src: cDFT_logo.svg
+    src: logo.png
     alt: cDFT.jl
   tagline: A comprehensive, extensible library of classical DFT and Self-Consistent Field Theory models, built directly on top of Clapeyron.jl
   actions:
@@ -41,6 +42,11 @@ features:
     details: Evolve density profiles in time as well as space, to watch phase separation and microphase ordering actually happen
     link: /tutorials/dynamic_dft
 ---
+````
+
+```@meta
+CurrentModule = cDFT
+```
 
 ## What is this?
 
