@@ -31,15 +31,14 @@ and backward propagators using Gaussian transition probabilities via FFT.
 
 # Fields
 - `kernel_map`: Dictionary mapping species pairs `(i, j)` (sorted) to Fourier-space Gaussian kernels.
-- `b_species`: Statistical segment length per species type.
-- `N`: Number of segments per chain.
-- `segment_species`: Segment-to-species-index mapping per chain (`Vector{Vector{Int}}`).
+
+Chain length and segment-to-species mapping (`N`/`segment_species`, matching
+`TangentHSPropagator`'s minimal-state convention) are not stored here — they're already
+available as `length.(system.species.sequence)`/`system.species.sequence` wherever this
+propagator is used.
 """
 struct DiscreteGaussianChainPropagator{K} <: DFTPropagator
     kernel_map::K
-    b_species::Vector{Float64}
-    N::Vector{Int}
-    segment_species::Vector{Vector{Int}}
 end
 propagate!(system::DGTSystem, δf_res, ρ, ::Nothing) = nothing
 

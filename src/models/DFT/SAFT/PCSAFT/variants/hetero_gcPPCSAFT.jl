@@ -9,7 +9,7 @@ The bulk model can be obtained from Clapeyron.
 """
 HeterogcPCPSAFT
 
-function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, options::DFTOptions;
+function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, options::DFTOptions=DFTOptions();
                    mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
     model = expand_model(model, mol_structure)
     species = get_species(model, structure)
@@ -31,7 +31,7 @@ function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, external_fie
     return DFTSystem(model, species, structure, fields, external_fields, propagator, options, chunksize)
 end
 
-function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, external_fields::ExternalFieldModel=nothing, options::DFTOptions=DFTOptions();
+function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, external_field::ExternalFieldModel, options::DFTOptions=DFTOptions();
                    mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
     model = expand_model(model, mol_structure)
     species = get_species(model, structure)
@@ -39,7 +39,7 @@ function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, external_fie
     propagator = get_propagator(model, species, structure, options.device)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, fields, [external_fields], propagator, options, chunksize)
+    return DFTSystem(model, species, structure, fields, [external_field], propagator, options, chunksize)
 end
 
 struct gcPCPSAFTSpecies <: DFTSpecies

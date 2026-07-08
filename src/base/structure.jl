@@ -113,46 +113,6 @@ function Uniform1DCart(conditions,ρbulk,bounds,ngrid::Int64)
 end
 
 """
-    Uniform3DCart(conditions::Tuple{Float64,Float64}, ρbulk, bounds::Matrix{Float64}, ngrid::Int64)
-
-The generic structure type used when trying to simulate a uniform system in 3D-cartesian coordinates. Contains:
-- `conditions`: The p, T conditions of the system.
-- `ρbulk`: The bulk density of each species in the system.
-- `bounds`: A 3×2 matrix specifying the bounds of the system along each dimension.
-- `ngrids`: The number of grid points used to represent the density profile along each dimension.
-This structure should generally be used to benchmark the DFT code against the bulk calculations.
-Example:
-```julia
-julia> structure = Uniform3DCart((p, T), ρbulk, [-10L 10L; -10L 10L; -10L 10L], 51)
-```
-"""
-struct Uniform2DCart <: DFTStructure2DCart
-    conditions::Tuple{Float64,Float64}
-    ρbulk::Vector{Float64}
-    bounds::Matrix{Float64}
-    ngrid::Tuple{Int64,Int64}
-end
-
-function Uniform2DCart(conditions, ρbulk, bounds, ngrid::Int64)
-    Uniform2DCart(conditions, ρbulk, bounds, (ngrid, ngrid))
-end
-
-function Uniform2DCart(conditions, ρbulk, bounds, ngrid::Tuple{Int64,Int64})
-    Uniform2DCart(conditions, ρbulk, bounds, ngrid)
-end
-
-struct Uniform3DCart <: DFTStructure3DCart
-    conditions::Tuple{Float64,Float64}
-    ρbulk::Vector{Float64}
-    bounds::Matrix{Float64}
-    ngrid::Tuple{Int64,Int64,Int64}
-end
-
-function Uniform3DCart(conditions,ρbulk,bounds,ngrid::Int64)
-    Uniform3DCart(conditions,ρbulk,bounds,(ngrid,ngrid,ngrid))
-end
-
-"""
     Uniform2DCart(conditions::Tuple{Float64,Float64}, ρbulk, bounds::Matrix{Float64}, ngrid::Int64)
 
 The generic structure type used when trying to simulate a uniform system in 2D-cartesian coordinates. Contains:
@@ -173,8 +133,37 @@ struct Uniform2DCart <: DFTStructure2DCart
     ngrid::Tuple{Int64,Int64}
 end
 
-function Uniform2DCart(conditions,ρbulk,bounds,ngrid::Int64)
-    Uniform2DCart(conditions,ρbulk,bounds,(ngrid,ngrid))
+function Uniform2DCart(conditions, ρbulk, bounds, ngrid::Int64)
+    Uniform2DCart(conditions, ρbulk, bounds, (ngrid, ngrid))
+end
+
+function Uniform2DCart(conditions, ρbulk, bounds, ngrid::Tuple{Int64,Int64})
+    Uniform2DCart(conditions, ρbulk, bounds, ngrid)
+end
+
+"""
+    Uniform3DCart(conditions::Tuple{Float64,Float64}, ρbulk, bounds::Matrix{Float64}, ngrid::Int64)
+
+The generic structure type used when trying to simulate a uniform system in 3D-cartesian coordinates. Contains:
+- `conditions`: The p, T conditions of the system.
+- `ρbulk`: The bulk density of each species in the system.
+- `bounds`: A 3×2 matrix specifying the bounds of the system along each dimension.
+- `ngrids`: The number of grid points used to represent the density profile along each dimension.
+This structure should generally be used to benchmark the DFT code against the bulk calculations.
+Example:
+```julia
+julia> structure = Uniform3DCart((p, T), ρbulk, [-10L 10L; -10L 10L; -10L 10L], 51)
+```
+"""
+struct Uniform3DCart <: DFTStructure3DCart
+    conditions::Tuple{Float64,Float64}
+    ρbulk::Vector{Float64}
+    bounds::Matrix{Float64}
+    ngrid::Tuple{Int64,Int64,Int64}
+end
+
+function Uniform3DCart(conditions,ρbulk,bounds,ngrid::Int64)
+    Uniform3DCart(conditions,ρbulk,bounds,(ngrid,ngrid,ngrid))
 end
 
 """
@@ -422,11 +411,13 @@ end
 # `src/structure/morphology.jl` for the seed-profile math.
 
 """
-    LamellarStack1DCart(conditions, ρbulk, bounds::Vector{Float64}, ngrid::Int64; core_groups, amplitude=1.0)
+    LamellarStack1DCart(conditions, ρbulk, bounds::Vector{Float64}, ngrid::Int64; core_groups, amplitude=1.0, periods=1)
 
 Seeds a periodic lamellar (alternating-layer) block-copolymer morphology in 1D-cartesian
 coordinates: `core_groups` enrich in one set of layers, every other group in the
-alternating layers, with period equal to the full box (`bounds`).
+alternating layers. `periods` (a positive integer, default `1`) sets how many full
+lamellar periods are seeded across the box (`bounds`) — `1` means the period equals the
+full box length.
 """
 struct LamellarStack1DCart <: DFTStructure1DCart
     conditions::Tuple{Float64,Float64}
@@ -435,17 +426,20 @@ struct LamellarStack1DCart <: DFTStructure1DCart
     ngrid::Tuple{Int64}
     core_groups::Vector{String}
     amplitude::Float64
+    periods::Int
 end
 
-function LamellarStack1DCart(conditions,ρbulk,bounds::Vector{Float64},ngrid::Int64; core_groups::Vector{String}, amplitude::Float64=0.3)
-    LamellarStack1DCart(conditions,ρbulk,bounds,(ngrid,),core_groups,amplitude)
+function LamellarStack1DCart(conditions,ρbulk,bounds::Vector{Float64},ngrid::Int64; core_groups::Vector{String}, amplitude::Float64=0.3, periods::Int=1)
+    periods >= 1 || throw(ArgumentError("periods must be a positive integer, got $periods"))
+    LamellarStack1DCart(conditions,ρbulk,bounds,(ngrid,),core_groups,amplitude,periods)
 end
 
 """
-    LamellarStack2DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64}; core_groups, amplitude=1.0)
+    LamellarStack2DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64}; core_groups, amplitude=1.0, periods=1)
 
 2D-cartesian counterpart of [`LamellarStack1DCart`](@ref cDFT.LamellarStack1DCart): layers
-alternate along the first dimension, uniform along the second.
+alternate along the first dimension, uniform along the second. `periods` sets how many
+lamellar periods are seeded along the first dimension.
 """
 struct LamellarStack2DCart <: DFTStructure2DCart
     conditions::Tuple{Float64,Float64}
@@ -454,17 +448,20 @@ struct LamellarStack2DCart <: DFTStructure2DCart
     ngrid::Tuple{Int64,Int64}
     core_groups::Vector{String}
     amplitude::Float64
+    periods::Int
 end
 
-function LamellarStack2DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3)
-    LamellarStack2DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude)
+function LamellarStack2DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3, periods::Int=1)
+    periods >= 1 || throw(ArgumentError("periods must be a positive integer, got $periods"))
+    LamellarStack2DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude,periods)
 end
 
 """
-    LamellarStack3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=1.0)
+    LamellarStack3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=1.0, periods=1)
 
 3D-cartesian counterpart of [`LamellarStack1DCart`](@ref cDFT.LamellarStack1DCart): layers
-alternate along the first dimension, uniform along the other two.
+alternate along the first dimension, uniform along the other two. `periods` sets how many
+lamellar periods are seeded along the first dimension.
 """
 struct LamellarStack3DCart <: DFTStructure3DCart
     conditions::Tuple{Float64,Float64}
@@ -473,21 +470,25 @@ struct LamellarStack3DCart <: DFTStructure3DCart
     ngrid::Tuple{Int64,Int64,Int64}
     core_groups::Vector{String}
     amplitude::Float64
+    periods::Int
 end
 
-function LamellarStack3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3)
-    LamellarStack3DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude)
+function LamellarStack3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3, periods::Int=1)
+    periods >= 1 || throw(ArgumentError("periods must be a positive integer, got $periods"))
+    LamellarStack3DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude,periods)
 end
 
 """
-    HexLattice2DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64}; core_groups, amplitude=1.0)
+    HexLattice2DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64}; core_groups, amplitude=1.0, periods=1)
 
 Seeds a periodic hexagonally-packed-cylinder block-copolymer morphology (2D cross-section):
 `core_groups` enrich into two cylindrical domains per unit cell, matching the standard
 rectangular 2-cylinder supercell that reproduces a true hexagonal lattice under periodic
 (FFT) boundary conditions on a Cartesian grid. `bounds`' second dimension should span
 `√3 ×` the first (a warning is emitted otherwise — this only affects the quality of the
-initial guess, not the correctness of a subsequently converged/evolved profile).
+initial guess, not the correctness of a subsequently converged/evolved profile). `periods`
+(a positive integer, default `1`) tiles this 2-cylinder supercell `periods` times along
+each dimension.
 """
 struct HexLattice2DCart <: DFTStructure2DCart
     conditions::Tuple{Float64,Float64}
@@ -496,16 +497,18 @@ struct HexLattice2DCart <: DFTStructure2DCart
     ngrid::Tuple{Int64,Int64}
     core_groups::Vector{String}
     amplitude::Float64
+    periods::Int
 end
 
-function HexLattice2DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3)
+function HexLattice2DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3, periods::Int=1)
+    periods >= 1 || throw(ArgumentError("periods must be a positive integer, got $periods"))
     Lx, Ly = bounds[1,2]-bounds[1,1], bounds[2,2]-bounds[2,1]
     isapprox(Ly, sqrt(3)*Lx; rtol=0.05) || @warn "HexLattice2DCart: bounds[2] should span ≈√3×bounds[1] for a clean hexagonal supercell (got Ly/Lx=$(Ly/Lx)); the initial guess will be distorted."
-    HexLattice2DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude)
+    HexLattice2DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude,periods)
 end
 
 """
-    HexLattice3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=1.0)
+    HexLattice3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=1.0, periods=1)
 
 3D-cartesian counterpart of [`HexLattice2DCart`](@ref cDFT.HexLattice2DCart): the hexagonal
 cylinder lattice is extruded, uniform, along the third dimension.
@@ -517,20 +520,23 @@ struct HexLattice3DCart <: DFTStructure3DCart
     ngrid::Tuple{Int64,Int64,Int64}
     core_groups::Vector{String}
     amplitude::Float64
+    periods::Int
 end
 
-function HexLattice3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3)
+function HexLattice3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3, periods::Int=1)
+    periods >= 1 || throw(ArgumentError("periods must be a positive integer, got $periods"))
     Lx, Ly = bounds[1,2]-bounds[1,1], bounds[2,2]-bounds[2,1]
     isapprox(Ly, sqrt(3)*Lx; rtol=0.05) || @warn "HexLattice3DCart: bounds[2] should span ≈√3×bounds[1] for a clean hexagonal supercell (got Ly/Lx=$(Ly/Lx)); the initial guess will be distorted."
-    HexLattice3DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude)
+    HexLattice3DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude,periods)
 end
 
 """
-    BCC3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=1.0)
+    BCC3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=1.0, periods=1)
 
 Seeds a periodic body-centered-cubic (BCC, Im-3m) sphere block-copolymer morphology:
 `core_groups` enrich into spheres at the corners and body-center of the cubic unit cell
-(`bounds`, expected cubic — a warning is emitted otherwise).
+(`bounds`, expected cubic — a warning is emitted otherwise). `periods` (a positive
+integer, default `1`) tiles `periods` unit cells along each dimension.
 """
 struct BCC3DCart <: DFTStructure3DCart
     conditions::Tuple{Float64,Float64}
@@ -539,21 +545,24 @@ struct BCC3DCart <: DFTStructure3DCart
     ngrid::Tuple{Int64,Int64,Int64}
     core_groups::Vector{String}
     amplitude::Float64
+    periods::Int
 end
 
-function BCC3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3)
+function BCC3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3, periods::Int=1)
+    periods >= 1 || throw(ArgumentError("periods must be a positive integer, got $periods"))
     L = bounds[:,2] .- bounds[:,1]
     isapprox(L[1],L[2];rtol=0.02) && isapprox(L[2],L[3];rtol=0.02) || @warn "BCC3DCart: bounds should be cubic (equal extent in all 3 dimensions) for a clean BCC unit cell; got extents $(L)."
-    BCC3DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude)
+    BCC3DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude,periods)
 end
 
 """
-    Gyroid3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=1.0)
+    Gyroid3DCart(conditions, ρbulk, bounds::Matrix{Float64}, ngrid::Tuple{Int64,Int64,Int64}; core_groups, amplitude=1.0, periods=1)
 
 Seeds a periodic gyroid (Ia-3d) block-copolymer morphology, using the standard Schoen
 gyroid level-set as the initial guess: `core_groups` enrich on one side of the level set
 (one of the two mutually-interpenetrating networks), the rest of the model on the other.
-`bounds` is expected cubic (a warning is emitted otherwise).
+`bounds` is expected cubic (a warning is emitted otherwise). `periods` (a positive
+integer, default `1`) tiles `periods` unit cells along each dimension.
 """
 struct Gyroid3DCart <: DFTStructure3DCart
     conditions::Tuple{Float64,Float64}
@@ -562,12 +571,14 @@ struct Gyroid3DCart <: DFTStructure3DCart
     ngrid::Tuple{Int64,Int64,Int64}
     core_groups::Vector{String}
     amplitude::Float64
+    periods::Int
 end
 
-function Gyroid3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3)
+function Gyroid3DCart(conditions,ρbulk,bounds::Matrix{Float64},ngrid::Tuple{Int64,Int64,Int64}; core_groups::Vector{String}, amplitude::Float64=0.3, periods::Int=1)
+    periods >= 1 || throw(ArgumentError("periods must be a positive integer, got $periods"))
     L = bounds[:,2] .- bounds[:,1]
     isapprox(L[1],L[2];rtol=0.02) && isapprox(L[2],L[3];rtol=0.02) || @warn "Gyroid3DCart: bounds should be cubic (equal extent in all 3 dimensions) for a clean gyroid unit cell; got extents $(L)."
-    Gyroid3DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude)
+    Gyroid3DCart(conditions,ρbulk,bounds,ngrid,core_groups,amplitude,periods)
 end
 
 export Uniform1DCart, ExternalField1DCart

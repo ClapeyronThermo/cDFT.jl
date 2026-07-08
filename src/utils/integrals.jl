@@ -35,12 +35,14 @@ function _∫(f::Array{T},dz) where T<:Real
     ∑f = zero(typeof(first(dz)))
     for i in CartesianIndices(size(f))
         k = Tuple(i)
-        # check if the indices in each dimension is even or odd
-        coef = (k.==1 .|| k.==size(f)) .+ (2 .*(k .% 2 .== 0) .+ 4 .*(k .% 2 .!= 0)).*.!(k.==1 .|| k.==size(f))
-        ∑f += FT(prod(coef)) * FT(f[k...])
+        # 1-based indexing: interior points at even k are odd-numbered interior nodes
+        # (1st, 3rd, ... interior point) and get Simpson's 4/3 weight; interior points at
+        # odd k get the 2/3 weight. (composite Simpson: 1,4,2,4,2,...,4,1)
+        coef = (k.==1 .|| k.==size(f)) .+ (4 .*(k .% 2 .== 0) .+ 2 .*(k .% 2 .!= 0)).*.!(k.==1 .|| k.==size(f))
+        ∑f += T(prod(coef)) * T(f[k...])
     end
 
-    ∑f *= FT(prod(dz ./ 3))
+    ∑f *= T(prod(dz ./ 3))
     return ∑f
 end
 
@@ -56,7 +58,7 @@ converges spectrally (exponentially in N) via the Euler-Maclaurin theorem, compa
 O(h⁴) for Simpson's rule. Works for any N (odd or even).
 """
 function trapz_weights(ngrid::Tuple, dz, options::DFTOptions)
-    FT = float_type(options)
+    FT = fptype(options)
     w = fill(FT(prod(dz)), ngrid...)
     return Adapt.adapt(options.device, w)
 end
@@ -73,7 +75,7 @@ as an outer product, multiplied by `prod(dz ./ 3)`. Requires odd N in each dimen
 """
 function simpson_weights(ngrid::Tuple, dz, options::DFTOptions)
     nd = length(ngrid)
-    FT = float_type(options)
+    FT = fptype(options)
     # Build 1D weight vector for each dimension
     w1d = map(1:nd) do d
         n = ngrid[d]
@@ -82,7 +84,7 @@ function simpson_weights(ngrid::Tuple, dz, options::DFTOptions)
         w[1]   = FT(1)
         w[end] = FT(1)
         for i in 2:n-1
-            w[i] = i % 2 == 0 ? FT(2) : FT(4)
+            w[i] = i % 2 == 0 ? FT(4) : FT(2)
         end
         w .*= FT(h / 3)
         w
@@ -103,6 +105,25 @@ function convolve!(result, profile, kernel, P, iP, buf)
     elmul!(buf, buf, kernel)
     iP * buf
     result .= real.(buf)
+end
+
+"""
+    convolve!(result, profile, kernel, P, iP, buf_r, buf_c)
+
+R2C (real-to-complex) variant of the FFT-based `convolve!` above, for use with a
+half-complex FFT plan pair (`plan_rfft`/`plan_irfft`, e.g. `DiscreteGaussianChainPropagator`'s
+kernels) where the real-space and frequency-space arrays have different sizes and so
+cannot share a single buffer — `buf_r` (real, same shape as `profile`) and `buf_c`
+(complex, half-complex shape matching `kernel`) are separate scratch arrays.
+"""
+function convolve!(result, profile, kernel, P, iP, buf_r, buf_c)
+    if profile !== buf_r
+        buf_r .= profile
+    end
+    mul!(buf_c, P, buf_r)
+    buf_c .*= kernel
+    mul!(buf_r, iP, buf_c)
+    result .= buf_r
 end
 
 """

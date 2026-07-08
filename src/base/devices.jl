@@ -43,21 +43,7 @@ fptype(::DFTOptions{D,FP}) where {D,FP} = FP
 adapt_to_device(backend, ::Type{FP}, arr::AbstractArray) where FP<:AbstractFloat =
     Adapt.adapt(backend, FP.(arr))
 
-function DFTOptions(; precision::Type{<:AbstractFloat}=Float64)
-    return DFTOptions(CPU(; static=true), AndersonFixPoint(), precision)
-end
-
-"""
-    float_type(options::DFTOptions) -> Type
-
-Return the floating-point scalar type used for device allocations.
-Controlled by the `precision` field of `DFTOptions`.
-"""
-float_type(opts::DFTOptions) = opts.precision
-
-is_metal_backend(backend) = nameof(typeof(backend)) == :MetalBackend
-
-function preallocate(system, ρ)
+function preallocate(system, ρ; kwargs...)
     backend = system.options.device
     FP = fptype(system.options)
 
@@ -67,7 +53,7 @@ function preallocate(system, ρ)
 
     δfδρ_res = allocate(backend, FP, ngrid...,nb)
 
-    cache_model = preallocate_model(system, ρ)
+    cache_model = preallocate_model(system, ρ; kwargs...)
 
     cache_external = preallocate_external_potential(system, ρ)
 
@@ -110,6 +96,16 @@ function preallocate_external_potential(system, ρ)
     return cache_external
 end
 
+"""
+    preallocate_propagator(system, ρ)
+
+Universal propagator-buffer preallocation entry point, called by `preallocate`
+alongside `preallocate_model`/`preallocate_external_potential`.
+Dispatches on `system.propagator`'s concrete type (`IdealPropagator`,
+`TangentHSPropagator`, `DiscreteGaussianChainPropagator` — see [Propagators](@ref)) to the
+matching `preallocate_propagator(system, propagator, ρ, backend)` method, which allocates
+whatever forward/backward propagator arrays and FFT plans that propagator needs.
+"""
 function preallocate_propagator(system, ρ)
     backend = system.options.device
     propagtor = system.propagator

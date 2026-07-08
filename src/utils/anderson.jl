@@ -429,6 +429,34 @@ function aa_qr_update!(Q, R, vnew, m, k, Qd)
     return (Q, R)
 end
 
+"""
+    Orthogonalize!(Qkm, hv, vnew, mode="cgs2")
+
+Orthogonalize `vnew` against the existing orthonormal columns `Qkm` (an `N×k` matrix),
+in place, using classical Gram-Schmidt with one reorthogonalization pass (`"cgs2"`) for
+numerical stability. On return: `hv[1:k]` holds the accumulated projection coefficients
+`Qkm' * vnew_original` (summed across both passes), `hv[k+1]` holds
+`norm(vnew_orthogonalized)`, and `vnew` itself has been overwritten with the new
+orthonormalized column (unit norm, orthogonal to every column of `Qkm`) — ready to be
+stored directly as the next `Q` column by the caller.
+"""
+function Orthogonalize!(Qkm, hv, vnew, mode="cgs2")
+    mode == "cgs2" || error("Orthogonalize!: unsupported mode $mode (only \"cgs2\" is implemented)")
+    k = size(Qkm, 2)
+    if k > 0
+        # First Gram-Schmidt pass
+        h1 = Qkm' * vnew
+        mul!(vnew, Qkm, h1, -1.0, 1.0)   # vnew .-= Qkm * h1
+        # Second pass (reorthogonalization), accumulated for numerical stability
+        h2 = Qkm' * vnew
+        mul!(vnew, Qkm, h2, -1.0, 1.0)
+        hv[1:k] .= h1 .+ h2
+    end
+    hv[k+1] = norm(vnew)
+    vnew ./= hv[k+1]
+    return vnew
+end
+
 function update_aaqr!(Q, R, vnew, m, k)
     (nq, mq) = size(Q)
     (k > m - 1) && error("Dimension error in Anderson QR")

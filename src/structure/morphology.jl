@@ -35,30 +35,34 @@ end
 function lamellar_ψ(structure::DFTStructure)
     coords, Ls = _morph_coords(structure)
     X, Lx = coords[1], Ls[1]
-    return @. cos(2π*X/Lx)
+    n = structure.periods
+    return @. cos(2π*n*X/Lx)
 end
 
 function hex_ψ(structure::DFTStructure)
     coords, Ls = _morph_coords(structure)
     X, Y = coords[1], coords[2]
     Lx, Ly = Ls[1], Ls[2]
-    return @. (1/3)*(cos(2π*(X/Lx + Y/Ly)) + cos(2π*(X/Lx - Y/Ly)) + cos(4π*Y/Ly))
+    n = structure.periods
+    return @. (1/3)*(cos(2π*n*(X/Lx + Y/Ly)) + cos(2π*n*(X/Lx - Y/Ly)) + cos(4π*n*Y/Ly))
 end
 
 function bcc_ψ(structure::DFTStructure)
     coords, Ls = _morph_coords(structure)
     X, Y, Z = coords
     L = Ls[1]
-    return @. (1/6)*(cos(2π*(X+Y)/L) + cos(2π*(X-Y)/L) +
-                      cos(2π*(Y+Z)/L) + cos(2π*(Y-Z)/L) +
-                      cos(2π*(Z+X)/L) + cos(2π*(Z-X)/L))
+    n = structure.periods
+    return @. (1/6)*(cos(2π*n*(X+Y)/L) + cos(2π*n*(X-Y)/L) +
+                      cos(2π*n*(Y+Z)/L) + cos(2π*n*(Y-Z)/L) +
+                      cos(2π*n*(Z+X)/L) + cos(2π*n*(Z-X)/L))
 end
 
 function gyroid_ψ(structure::DFTStructure)
     coords, Ls = _morph_coords(structure)
     X, Y, Z = coords
     L = Ls[1]
-    return @. (sin(2π*X/L)*cos(2π*Y/L) + sin(2π*Y/L)*cos(2π*Z/L) + sin(2π*Z/L)*cos(2π*X/L)) / 1.5
+    n = structure.periods
+    return @. (sin(2π*n*X/L)*cos(2π*n*Y/L) + sin(2π*n*Y/L)*cos(2π*n*Z/L) + sin(2π*n*Z/L)*cos(2π*n*X/L)) / 1.5
 end
 
 # Shared fill: ρ_k = ρbulk[component] * (1 + amplitude * sign_k * ψ). amplitude < 1

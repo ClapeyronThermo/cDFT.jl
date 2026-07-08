@@ -208,6 +208,44 @@ function preallocate_model(system::ElectrolyteDFTSystem, ρ)
     return n, δf, fft_buf, in_buf, out_buf, plan, iplan, params, f_val, δf_val, nc, nd, fwd_cache
 end
 
+"""
+    preallocate_model(system::SCFTSystem, ρ; quadrature::Symbol=:trapz)
+
+SCFT's `preallocate_model` counterpart to the generic DFT-family `preallocate_model`
+(`src/models/models.jl`), called by the universal `preallocate(system, ρ)`
+(`src/base/devices.jl`). Bundles everything `get_new_profile!`/`converge!` need each
+iteration besides the propagator buffers and the main field array `δfδρ_res` (SCFT's `w`):
+a second field buffer `w_new`, quadrature weights/`V_eff`, the bulk field `w_bulk`, a
+`compute_fields!` scratch buffer, and per-species `exp_field`/`inv_exp_field` caches.
+
+`quadrature` is a solve-time choice (not a system invariant), so it's accepted as a keyword
+here and forwarded from `preallocate(system, ρ; quadrature=...)`.
+"""
+function preallocate_model(system::SCFTSystem, ρ; quadrature::Symbol=:trapz)
+    nd  = dimension(system)
+    nspecies_ = nspecies(system)
+    dz  = structure_dz(system.structure)
+
+    w_new = similar(ρ)
+
+    weights = if quadrature == :trapz
+        trapz_weights(system.structure.ngrid, dz, system.options)
+    elseif quadrature == :simpson
+        simpson_weights(system.structure.ngrid, dz, system.options)
+    else
+        error("Unknown quadrature rule: $quadrature. Use :trapz or :simpson.")
+    end
+    V_eff = sum(weights)
+
+    w_bulk = compute_bulk_fields(system.model, compute_bulk_densities(system))
+
+    scratch       = similar(selectdim(w_new, nd+1, 1))
+    exp_field     = [similar(selectdim(w_new, nd+1, 1)) for _ in 1:nspecies_]
+    inv_exp_field = [similar(selectdim(w_new, nd+1, 1)) for _ in 1:nspecies_]
+
+    return (; w_new, weights, V_eff, w_bulk, scratch, exp_field, inv_exp_field)
+end
+
 function length_scales(model::EoSModel)
     if hasfield(typeof(model.params), :sigma)
         return diagvalues(model.params.sigma.values)
