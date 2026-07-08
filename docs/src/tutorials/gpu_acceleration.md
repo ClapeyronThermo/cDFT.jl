@@ -42,8 +42,6 @@ calculation (like [Dynamic DFT](@ref)) that repeats the same convolution over ma
 iterations/time steps. For small 1D structures, the CPU is typically faster once you
 account for transfer overhead.
 
-![Wall-time vs. grid size for CPU and GPU on a 3D uniform structure](../assets/gpu_acceleration_benchmark.png)
-
 ## Precision
 
 `DFTOptions` also controls the floating-point precision used throughout the calculation,
