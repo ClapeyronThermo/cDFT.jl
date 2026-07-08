@@ -353,6 +353,15 @@ function free_energy(system::SCFTSystem, ρ, w, Q;
     rho0 = system.model.rho0
     kappa = system.model.kappa
 
+    # Periodic composite-trapezoidal integral: sum(f)*prod(dz). Deliberately NOT the
+    # general-purpose `∫` (Simpson's rule assuming non-periodic spacing dz=L/(N-1)) —
+    # `structure_dz` returns the *periodic* spacing dz=L/N, so `∫` on a periodic grid
+    # systematically undercounts by a factor (N-1)/N (the same discrepancy
+    # `effective_volume`'s docstring already documents for volume/Q/density
+    # normalization). Using the same periodic convention here keeps U_int/U_comp/wρ_sum
+    # consistent with V_eff (and with each other) regardless of caller.
+    per_∫(f) = sum(f) * prod(dz)
+
     # U_int = (1/ρ₀) ∫ Σ_{α<β} χ_αβ ρ_α ρ_β dr
     U_int_integrand = zeros(ngrid...)
     for α in 1:nspecies_
@@ -362,7 +371,7 @@ function free_energy(system::SCFTSystem, ρ, w, Q;
             end
         end
     end
-    U_int = ∫(U_int_integrand, dz) / rho0
+    U_int = per_∫(U_int_integrand) / rho0
 
     # U_comp = (ζ / 2) ∫ (ρ₊/ρ₀ - 1)² dr
     # Consistent with w_comp = ζ/ρ₀ · (ρ₊/ρ₀ − 1) = δU_comp/δρ_α.
@@ -371,13 +380,13 @@ function free_energy(system::SCFTSystem, ρ, w, Q;
         ρ_total .+= Array(selectdim(ρ, nd+1, α))
     end
     U_comp_integrand = (kappa / 2.0) .* (ρ_total ./ rho0 .- 1.0) .^ 2
-    U_comp = ∫(U_comp_integrand, dz)
+    U_comp = per_∫(U_comp_integrand)
 
     # -Σ_K ∫ w_K ρ_K dr
     wρ_sum = 0.0
     for α in 1:nspecies_
         wρ_integrand = Array(selectdim(w, nd+1, α)) .* Array(selectdim(ρ, nd+1, α))
-        wρ_sum += ∫(wρ_integrand, dz)
+        wρ_sum += per_∫(wρ_integrand)
     end
 
     # Molecule-type contributions (chains and solvents, unified; a solvent is N_c=1).

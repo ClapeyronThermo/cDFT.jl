@@ -1,48 +1,63 @@
-using FFTW
-using KernelAbstractions
-using LinearAlgebra
+using Test, cDFT
+
+# Collapses the model/mol_structure/structure/system construction repeated across nearly
+# every SCFT testset. `chain_specs` is a list of `(name, group_counts)` pairs, e.g.
+# `[("diblock", ["A"=>5,"B"=>5])]`; the linear bead sequence for `mol_structure` is built
+# automatically from each spec's group letters/counts.
+function build_scft_system(chain_specs, chi; rho0=1.0, kappa=20.0, b=ones(size(chi,1)),
+                            L=10.0, ngrid=65, rhobulk_seed=ones(length(chain_specs)),
+                            ensemble=fill(:canonical, length(chain_specs)),
+                            n_molecules=ones(length(chain_specs)),
+                            structure=cDFT.Uniform1DCart((0.0,0.0), rhobulk_seed, [0.0,L], ngrid))
+    model = cDFT.SCFTLatticeFluid(chain_specs, b, chi; rho0=rho0, kappa=kappa)
+    mol_structure = Dict(name => cDFT.custom_structure(join(letter^n for (letter,n) in groups))
+                          for (name, groups) in chain_specs)
+    return cDFT.SCFTSystem(model, structure, cDFT.DFTOptions();
+        mol_structure=mol_structure, ensemble=ensemble, n_molecules=n_molecules)
+end
 
 @testset "SCFT" begin
 
-    backend = CPU()
-
-    @testset "FloryHuggins constructor" begin
+    @testset "expand_model / get_species error paths" begin
         chi = [0.0 10.0; 10.0 0.0]
-        fh = cDFT.FloryHuggins(chi, 1.0, 20.0)
-        @test fh.chi == chi
-        @test fh.rho0 == 1.0
-        @test fh.kappa == 20.0
+        model = cDFT.SCFTLatticeFluid([("diblock", ["A"=>3, "B"=>2])], [1.0, 1.2], chi; rho0=1.0, kappa=20.0)
+
+        # a mol_structure inconsistent with the grouplist composition must throw
+        bad_mol_structure = Dict("diblock" => cDFT.custom_structure("AABBB"))
+        @test_throws AssertionError cDFT.expand_model(model, bad_mol_structure)
+
+        # a branched mol_structure (SCFT's propagator can't represent branching) must throw
+        branched_model = cDFT.SCFTLatticeFluid([("chain", ["A"=>3, "B"=>2])], [1.0, 1.2], chi; rho0=1.0, kappa=20.0)
+        branched_structure = Dict("chain" => cDFT.custom_structure("AA(B)AB"))
+        @test_throws AssertionError cDFT.expand_model(branched_model, branched_structure)
     end
 
-    @testset "Field computation - FloryHuggins" begin
-        nspecies = 2
+    @testset "Propagator kernel matches analytic Gaussian-chain formula" begin
+        L = 10.0
+        b_A, b_B = 1.0, 2.0
+        system = build_scft_system([("diblock", ["A"=>2, "B"=>2])], zeros(2,2);
+            b=[b_A, b_B], L=L, ngrid=64, ensemble=[:canonical], n_molecules=[1.0])
+
+        ν1 = 1.0 / L
+        b_AB = sqrt((b_A^2 + b_B^2) / 2)
+        for ((α, β), b_bond) in (((1,1), b_A), ((2,2), b_B), ((1,2), b_AB))
+            kernel = system.propagator.kernel_map[(α, β)]
+            @test real(kernel[1]) ≈ 1.0 atol = 1e-14
+            @test real(kernel[2]) ≈ exp(-2π^2 * b_bond^2 * ν1^2 / 3) rtol = 1e-12
+        end
+    end
+
+    @testset "Field formula matches closed form" begin
         chi = [0.0 10.0; 10.0 0.0]
         rho0 = 1.0
         kappa = 20.0
-        fh = cDFT.FloryHuggins(chi, rho0, kappa)
+        system = build_scft_system([("chain", ["A"=>3, "B"=>2])], chi; rho0=rho0, kappa=kappa,
+            ensemble=[:canonical], n_molecules=[10.0], ngrid=64)
+        ngrid = system.structure.ngrid[1]
 
-        L = 10.0
-        ngrid = 64
-
-        chain_A = cDFT.SCFTChain(N=5, b=1.0, segment_species=[1,1,1,2,2],
-                                  ensemble=:canonical, n_chains=10.0)
-
-        system = cDFT.SCFTSystem(
-            interaction=fh,
-            chains=[chain_A],
-            nspecies=nspecies,
-            species_names=[:A, :B],
-            bounds=[0.0, L],
-            ngrid=ngrid,
-            options=cDFT.DFTOptions()
-        )
-
-        # Uniform density test
-        ρ_A = 0.6
-        ρ_B = 0.4
+        ρ_A, ρ_B = 0.6, 0.4
         ρ = hcat(fill(ρ_A, ngrid), fill(ρ_B, ngrid))
         w = similar(ρ)
-
         cDFT.compute_fields!(system, ρ, w)
 
         # Expected: w_A = χ_AB/ρ₀ * ρ_B + ζ/ρ₀ * (ρ₊/ρ₀ - 1)
@@ -50,328 +65,144 @@ using LinearAlgebra
         comp = (kappa / rho0) * (ρ_total / rho0 - 1.0)
         expected_wA = chi[1,2] / rho0 * ρ_B + comp
         expected_wB = chi[2,1] / rho0 * ρ_A + comp
-
         @test all(x -> isapprox(x, expected_wA; atol=1e-12), w[:, 1])
         @test all(x -> isapprox(x, expected_wB; atol=1e-12), w[:, 2])
-    end
 
-    @testset "Bulk fields" begin
-        chi = [0.0 10.0 5.0; 10.0 0.0 3.0; 5.0 3.0 0.0]
-        rho0 = 1.0
-        kappa = 20.0
-        fh = cDFT.FloryHuggins(chi, rho0, kappa)
+        # The bulk (scalar) formula must agree with the spatial formula above
+        w_bulk_check = cDFT.compute_bulk_fields(system.model, [ρ_A, ρ_B])
+        @test w_bulk_check[1] ≈ expected_wA atol = 1e-12
+        @test w_bulk_check[2] ≈ expected_wB atol = 1e-12
 
-        bulk = [0.4, 0.3, 0.3]
-        w_bulk = cDFT.compute_bulk_fields(fh, bulk)
-
-        ρ_total = sum(bulk)
-        comp = (kappa / rho0) * (ρ_total / rho0 - 1.0)
-
-        @test w_bulk[1] ≈ chi[1,2]/rho0 * bulk[2] + chi[1,3]/rho0 * bulk[3] + comp
-        @test w_bulk[2] ≈ chi[2,1]/rho0 * bulk[1] + chi[2,3]/rho0 * bulk[3] + comp
-        @test w_bulk[3] ≈ chi[3,1]/rho0 * bulk[1] + chi[3,2]/rho0 * bulk[2] + comp
+        # 3-species case, direct bulk-fields check (no full system needed)
+        chi3 = [0.0 10.0 5.0; 10.0 0.0 3.0; 5.0 3.0 0.0]
+        model3 = cDFT.SCFTLatticeFluid([("chain", ["A"=>1, "B"=>1, "S"=>1])], ones(3), chi3; rho0=rho0, kappa=kappa)
+        bulk3 = [0.4, 0.3, 0.3]
+        w_bulk3 = cDFT.compute_bulk_fields(model3, bulk3)
+        ρ_total3 = sum(bulk3)
+        comp3 = (kappa / rho0) * (ρ_total3 / rho0 - 1.0)
+        @test w_bulk3[1] ≈ chi3[1,2]/rho0*bulk3[2] + chi3[1,3]/rho0*bulk3[3] + comp3
+        @test w_bulk3[2] ≈ chi3[2,1]/rho0*bulk3[1] + chi3[2,3]/rho0*bulk3[3] + comp3
+        @test w_bulk3[3] ≈ chi3[3,1]/rho0*bulk3[1] + chi3[3,2]/rho0*bulk3[2] + comp3
     end
 
     @testset "Uniform self-consistency" begin
-        # A uniform system at bulk densities should be a fixed point:
-        # fields(ρ_bulk) → propagators → Q → densities should return ρ_bulk
-        nspecies = 2
-        chi = [0.0 1.0; 1.0 0.0]
-        rho0 = 1.0
-        kappa = 20.0
-        fh = cDFT.FloryHuggins(chi, rho0, kappa)
-
-        L = 10.0
-        ngrid = 65  # odd for Simpson rule
-
-        N_seg = 10
-        n_chains = 1.0
-        seg_spec = vcat(fill(1, 5), fill(2, 5))
-        chain = cDFT.SCFTChain(N=N_seg, b=1.0, segment_species=seg_spec,
-                                ensemble=:canonical, n_chains=n_chains)
-
-        system = cDFT.SCFTSystem(
-            interaction=fh,
-            chains=[chain],
-            nspecies=nspecies,
-            species_names=[:A, :B],
-            bounds=[0.0, L],
-            ngrid=ngrid,
-            options=cDFT.DFTOptions()
-        )
+        # A uniform system at bulk densities is exactly the fixed point of converge!'s
+        # field map: compute_fields!(bulk) reproduces w_bulk (Δw=0 everywhere), so every
+        # propagator value is exp(0)=1, Q̃=1, and the resulting density is bulk again.
+        # Run through the public converge! entry point rather than hand-driving the
+        # internal propagate!/compute_partition_functions/compute_densities! pipeline.
+        system = build_scft_system([("diblock", ["A"=>5, "B"=>5])], [0.0 1.0; 1.0 0.0];
+            ensemble=[:canonical], n_molecules=[1.0], ngrid=65)
+        ngrid = system.structure.ngrid[1]
 
         bulk = cDFT.compute_bulk_densities(system)
-        ρ_A_bulk = bulk[1]
-        ρ_B_bulk = bulk[2]
+        ρ = hcat(fill(bulk[1], ngrid), fill(bulk[2], ngrid))
+        cDFT.converge!(system, ρ)
 
-        ρ = hcat(fill(ρ_A_bulk, ngrid), fill(ρ_B_bulk, ngrid))
-        w = similar(ρ)
-        ρ_new = similar(ρ)
-
-        cDFT.compute_fields!(system, ρ, w)
-
-        propagator = system.propagator
-        q_fwd, q_bwd, buf, P, iP = cDFT.preallocate_propagator(system, propagator, ρ, backend)
-        w_bulk = cDFT.compute_bulk_fields(fh, bulk)
-        cDFT.propagate_scft!(system, w, w_bulk, q_fwd, q_bwd, buf, P, iP)
-
-        dz = cDFT.structure_dz(system.structure)
-        Q_chains, Q_solvents = cDFT.compute_partition_functions(system, w, w_bulk, q_fwd, dz)
-
-        cDFT.compute_densities!(system, w, w_bulk, q_fwd, q_bwd, Q_chains, Q_solvents, ρ_new)
-
-        # For a uniform system, the new densities should match the input
-        @test all(x -> isapprox(x, ρ_A_bulk; rtol=1e-6), ρ_new[:, 1])
-        @test all(x -> isapprox(x, ρ_B_bulk; rtol=1e-6), ρ_new[:, 2])
+        @test all(x -> isapprox(x, bulk[1]; rtol=1e-6), ρ[:, 1])
+        @test all(x -> isapprox(x, bulk[2]; rtol=1e-6), ρ[:, 2])
     end
 
     @testset "Free energy - uniform system" begin
-        nspecies = 2
         chi = [0.0 1.0; 1.0 0.0]
         rho0 = 1.0
         kappa = 20.0
-        fh = cDFT.FloryHuggins(chi, rho0, kappa)
-
-        L = 10.0
-        ngrid = 65
-
-        N_seg = 10
-        n_chains = 1.0
-        seg_spec = vcat(fill(1, 5), fill(2, 5))
-        chain = cDFT.SCFTChain(N=N_seg, b=1.0, segment_species=seg_spec,
-                                ensemble=:canonical, n_chains=n_chains)
-
-        system = cDFT.SCFTSystem(
-            interaction=fh,
-            chains=[chain],
-            nspecies=nspecies,
-            species_names=[:A, :B],
-            bounds=[0.0, L],
-            ngrid=ngrid,
-            options=cDFT.DFTOptions()
-        )
+        system = build_scft_system([("diblock", ["A"=>5, "B"=>5])], chi; rho0=rho0, kappa=kappa,
+            ensemble=[:canonical], n_molecules=[1.0], ngrid=65)
+        ngrid = system.structure.ngrid[1]
 
         bulk = cDFT.compute_bulk_densities(system)
-        ρ_A_bulk = bulk[1]
-        ρ_B_bulk = bulk[2]
+        ρ = hcat(fill(bulk[1], ngrid), fill(bulk[2], ngrid))
+        w_bulk = cDFT.compute_bulk_fields(system.model, bulk)
+        w = hcat(fill(w_bulk[1], ngrid), fill(w_bulk[2], ngrid))
+        # At the uniform fixed point Δw=0 everywhere, so every propagator value is
+        # exp(0)=1 and Q̃=1 exactly (not just approximately) — no propagation needed.
+        Q = [1.0]
 
-        ρ = hcat(fill(ρ_A_bulk, ngrid), fill(ρ_B_bulk, ngrid))
-        w = similar(ρ)
-        cDFT.compute_fields!(system, ρ, w)
+        H = cDFT.free_energy(system, ρ, w, Q)
 
-        propagator = system.propagator
-        q_fwd, q_bwd, buf, P, iP = cDFT.preallocate_propagator(system, propagator, ρ, backend)
-        w_bulk = cDFT.compute_bulk_fields(fh, bulk)
-        cDFT.propagate_scft!(system, w, w_bulk, q_fwd, q_bwd, buf, P, iP)
         dz = cDFT.structure_dz(system.structure)
-        Q_chains, Q_solvents = cDFT.compute_partition_functions(system, w, w_bulk, q_fwd, dz)
-
-        H = cDFT.free_energy(system, ρ, w, Q_chains, Q_solvents)
-
-        # The free energy should be a finite number for a well-defined system
-        @test isfinite(H)
-
-        # For uniform system, U_int = χ_AB * ρ_A * ρ_B * V_eff / ρ₀
         V_eff = cDFT.effective_volume(system, dz)
-        U_int_expected = chi[1,2] * ρ_A_bulk * ρ_B_bulk * V_eff / rho0
-        ρ_total = ρ_A_bulk + ρ_B_bulk
-        U_comp_expected = (kappa / (2.0 * rho0)) * (ρ_total / rho0 - 1.0)^2 * V_eff
+        U_int_expected = chi[1,2] * bulk[1] * bulk[2] * V_eff / rho0
+        ρ_total = bulk[1] + bulk[2]
+        U_comp_expected = (kappa / 2.0) * (ρ_total / rho0 - 1.0)^2 * V_eff
+        wρ_sum_expected = (w_bulk[1]*bulk[1] + w_bulk[2]*bulk[2]) * V_eff
+        w_bulk_sum = 5*w_bulk[1] + 5*w_bulk[2]  # 5 A-segments + 5 B-segments per chain
+        molecule_sum_expected = -1.0 * (log(Q[1]) - w_bulk_sum)  # n_molecules=1.0
+        H_expected = U_int_expected + U_comp_expected - wρ_sum_expected + molecule_sum_expected
 
-        @test U_int_expected > 0
-        @test isfinite(U_comp_expected)
+        @test H ≈ H_expected rtol = 1e-8
     end
 
     @testset "Initialize profiles" begin
-        nspecies = 2
-        chi = [0.0 10.0; 10.0 0.0]
-        fh = cDFT.FloryHuggins(chi, 1.0, 20.0)
+        system = build_scft_system([("chain", ["A"=>5, "B"=>5])], [0.0 10.0; 10.0 0.0];
+            ensemble=[:canonical], n_molecules=[10.0], ngrid=64)
+        ngrid = system.structure.ngrid[1]
 
-        L = 10.0
-        ngrid = 64
-        n_chains = 10.0
-
-        chain = cDFT.SCFTChain(N=10, b=1.0, segment_species=vcat(fill(1,5), fill(2,5)),
-                                ensemble=:canonical, n_chains=n_chains)
-
-        system = cDFT.SCFTSystem(
-            interaction=fh,
-            chains=[chain],
-            nspecies=nspecies,
-            species_names=[:A, :B],
-            bounds=[0.0, L],
-            ngrid=ngrid,
-            options=cDFT.DFTOptions()
-        )
-
-        # Uniform initialization
-        ρ = cDFT.initialize_profiles(system; mode=:uniform)
-        @test size(ρ) == (ngrid, nspecies)
+        ρ = cDFT.initialize_profiles(system)
+        @test size(ρ) == (ngrid, 2)
         @test all(ρ[:, 1] .== ρ[1, 1])
         @test all(ρ[:, 2] .== ρ[1, 2])
 
-        # Perturbed initialization
-        ρ_pert = cDFT.initialize_profiles(system; mode=:perturbed)
-        @test size(ρ_pert) == (ngrid, nspecies)
+        ρ_pert = cDFT.initialize_profiles(system; noise=0.01)
+        @test size(ρ_pert) == (ngrid, 2)
         @test !all(ρ_pert[:, 1] .== ρ_pert[1, 1])
     end
 
     @testset "Grand canonical solvent" begin
-        nspecies = 3  # A, B, S
+        # Same fixed-point argument as "Uniform self-consistency", extended to a
+        # multi-molecule-type (canonical diblock + grand-canonical solvent) system,
+        # run through the public converge! entry point.
         chi = [0.0 10.0 5.0; 10.0 0.0 3.0; 5.0 3.0 0.0]
-        rho0 = 1.0
-        kappa = 20.0
-        fh = cDFT.FloryHuggins(chi, rho0, kappa)
-
-        L = 10.0
-        ngrid = 65
-
-        N_seg = 10
-        seg_spec = vcat(fill(1, 5), fill(2, 5))
-        chain = cDFT.SCFTChain(N=N_seg, b=1.0, segment_species=seg_spec,
-                                ensemble=:canonical, n_chains=10.0)
-
-        solvent = cDFT.SCFTSolvent(species_index=3, ensemble=:grand_canonical,
-                                    bulk_density=0.3)
-
-        system = cDFT.SCFTSystem(
-            interaction=fh,
-            chains=[chain],
-            solvents=[solvent],
-            nspecies=nspecies,
-            species_names=[:A, :B, :S],
-            bounds=[0.0, L],
-            ngrid=ngrid,
-            options=cDFT.DFTOptions()
-        )
+        system = build_scft_system(
+            [("diblock", ["A"=>5, "B"=>5]), ("solvent", ["S"=>1])], chi;
+            ensemble=[:canonical, :grand_canonical], n_molecules=[10.0, 0.0],
+            rhobulk_seed=[1.0, 0.3], ngrid=65)
+        ngrid = system.structure.ngrid[1]
 
         bulk = cDFT.compute_bulk_densities(system)
-        w_bulk = cDFT.compute_bulk_fields(fh, bulk)
+        ρ = hcat((fill(b, ngrid) for b in bulk)...)
+        cDFT.converge!(system, ρ)
 
-        ρ = zeros(ngrid, nspecies)
-        for α in 1:nspecies
-            ρ[:, α] .= bulk[α]
-        end
-        w = similar(ρ)
-        cDFT.compute_fields!(system, ρ, w)
-
-        ρ_new = similar(ρ)
-        propagator = system.propagator
-        q_fwd, q_bwd, buf, P, iP = cDFT.preallocate_propagator(system, propagator, ρ, backend)
-        cDFT.propagate_scft!(system, w, w_bulk, q_fwd, q_bwd, buf, P, iP)
-        dz = cDFT.structure_dz(system.structure)
-        Q_chains, Q_solvents = cDFT.compute_partition_functions(system, w, w_bulk, q_fwd, dz)
-        cDFT.compute_densities!(system, w, w_bulk, q_fwd, q_bwd, Q_chains, Q_solvents, ρ_new)
-
-        # Solvent density should match bulk
-        @test all(x -> isapprox(x, 0.3; rtol=1e-6), ρ_new[:, 3])
-    end
-
-    @testset "3D SCFTSystem construction" begin
-        nspecies = 2
-        chi = [0.0 10.0; 10.0 0.0]
-        fh = cDFT.FloryHuggins(chi, 1.0, 20.0)
-
-        L = 5.0
-        ngrid = 16
-        bounds_3d = [0.0 L; 0.0 L; 0.0 L]
-
-        chain = cDFT.SCFTChain(N=4, b=1.0, segment_species=[1,1,2,2],
-                                ensemble=:canonical, n_chains=10.0)
-
-        system = cDFT.SCFTSystem(
-            interaction=fh,
-            chains=[chain],
-            nspecies=nspecies,
-            species_names=[:A, :B],
-            bounds=bounds_3d,
-            ngrid=ngrid,
-            options=cDFT.DFTOptions()
-        )
-
-        @test cDFT.dimension(system) == 3
-        @test system.structure.ngrid == (ngrid, ngrid, ngrid)
-
-        ρ = cDFT.initialize_profiles(system; mode=:uniform)
-        @test size(ρ) == (ngrid, ngrid, ngrid, nspecies)
+        # Solvent density should stay at its bulk value
+        @test all(x -> isapprox(x, bulk[3]; rtol=1e-6), ρ[:, 3])
     end
 
     @testset "Convergence - perturbed to uniform" begin
         # A symmetric AB diblock with weak χ should converge back to uniform
         # from a small perturbation (below the spinodal)
-        nspecies = 2
         chi = [0.0 0.5; 0.5 0.0]  # χN = 5, well below ODT (~10.5)
-        rho0 = 1.0
-        kappa = 20.0
-        fh = cDFT.FloryHuggins(chi, rho0, kappa)
-
-        L = 10.0
-        ngrid = 65
-
-        N_seg = 10
-        n_chains = 1.0
-        seg_spec = vcat(fill(1, 5), fill(2, 5))
-        chain = cDFT.SCFTChain(N=N_seg, b=1.0, segment_species=seg_spec,
-                                ensemble=:canonical, n_chains=n_chains)
-
-        system = cDFT.SCFTSystem(
-            interaction=fh,
-            chains=[chain],
-            nspecies=nspecies,
-            species_names=[:A, :B],
-            bounds=[0.0, L],
-            ngrid=ngrid,
-            options=cDFT.DFTOptions()
-        )
+        system = build_scft_system([("diblock", ["A"=>5, "B"=>5])], chi;
+            ensemble=[:canonical], n_molecules=[1.0], ngrid=65)
 
         bulk = cDFT.compute_bulk_densities(system)
+        ρ = cDFT.initialize_profiles(system; noise=0.05)
+        @test maximum(abs.(ρ[:, 1] .- bulk[1])) > 0.001  # verify it's actually perturbed
 
-        # Perturbed initial condition
-        ρ = cDFT.initialize_profiles(system; mode=:perturbed, perturbation=0.05)
+        cDFT.converge!(system, ρ)
 
-        # Verify it's actually perturbed
-        @test maximum(abs.(ρ[:, 1] .- bulk[1])) > 0.001
-
-        # Run field-based convergence
-        result = cDFT.converge_fields!(system, ρ)
-
-        # Should converge back to uniform bulk densities
         @test all(x -> isapprox(x, bulk[1]; rtol=1e-3), ρ[:, 1])
         @test all(x -> isapprox(x, bulk[2]; rtol=1e-3), ρ[:, 2])
     end
 
     @testset "Convergence - lamellar microphase separation" begin
         # Symmetric AB diblock above the ODT (χN=30 >> 10.5) should form lamellae
-        nspecies = 2
         N_seg = 20
         chi_val = 1.5  # χN = 30
         rho0 = 1.0
-        kappa = 20.0
         chi = [0.0 chi_val; chi_val 0.0]
-        fh = cDFT.FloryHuggins(chi, rho0, kappa)
 
         # Box ≈ one lamellar period (Rg ≈ b√(N/6) ≈ 1.83, d ≈ 3.8 Rg ≈ 7)
         L = 7.0
         ngrid = 65
         n_chains = L / N_seg  # total segment density ≈ ρ₀
-
-        seg_spec = vcat(fill(1, N_seg÷2), fill(2, N_seg÷2))
-        chain = cDFT.SCFTChain(N=N_seg, b=1.0, segment_species=seg_spec,
-                                ensemble=:canonical, n_chains=n_chains)
-
-        system = cDFT.SCFTSystem(
-            interaction=fh,
-            chains=[chain],
-            nspecies=nspecies,
-            species_names=[:A, :B],
-            bounds=[0.0, L],
-            ngrid=ngrid,
-            options=cDFT.DFTOptions()
-        )
+        system = build_scft_system([("diblock", ["A"=>N_seg÷2, "B"=>N_seg÷2])], chi;
+            ensemble=[:canonical], n_molecules=[n_chains], L=L, ngrid=ngrid)
 
         bulk = cDFT.compute_bulk_densities(system)
 
         # Seed with sinusoidal perturbation to break symmetry toward lamellae
-        ρ = cDFT.initialize_profiles(system; mode=:uniform)
+        ρ = cDFT.initialize_profiles(system)
         z = range(0, L, length=ngrid)
         amp = 0.1 * bulk[1]
         for i in 1:ngrid
@@ -380,12 +211,12 @@ using LinearAlgebra
         end
         clamp!(ρ, 1e-10, Inf)
 
-        result = cDFT.converge_fields!(system, ρ)
+        cDFT.converge!(system, ρ)
 
         # Density profiles should be strongly non-uniform (microphase separated)
         amp_A = maximum(ρ[:, 1]) - minimum(ρ[:, 1])
         amp_B = maximum(ρ[:, 2]) - minimum(ρ[:, 2])
-        @test amp_A > 0.5  # large compositional contrast
+        @test amp_A > 0.5
         @test amp_B > 0.5
 
         # A and B should be out of phase (complementary domains)
@@ -394,5 +225,27 @@ using LinearAlgebra
         # Incompressibility: total density ≈ ρ₀ everywhere
         ρ_total = ρ[:, 1] .+ ρ[:, 2]
         @test all(x -> isapprox(x, rho0; rtol=0.05), ρ_total)
+    end
+
+    @testset "Morphology-seeded initialize_profiles" begin
+        # A SCFTSystem built with a LamellarStack1DCart structure should have
+        # initialize_profiles(system) reach the morphology-seeding dispatch branch
+        # (src/structure/structure.jl), not SCFT's own flat bulk/perturbed seeding.
+        L = 7.0
+        ngrid = 33
+        n_chains = L / 10
+        structure = cDFT.LamellarStack1DCart((0.0, 0.0), [1.0], [0.0, L], ngrid; core_groups=["A"])
+        system = build_scft_system([("diblock", ["A"=>5, "B"=>5])], [0.0 1.0; 1.0 0.0];
+            ensemble=[:canonical], n_molecules=[n_chains], structure=structure)
+
+        ρ = cDFT.initialize_profiles(system)
+
+        # Morphology-seeded profile must be non-uniform (unlike SCFT's default flat seed)
+        @test !all(ρ[:, 1] .== ρ[1, 1])
+        @test !all(ρ[:, 2] .== ρ[1, 2])
+        # A and B should be seeded out of phase (core_groups=["A"] vs. the rest)
+        @test argmax(ρ[:, 1]) != argmax(ρ[:, 2])
+        # Strictly positive everywhere (amplitude < 1 guarantee from _fill_morphology!)
+        @test all(ρ .> 0)
     end
 end

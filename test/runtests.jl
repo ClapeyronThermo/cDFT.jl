@@ -10,4 +10,5 @@ using ChemicalIdentifiers
     include("test_methods.jl")
     include("test_coordinate_systems.jl")
     include("test_morphology.jl")
+    include("test_scft.jl")
 end
