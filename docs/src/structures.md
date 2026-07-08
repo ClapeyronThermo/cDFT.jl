@@ -33,7 +33,9 @@ cDFT.ExternalField1DCart
 
 Used to resolve an interface between two bulk phases (vapour-liquid, liquid-liquid, or a
 microphase-separated copolymer melt), initialised as a sigmoidal density profile between
-the two supplied bulk densities.
+the two supplied bulk densities. Not supported for [`SCFTSystem`](@ref cDFT.SCFTSystem)
+(see [SCFT](models/scft.md)) — SCFT has no two-phase/interfacial-tension machinery, and
+`SCFTSystem`'s constructor rejects these structures outright.
 
 ```@docs
 cDFT.TwoPhase1DCart
@@ -50,7 +52,9 @@ Seed (and, via `initialize_profiles`, converge) a single periodic unit cell of a
 crystallographic microphase morphology, in which different named groups of one
 group-contribution component (see [Group-Contribution & Heterosegmented Chains](@ref))
 enrich in different spatial domains — see [Copolymer Microphase Morphologies](@ref) for a
-worked example.
+worked example. These structures also work directly with [`SCFTSystem`](@ref
+cDFT.SCFTSystem) (see [SCFT](models/scft.md)) — `initialize_profiles` dispatches to the
+same per-species-aware seeding either way.
 
 ```@docs
 cDFT.LamellarStack1DCart
