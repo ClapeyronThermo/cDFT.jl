@@ -71,5 +71,26 @@ function preallocate_model(system::DGTSystem, ρ)
     δf_val  = allocate(CPU(), Float64, ngrid...);  fill!(δf_val, 1.0)
 
     params, nc = preallocate_params(system)
-    return n, δf, fft_buf, in_buf, out_buf, plan, iplan, params, f_val, δf_val, nc, nd
+
+    # Mirrors preallocate_model(::DFTSystem,...)/(::ElectrolyteDFTSystem,...)
+    # (src/models/models.jl) — δFδρ_res! destructures fwd_cache unconditionally whenever
+    # system.options.ad_mode === :forward (the DFTOptions default), so DGT needs the same
+    # dn_seeds/df_outs/batch construction, not just `nothing`.
+    if system.options.ad_mode === :forward
+        batch = nf * nc
+        dn_seeds = ntuple(Val(batch)) do k
+            f_idx = (k - 1) ÷ nc + 1
+            c_idx = (k - 1) % nc + 1
+            seed = allocate(CPU(), Float64, ngrid..., nf, nc)
+            fill!(seed, 0)
+            fill!(selectdim(selectdim(seed, nd+1, f_idx), nd+1, c_idx), 1)
+            seed
+        end
+        df_outs   = ntuple(_ -> allocate(CPU(), Float64, ngrid...), Val(batch))
+        fwd_cache = (dn_seeds, df_outs, Val(batch))
+    else
+        fwd_cache = nothing
+    end
+
+    return n, δf, fft_buf, in_buf, out_buf, plan, iplan, params, f_val, δf_val, nc, nd, fwd_cache
 end

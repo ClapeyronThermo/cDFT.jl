@@ -105,6 +105,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase2DHexCart, speci
     lb,ub = bounds(structure,1)
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
+    nd = dimension(structure)
     (pressure, temperature) = structure.conditions
     ρ1 = structure.ρbulk
     ρ2 = structure.ρbulk2
@@ -148,6 +149,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DHexCart, speci
     lb,ub = bounds(structure,1)
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
+    nd = dimension(structure)
     (pressure, temperature) = structure.conditions
     ρ1 = structure.ρbulk
     ρ2 = structure.ρbulk2
