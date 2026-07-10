@@ -118,59 +118,20 @@ end
 # structure-type groupings of the generic methods below — a broader combined Union here
 # would be ambiguous with them (neither method strictly more specific than the other
 # across both the `structure` and `species` arguments at once).
-function initialize_profiles(model::EoSModel, structure::DFTStructure{1,Cartesian,UniformGrid}, species::SCFTSpecies, device, ::Type{FP}=Float64) where FP<:AbstractFloat
-    _scft_initialize_profiles(structure, species, device, FP)
-end
-function initialize_profiles(model::EoSModel, structure::DFTStructure{2,Cartesian,UniformGrid}, species::SCFTSpecies, device, ::Type{FP}=Float64) where FP<:AbstractFloat
-    _scft_initialize_profiles(structure, species, device, FP)
-end
-function initialize_profiles(model::EoSModel, structure::DFTStructure{3,Cartesian,UniformGrid}, species::SCFTSpecies, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel, structure::DFTStructure{N,Cartesian,UniformGrid}, species::SCFTSpecies, device, ::Type{FP}=Float64) where {N,FP<:AbstractFloat}
     _scft_initialize_profiles(structure, species, device, FP)
 end
 
-function initialize_profiles(model::EoSModel,structure::DFTStructure{1,Cartesian,UniformGrid}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel,structure::DFTStructure{N,Cartesian,UniformGrid}, species, device, ::Type{FP}=Float64) where {N,FP<:AbstractFloat}
     ngrid = structure.ngrid
-    ρbulk = structure.ρbulk
-
-    ρ = allocate(device, FP, ngrid..., sum(species.nbeads))
-
-    for i in @comps
-        for j in @chain(i)
-            ρ[:,j] = ρbulk[i]*ones(ngrid)
-        end
-    end
-    return ρ
-end
-
-function initialize_profiles(model::EoSModel,structure::DFTStructure{2,Cartesian,UniformGrid}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
-    nd = dimension(structure)
-    ngrid = structure.ngrid
-
-
     ρbulk = structure.ρbulk
     ρ = allocate(device, FP, ngrid..., sum(species.nbeads))
     for i in @comps
         for j in @chain(i)
-            ρ[:,:,j] .= ρbulk[i]
+            ρj = selectdim(ρ,N,j)
+            ρj .= ρbulk[i]
         end
     end
-
-    return ρ
-end
-
-function initialize_profiles(model::EoSModel,structure::DFTStructure{3,Cartesian,UniformGrid}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
-    nd = dimension(structure)
-    ngrid = structure.ngrid
-
-
-    ρbulk = structure.ρbulk
-    ρ = allocate(device, FP, ngrid..., sum(species.nbeads))
-    for i in @comps
-        for j in @chain(i)
-            ρ[:,:,:,j] .= ρbulk[i]
-        end
-    end
-
     return ρ
 end
 
