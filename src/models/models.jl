@@ -9,6 +9,40 @@ include("DGT/dgt.jl")
 include("SCFT/scft.jl")
 
 """
+    _energy_scale(system)
+
+Compensating factor for `F_res`'s integrated scalar, for systems whose `get_fields`/
+`preallocate_params` build their weighted-density kernels in reduced (length-scale-divided)
+units (PC-SAFT and all its PCSAFTModel-hierarchy variants — PCPSAFT, QPCPSAFT,
+pharmaPCSAFT, HomogcPCPSAFT, HeterogcPCPSAFT — plus SAFT-VR Mie, SAFTγMie, COFFEE, and PeTS
+— see PCSAFT.jl's `get_fields` docstring). Reduced units make the per-point integrand `L^3`
+times too large (a pure change-of-variables artifact, exact for any `ρ`), so `F_res`
+divides by this. Defaults to `1.0` (no-op) for every other system. Every PCSAFTModel
+subtype shares this one `DFTSystem{<:Clapeyron.PCSAFTModel}` dispatch — no per-variant
+override needed, but that also means any *new* PCSAFTModel-hierarchy variant added later
+must get matching reduced-units treatment in its own `get_fields`/`preallocate_params`, or
+it will silently inherit this correction while still computing raw-unit kernels.
+
+Dispatches on the *system* type, not just the model, so that `DGTSystem` — which wraps the
+same Clapeyron models (e.g. `DGTSystem{<:PCSAFTModel}` in `test_dgt.jl`) but builds its own,
+structurally different reduced-units treatment (`dgt.jl`'s `f_res`/`preallocate_params`: no
+weighted-density convolution kernels, just `density_scale=L` on the `:ρ`/`:∇ρ` smoothing
+fields plus a `κ/L^3` rescale — see `dgt.jl`'s `f_res` docstring) — can't inherit a
+`DFTSystem`-specific per-model-type correction via shared model-type dispatch.
+`DGTSystem{<:PCSAFTModel}` is a distinct outer type from `DFTSystem{<:PCSAFTModel}`, so it
+never matches the `DFTSystem{<:...}`-dispatched methods above; it gets its own blanket
+override below instead (every `DGTSystem` uses reduced units the same way, regardless of
+which Clapeyron model it wraps, unlike `DFTSystem`'s per-model-type kernel differences).
+"""
+_energy_scale(system) = 1.0
+_energy_scale(system::DFTSystem{<:Clapeyron.PCSAFTModel})       = length_scale(system.model)^3
+_energy_scale(system::DFTSystem{<:Clapeyron.SAFTVRMieModel})    = length_scale(system.model)^3
+_energy_scale(system::DFTSystem{<:Clapeyron.SAFTgammaMieModel}) = length_scale(system.model)^3
+_energy_scale(system::DFTSystem{<:Clapeyron.COFFEEModel})       = length_scale(system.model)^3
+_energy_scale(system::DFTSystem{<:Clapeyron.PeTSModel})         = length_scale(system.model)^3
+_energy_scale(system::DGTSystem)                                = length_scale(system.model)^3
+
+"""
     F_res(system::DFTSystem, ρ)
 
 Residual free energy for DFT systems via the Enzyme/KA kernel path.
@@ -18,7 +52,7 @@ function F_res(system::Union{DFTSystem, DGTSystem}, ρ)
     δfδρ_res, cache_model, _, _ = preallocate(system, ρ)
     δFδρ_res!(system, ρ, δfδρ_res, cache_model...)
     f_val = cache_model[9]
-    return ∫(f_val, system.structure)
+    return ∫(f_val, system.structure) / _energy_scale(system)
 end
 
 """

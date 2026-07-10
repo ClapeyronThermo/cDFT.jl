@@ -139,8 +139,15 @@ function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStruc
     μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), temperature, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / temperature
 
     species = DGTSpecies(nbeads,sizes,ρbulk,μres)
-    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid, backend),
-              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid, backend)]
+    # :ρ/:∇ρ kernels don't depend on `width` at all (Ω=1 and Ω=i*2π*ω respectively — no
+    # smoothing/weighting shape to rescale, unlike the SAFT-family's convolution kernels).
+    # `model` is threaded through so the constructor can compute `L=length_scale(model)`
+    # internally for `density_scale`/`NA` (`:∇ρ` deliberately keeps `ω` raw — see
+    # VWeightedDensity's docstring). See dgt.jl's `f_res` for how `preallocate_params`
+    # compensates (κ/L^3, V=N_A*L^3 into a_res) to keep the whole f_res output uniformly
+    # L^3-inflated, matching `_energy_scale(::DGTSystem)`.
+    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid,backend,model),
+              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid,backend,model)]
     typed_fields = tuple(fields...)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
@@ -161,8 +168,15 @@ function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStruc
     μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), temperature, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / temperature
 
     species = DGTSpecies(nbeads,sizes,ρbulk,μres)
-    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid, backend),
-              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid, backend)]
+    # :ρ/:∇ρ kernels don't depend on `width` at all (Ω=1 and Ω=i*2π*ω respectively — no
+    # smoothing/weighting shape to rescale, unlike the SAFT-family's convolution kernels).
+    # `model` is threaded through so the constructor can compute `L=length_scale(model)`
+    # internally for `density_scale`/`NA` (`:∇ρ` deliberately keeps `ω` raw — see
+    # VWeightedDensity's docstring). See dgt.jl's `f_res` for how `preallocate_params`
+    # compensates (κ/L^3, V=N_A*L^3 into a_res) to keep the whole f_res output uniformly
+    # L^3-inflated, matching `_energy_scale(::DGTSystem)`.
+    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid,backend,model),
+              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid,backend,model)]
     typed_fields = tuple(fields...)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
@@ -183,8 +197,15 @@ function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStruc
     μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), temperature, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / temperature
 
     species = DGTSpecies(nbeads,sizes,ρbulk,μres)
-    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid, backend),
-              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid, backend)]
+    # :ρ/:∇ρ kernels don't depend on `width` at all (Ω=1 and Ω=i*2π*ω respectively — no
+    # smoothing/weighting shape to rescale, unlike the SAFT-family's convolution kernels).
+    # `model` is threaded through so the constructor can compute `L=length_scale(model)`
+    # internally for `density_scale`/`NA` (`:∇ρ` deliberately keeps `ω` raw — see
+    # VWeightedDensity's docstring). See dgt.jl's `f_res` for how `preallocate_params`
+    # compensates (κ/L^3, V=N_A*L^3 into a_res) to keep the whole f_res output uniformly
+    # L^3-inflated, matching `_energy_scale(::DGTSystem)`.
+    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid,backend,model),
+              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid,backend,model)]
     typed_fields = tuple(fields...)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()

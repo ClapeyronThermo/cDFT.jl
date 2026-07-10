@@ -13,21 +13,29 @@ COFFEE
 function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     nc = length(model)
     ψ = 1.3862
-
-    ω = structure_ω(structure, device, FP)
-    d = species.size
     ngrid = structure.ngrid
+
+    # ψ1 is a dimensionless Barker-Henderson-style shape factor derived from the RAW
+    # (unscaled) diameter/sigma ratio — it must stay L-invariant, so compute it before
+    # any reduced-units rescaling is applied below (ψ, unlike ψ1, is already a fixed
+    # constant). See PCSAFT.jl's `get_fields` docstring for the overall reduced-units
+    # scheme.
     λ_r = diagvalues(model.params.lambda_r.values)
     λ_a = diagvalues(model.params.lambda_a.values)
     σ   = diagvalues(model.params.sigma.values)
     C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
     x = species.size ./ σ
     ψ1 = @. cbrt(3*C*x^3*(x^-λ_a/(λ_a-3)-x^-λ_r/(λ_r-3)))
-    return [SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device),
-            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,device),
-            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,device),
-            SWeightedDensity(:∫ρz²dz,ψ*d,ω,ngrid,device),
-            SWeightedDensity(:∫ρz²dz,ψ1.*d,ω,ngrid,device)]
+
+    L = length_scale(model)
+    ω = structure_ω(structure, device, FP)
+    d = species.size ./ L
+
+    return [SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,device,model),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρz²dz,ψ*d,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρz²dz,ψ1.*d,ω,ngrid,device,model)]
 end
 
 # ── Enzyme / KernelAbstractions kernel support ──────────────────────────────
@@ -56,6 +64,11 @@ Field layout (5 fields):
 """
 @inline function f_ff(::Type{M}, kk, n, params, T, ::Val{NC}, ::Val{ND}) where {NC, ND, M <: COFFEEModel}
     FP    = eltype(n)
+    # Bare `π` (an Irrational) silently promotes to Float64 in many combinations that
+    # don't touch an FP value first — e.g. `π/6`, `-π*x`, and `-4*π*π/3` are ALL Float64
+    # (verified directly; even `-π*x` for x::Float32, despite `π*x` alone staying
+    # Float32). Binding `π = FP(π)` once and using it everywhere below avoids having to
+    # reason about which specific orderings are safe.
     HSd   = params.HSd
     m_seg = params.m
     pcp_ϵ = params.pcp_epsilon
@@ -129,7 +142,7 @@ Field layout (5 fields):
                     end
                 end
             end
-            _A₃ *= -4*π*π/3 * ∑ρ̄_ff*∑ρ̄_ff / (T*T*T)
+            _A₃ *= -4/3 * ∑ρ̄_ff*∑ρ̄_ff*π*π / (T*T*T)
             denom_p = _A₂ - _A₃
             res_polar = ∑ρ̄_ff * _A₂*_A₂ / denom_p
         end
@@ -190,7 +203,7 @@ end
     g_hs_nf = 1/(1-n₃₃) + di1*ξ_nf*n₂/(4*(1-n₃₃)^2) +
               di1*di1/4*n₂*n₂*ξ_nf/(18*(1-n₃₃)^3)
 
-    return FP(19π/12) * n₀ * ρ̄_nf * g_hs_nf * Base.log(4*π/Q_nf)
+    return FP(19π/12) * n₀ * ρ̄_nf * g_hs_nf * Base.log(π/Q_nf*4)
 end
 
 @inline function _Iμμ_kernel(ρ̄, T̄, μ, a)
@@ -234,6 +247,9 @@ function preallocate_params(system::DFTSystem{<:COFFEEModel})
     model   = system.model
     σ_diag  = diagvalues(model.params.sigma.values)
     ϵ_diag  = diagvalues(model.params.epsilon.values)
+    # nf_mu2_val/nf_d_val/nf_sig3 are dimensionless ratios of raw (unscaled) lengths —
+    # they must keep referencing σ_diag/system.species.size directly, NOT the reduced
+    # HSd_local/sigma_local below, or they'd stop being L-invariant.
     nf_mu2_val = pcp_dipole2(model)[1] / ϵ_diag[1] / σ_diag[1]^3
     nf_d_val   = model.params.shift[1] / σ_diag[1]
     nf_sig3    = (σ_diag[1] / system.species.size[1])^3
@@ -241,16 +257,25 @@ function preallocate_params(system::DFTSystem{<:COFFEEModel})
     nc = length(model)
     lr = model.params.lambda_r.values
     la = model.params.lambda_a.values
-    lambda_r_t = ntuple(i -> ntuple(j -> lr[i,j], nc), nc)
-    lambda_a_t = ntuple(i -> ntuple(j -> la[i,j], nc), nc)
+    lambda_r_t = ntuple(i -> ntuple(j -> FP(lr[i,j]), nc), nc)
+    lambda_a_t = ntuple(i -> ntuple(j -> FP(la[i,j]), nc), nc)
     A_fp   = ntuple(i -> ntuple(j -> FP(SAFTVRMIE_A[i][j]),   4), 4)
     phi_fp = ntuple(i -> ntuple(j -> FP(SAFTVRMIE_PHI[i][j]), 6), 7)
     _conv_tup(tup) = map(FP, tup)
+
+    # Reduced units: divide every length-dimensioned parameter fed directly into f_res
+    # (as opposed to through a weighted-density kernel) by L. See PCSAFT.jl's
+    # `get_fields`/`preallocate_params` docstrings for the full picture.
+    L               = length_scale(model)
+    HSd_local       = system.species.size ./ L
+    sigma_local     = model.params.sigma.values ./ L
+    pcp_sigma_local = pcp_sigma(model) ./ L
+
     params = (;
-        HSd         = adapt_to_device(backend, FP, system.species.size),
+        HSd         = adapt_to_device(backend, FP, HSd_local),
         m           = adapt_to_device(backend, FP, model.params.segment.values),
         meff        = adapt_to_device(backend, FP, model.params.segment.values),
-        sigma       = adapt_to_device(backend, FP, model.params.sigma.values),
+        sigma       = adapt_to_device(backend, FP, sigma_local),
         epsilon     = adapt_to_device(backend, FP, model.params.epsilon.values),
         lambda_r_t  = lambda_r_t,
         lambda_a_t  = lambda_a_t,
@@ -258,9 +283,12 @@ function preallocate_params(system::DFTSystem{<:COFFEEModel})
         A           = A_fp,
         phi         = phi_fp,
         pcp_m       = adapt_to_device(backend, FP, pcp_segment(model)),
-        pcp_sigma   = adapt_to_device(backend, FP, pcp_sigma(model)),
+        pcp_sigma   = adapt_to_device(backend, FP, pcp_sigma_local),
         pcp_epsilon = adapt_to_device(backend, FP, pcp_epsilon(model)),
-        dipole2     = adapt_to_device(backend, FP, pcp_dipole2(model)),
+        # dip2_i*dip2_j is combined directly with reduced pcp_σ³ in f_ff (unlike
+        # nf_mu2_val above, which is a self-contained raw ratio) — needs the matching
+        # /L^3, mirroring PPCSAFT.jl's f_polar fix.
+        dipole2     = adapt_to_device(backend, FP, pcp_dipole2(model) ./ L^3),
         coffee_b2   = _conv_tup(COFFEEconsts.corr_b2),
         coffee_c2   = _conv_tup(COFFEEconsts.corr_c2),
         coffee_b3   = _conv_tup(COFFEEconsts.corr_b3),

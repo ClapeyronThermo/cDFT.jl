@@ -88,7 +88,7 @@ function evaluate_external_field!(structure::DFTStructure,external_field::Electr
     end
 end
 
-function find_ψ_const(structure::DFTStructure,external_field::ElectrostaticPotentialModel,model::ElectrolyteModel,ρ::Array{Float64})
+function find_ψ_const(structure::DFTStructure,external_field::ElectrostaticPotentialModel,model::ElectrolyteModel,ρ)
     Z = model.charge
     nbeads = length(Z)
     nd = length(structure.ngrid)

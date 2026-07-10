@@ -60,7 +60,13 @@ function initialize_profiles(system::AbstractcDFTSystem; noise::Real=0.0)
 
         if any(typeof.(system.external_field) .<: ElectrostaticPotentialModel)
             ψ = find_ψ_const(system.structure, system.external_field[findfirst(typeof.(system.external_field) .<: ElectrostaticPotentialModel)], system.model, ρ) ./ k_B / system.structure.conditions[2]
-            Z = system.model.charge
+            # system.model.charge is a plain Vector{Int64} on Clapeyron's ElectrolyteModel
+            # struct, never adapted to the system's device — broadcasting it directly
+            # against ψ (GPU-resident, since it's built from ρ) fails GPU compilation
+            # ("passing non-bitstype argument": a CPU Vector reachable from the broadcast
+            # tree). adapt_to_device moves it to the same backend/FP as ρ, matching the
+            # convention used for every other model-derived array throughout this codebase.
+            Z = adapt_to_device(system.options.device, fptype(system.options), system.model.charge)
             ρ .*= exp.(-ψ*Z')
         end
     end
@@ -74,7 +80,15 @@ function initialize_profiles(system::AbstractcDFTSystem; noise::Real=0.0)
         ρ .*= ρ_total ./ sum(ρ, dims=nd+1)
     end
 
-    clamp!(ρ, 1e-30, 1e30)
+    # Bounds derived from the working type's own representable range (not a fixed
+    # Float64 literal) so this remains safe under `Float32`: several downstream
+    # correlations (e.g. PCSAFT's `I_lite`) raise densities/weighted-densities to
+    # up to the 6th power, so a value at the clamp boundary must survive that
+    # without underflowing to exact zero (→ log(0) → NaN) or overflowing to Inf.
+    FP = eltype(ρ)
+    lo = floatmin(FP)^(one(FP)/6)
+    hi = floatmax(FP)^(one(FP)/6)
+    clamp!(ρ, lo, hi)
 
     return ρ
 end
