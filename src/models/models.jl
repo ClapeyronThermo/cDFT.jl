@@ -89,8 +89,9 @@ end
               params, f_val, δf_val, nc, nd[, fwd_cache])
 
 Enzyme/KernelAbstractions-based functional derivative evaluation. Runs on CPU or GPU
-depending on `system.options.device`. When `system.options.ad_mode === :forward`,
-`fwd_cache` must be the `(dn_seeds, df_outs, Val(BATCH))` tuple from `preallocate_model`.
+depending on `system.options.device`. When `system.options.ad_mode` is `:forward` or
+`:forward_batch`, `fwd_cache` must be the `(dn_seeds, df_outs, Val(BATCH))` tuple from
+`preallocate_model`.
 """
 function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
                    n, δf, fft_buf, in_buf, out_buf, P, iP,
@@ -106,7 +107,7 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
     synchronize(backend)
     copyto!(n, fft_buf)
 
-    if system.options.ad_mode === :forward
+    if system.options.ad_mode === :forward_batch
         dn_seeds, df_outs, BATCH_val = fwd_cache
         fill!(δf, 0)
         kernel_fwd_batch = δf_fwd_batch_kernel!(backend)
@@ -118,7 +119,22 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
             k = (f_idx - 1) * nc + c_idx
             selectdim(selectdim(δf, nd+1, f_idx), nd+1, c_idx) .= df_outs[k]
         end
-    else  # :reverse (default)
+    elseif system.options.ad_mode === :forward
+        dn_seeds, df_outs, _ = fwd_cache
+        fill!(δf, 0)
+        kernel_fwd = δf_fwd_kernel!(backend)
+        for k in eachindex(dn_seeds)
+            fill!(df_outs[k], 0)
+            kernel_fwd(df_outs[k], n, f_val, dn_seeds[k], params, temperature,
+                       Val(NF), Val(NB), Val(nc), Val(nd), M,
+                       ndrange = ngrid)
+        end
+        synchronize(backend)
+        for f_idx in 1:NF, c_idx in 1:nc
+            k = (f_idx - 1) * nc + c_idx
+            selectdim(selectdim(δf, nd+1, f_idx), nd+1, c_idx) .= df_outs[k]
+        end
+    elseif system.options.ad_mode === :reverse
         fill!(δf_val, 1)
         fill!(δf, 0)
         kernel_rev = δf_rev_kernel!(backend)
@@ -126,6 +142,8 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
                    Val(NF), Val(NB), Val(nc), Val(nd), M,
                    ndrange = ngrid)
         synchronize(backend)
+    else
+        error("Unknown ad_mode $(system.options.ad_mode); expected :forward, :forward_batch, or :reverse")
     end
 
     copyto!(fft_buf, δf)
@@ -178,7 +196,7 @@ function preallocate_model(system::DFTSystem, ρ)
 
     params, nc = preallocate_params(system)
 
-    if system.options.ad_mode === :forward
+    if system.options.ad_mode === :forward || system.options.ad_mode === :forward_batch
         batch = nf * nc
         dn_seeds = ntuple(Val(batch)) do k
             f_idx = (k - 1) ÷ nc + 1
@@ -223,7 +241,7 @@ function preallocate_model(system::ElectrolyteDFTSystem, ρ)
     params, nc = preallocate_params(system)
 
     # Electrolyte uses its own f_res path; forward-mode batch not yet supported
-    if system.options.ad_mode === :forward
+    if system.options.ad_mode === :forward || system.options.ad_mode === :forward_batch
         batch = nf * nc
         dn_seeds = ntuple(Val(batch)) do k
             f_idx = (k - 1) ÷ nc + 1

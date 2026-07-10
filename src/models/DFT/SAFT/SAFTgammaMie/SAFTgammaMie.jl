@@ -372,7 +372,7 @@ end
         end
         ρrn *= ρr
     end
-    return expm1(params.assoc_eps[p] / T) * params.assoc_kap[p] * I_val
+    return (exp(params.assoc_eps[p] / T) - 1) * params.assoc_kap[p] * I_val
 end
 
 function preallocate_params(system::DFTSystem{<:SAFTgammaMieModel})

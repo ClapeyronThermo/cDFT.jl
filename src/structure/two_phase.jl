@@ -19,7 +19,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species,
         coef = sqrt(coef^2-1)/4
         for j in @chain(i)
             ρ_points = @.  cos_prof(z/(ub-lb), ρ1[i], ρ2[i], (ub / 4 + 3 * lb / 4), coef)
-
+            ρ_points = adapt_to_device(device, FP, ρ_points)
             ρ[:,j] = ρ_points
         end
     end

@@ -144,7 +144,7 @@ function initialize_profiles(model::EoSModel,structure::Union{Uniform1DCart,Unif
 
     for i in @comps
         for j in @chain(i)
-            ρ[:,j] = ρbulk[i]*ones(ngrid)
+            ρ[:,j] .= FP(ρbulk[i])
         end
     end
     return ρ
@@ -159,7 +159,7 @@ function initialize_profiles(model::EoSModel,structure::Uniform2DCart, species, 
     ρ = allocate(device, FP, ngrid..., sum(species.nbeads))
     for i in @comps
         for j in @chain(i)
-            ρ[:,:,j] .= ρbulk[i]
+            ρ[:,:,j] .= FP(ρbulk[i])
         end
     end
 
@@ -175,7 +175,7 @@ function initialize_profiles(model::EoSModel,structure::Uniform3DCart, species, 
     ρ = allocate(device, FP, ngrid..., sum(species.nbeads))
     for i in @comps
         for j in @chain(i)
-            ρ[:,:,:,j] .= ρbulk[i]
+            ρ[:,:,:,j] .= FP(ρbulk[i])
         end
     end
 

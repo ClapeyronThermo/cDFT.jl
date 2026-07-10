@@ -164,7 +164,7 @@ end
     inv1n3 = one(FP) / (one(FP) - n3_mix)
     g_hs   = inv1n3 + FP(0.5)*dij_p*xi_mix*n2_mix*inv1n3^2 +
              dij_p*dij_p*n2_mix*n2_mix*xi_mix*(inv1n3^3)/18
-    return g_hs * params.assoc_sig3[p] * expm1(params.assoc_eps[p]/T) * params.assoc_kap[p]
+    return g_hs * params.assoc_sig3[p] * (exp(params.assoc_eps[p]/T)-1) * params.assoc_kap[p]
 end
 
 # ── @generated tuple-construction helpers ────────────────────────────────────
