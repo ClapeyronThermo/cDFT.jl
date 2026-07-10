@@ -28,6 +28,14 @@ function preallocate_params(system::DFTSystem{<:pharmaPCSAFTModel})
         end
     end
 
+    # Reduced units: the raw effective diameter above (base σ + temperature-dependent
+    # water shift) must be divided by L, same as the `sigma`/`HSd` params_base already
+    # inherits from PCSAFT.jl's preallocate_params via `invoke` above — otherwise this
+    # overwrite would silently undo that fix. Compute the shift in raw units first (as
+    # above), then reduce the whole thing once, matching PCSAFT.jl's convention.
+    L = length_scale(model)
+    sigma_eff = sigma_eff ./ L
+
     # pharmaPCSAFT stores raw LB cross-terms (no k_ij baked in); Clapeyron's m2ϵσ3
     # applies (1 - k0[i,j] - k1[i,j]*T) at runtime. Pre-apply here so f_disp is correct.
     epsilon_eff = copy(model.params.epsilon.values)

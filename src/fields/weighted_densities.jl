@@ -1,25 +1,52 @@
 """
+    length_scale(L::Real)
+
+Identity escape hatch: lets `SWeightedDensity`/`VWeightedDensity`'s internal `L =
+length_scale(model)` call accept an already-resolved `L` value directly, not just an
+`EoSModel`. Needed by `DH.jl`'s `get_fields` — the ion field must share the *neutral*
+model's `L` (not `length_scale(ionmodel)`, its own, different, ion-diameter-based value),
+so it computes/receives the shared `L` as a plain number and passes that through as the
+`model` argument instead of an actual model — ordinary dispatch then routes it here
+instead of to any real `length_scale(::EoSModel)` method.
+"""
+length_scale(L::Real) = L
+
+"""
     SWeightedDensity(type::Symbol,width::Vector{Float64},map::Array{ComplexF64})
 
 Generic `SWeightedDensity` type used to calculate the scalar weighted densities of the system. One must specify:
 - `type`: The type of weighted density to be calculated. Options are `:∫ρdz` (``n_0``), `:∫ρzdz` (``n_v``), `:∫ρz²dz` (``n_3``), and `:ρ` (unweighted).
-- `width`: The width of the weighted density profile.
+- `width`: The width of the weighted density profile, in the model's own reduced-units
+  convention (i.e. already divided by `L = length_scale(model)` by the caller — this
+  constructor does not touch `width`, only `ω`).
+- `model`: The `EoSModel` — used internally to compute `L = length_scale(model)`, which
+  drives both the `ω`-rescaling (`_scaled_ω`, keeping the kernel's trig argument invariant
+  under the caller's `width/L` substitution — see PC-SAFT's `get_fields` docstring for the
+  full reduced-units scheme) and the `density_scale`/`NA` compensation `evaluate_field!`
+  applies. Every model in this codebase builds its kernels this way — there is no unscaled
+  (`L=1`) code path anymore.
 - `map`: The Fourier transform of the weights.
 - `plan`: The Fourier transform plan.
 - `iplan`: The inverse Fourier transform plan.
 """
-struct SWeightedDensity{M,P,iP} <: ScalarField 
+struct SWeightedDensity{M,P,iP} <: ScalarField
     type::Symbol
     width::Vector{Float64}
+    density_scale::Float64
     map::M
     plan::P
     iplan::iP
 end
 
-function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend)
+function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend, model)
     nd = length(ngrid)
     CT = eltype(ω)
     FP = real(CT)
+    L = length_scale(model)
+    # :ρ doesn't use ω at all (Ω≡1 below), so unconditionally rescaling here is harmless
+    # for it and required for :∫ρdz/:∫ρz²dz — unlike VWeightedDensity's :∇ρ case, there's
+    # no type here that needs ω left raw.
+    ω = _scaled_ω(ω, L, FP)
     R = adapt_to_device(backend, FP, 2π.*width')
     # Reshape R based on the dimension of the system
     # R = reshape(R,length(width))
@@ -62,11 +89,11 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend
     tmp = complex(Array(selectdim(Ω,nd+1,1)))
     plan = plan_fft!(tmp, 1:length(ngrid); num_threads=Threads.nthreads())
     iplan = inv(plan)
-    return SWeightedDensity(type,width,Ω,plan,iplan)
+    return SWeightedDensity(type,width,L,Ω,plan,iplan)
 end
 
 """
-    SWeightedDensity(type, width, ω::RadialFrequency, ngrid, backend)
+    SWeightedDensity(type, width, ω::RadialFrequency, ngrid, backend, model)
 
 Spherical/cylindrical (QDHT-based) counterpart of the Cartesian `SWeightedDensity`
 constructor above. Reuses the same closed-form kernel formulas (they are exact 3D
@@ -75,8 +102,10 @@ to sample them), substituting `ω.ω̄` for the Cartesian `ω̄ = sqrt.(sum(abs2
 and dropping the `ω̄=0` branch (QDHT never samples the origin in k-space). `map`/`plan`/
 `iplan` are all real-valued (no `Complex` cast) since QDHT operates on real arrays.
 """
-function SWeightedDensity(type::Symbol, width::Vector{Float64}, ω::RadialFrequency{FP}, ngrid, backend::Backend) where FP<:AbstractFloat
+function SWeightedDensity(type::Symbol, width::Vector{Float64}, ω::RadialFrequency{FP}, ngrid, backend::Backend, model) where FP<:AbstractFloat
     N = ngrid[1]
+    L = length_scale(model)
+    ω = _scaled_ω(ω, L, FP)
     ω̄ = ω.ω̄
     R = FP.(2π .* width)
 
@@ -96,7 +125,7 @@ function SWeightedDensity(type::Symbol, width::Vector{Float64}, ω::RadialFreque
     end
 
     Q = ω.Q
-    return SWeightedDensity(type, width, Ω, Q, Q)
+    return SWeightedDensity(type, width, L, Ω, Q, Q)
 end
 
 function evaluate_field!(system::AbstractcDFTSystem,field::SWeightedDensity, ρ, n, in_buf, out_buf, P, iP)
@@ -104,7 +133,7 @@ function evaluate_field!(system::AbstractcDFTSystem,field::SWeightedDensity, ρ,
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(ρ,nd+1)
-    NA = eltype(ρ)(N_A)
+    NA = eltype(ρ)(N_A) * eltype(ρ)(field.density_scale)^3
 
     if field.type == :ρ
         @. n = ρ * NA
@@ -152,23 +181,34 @@ end
 
 Generic `VWeightedDensity` type used to calculate the vector weighted densities of the system. One must specify:
 - `type`: The type of weighted density to be calculated. Options are `:∫ρdz` (``n_0``), `:∫ρzdz` (``n_v``), `:∫ρz²dz` (``n_3``), and `:ρ` (unweighted).
-- `width`: The width of the weighted density profile.
+- `width`: The width of the weighted density profile, in the model's own reduced-units
+  convention (already divided by `L`, like `SWeightedDensity`'s `width`).
+- `model`: The `EoSModel` — see `SWeightedDensity` for how `L = length_scale(model)` drives
+  both `ω`-rescaling and the `density_scale`/`NA` compensation. **Exception**: `:∇ρ`
+  (DGT's gradient field) is the exact Fourier gradient operator `i·2π·ω`, not a
+  width-dependent smoothing kernel — rescaling `ω` for it would inject a spurious
+  `L`-dependence into an operator that must stay exact, so this constructor leaves `ω` raw
+  specifically for `:∇ρ` (still uses `L` for the `density_scale`/`NA` compensation, same as
+  every other type).
 - `map`: The Fourier transform of the weights.
 - `plan`: The Fourier transform plan.
 - `iplan`: The inverse Fourier transform plan.
 """
-struct VWeightedDensity{M,P,iP} <: VectorField 
+struct VWeightedDensity{M,P,iP} <: VectorField
     type::Symbol
     width::Vector{Float64}
+    density_scale::Float64
     map::M
     plan::P
     iplan::iP
 end
 
-function VWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend)
+function VWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend, model)
     nd = length(ngrid)
     CT = eltype(ω)
     FP = real(CT)
+    L = length_scale(model)
+    ω = type == :∇ρ ? ω : _scaled_ω(ω, L, FP)
     R = adapt_to_device(backend, FP, 2π.*width')
     R = reshape(R, ntuple(i -> 1, nd)..., 1, length(width))
 
@@ -216,7 +256,7 @@ function VWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend
     tmp = complex(Array(selectdim(selectdim(Ω,nd+1,1),nd+1,1)))
     plan = plan_fft!(tmp, 1:length(ngrid); num_threads=Threads.nthreads())
     iplan = inv(plan)
-    return VWeightedDensity(type,width,Ω,plan,iplan)
+    return VWeightedDensity(type,width,L,Ω,plan,iplan)
 end
 
 """
@@ -241,13 +281,33 @@ construction time), and its *exact* matrix transpose is used for the adjoint in
 `integrate_field!` — this guarantees the forward/adjoint pair are consistent by
 construction, rather than relying on a hand-derived (and easy to get subtly wrong)
 weighted-inner-product adjoint formula.
+
+**Numerical stability exception**: unlike every other kernel in this file, `Hj`/`T` here
+are built from the *raw* (unscaled) `ω̄` and real (un-reduced) width, not the `L`-rescaled
+versions. This construction chains a QDHT convolution through a dense finite-difference
+derivative matrix `D` (radial spacing `Δr ~ R_max/N`), which amplifies any rounding noise
+in the convolved potential by `~1/Δr` — for realistic grids this is a ~1e10-1e13×
+amplification. For a near-uniform profile the *true* `n_v` is ~0, so this calculation is
+riding entirely on floating-point cancellation; empirically, the raw-unit rounding pattern
+keeps that noise negligible while the `L`-rescaled rounding pattern (mathematically
+equivalent, `Hj_scaled = Hj_raw/L^3` to ~13 significant digits, but computed via a
+different chain of multiplications) does not, blowing up by many orders of magnitude
+(confirmed via a standalone script comparing both against the ratio `L^3`). Rather than
+fix the ill-conditioning itself (would need a stable frequency-domain gradient identity,
+out of scope here), this constructor simply avoids perturbing the one rounding pattern
+known to stay stable. `T`'s downstream `L^3` inflation (needed so `n_v` lands on the same
+reduced-units footing as `n0`-`n3` — see `f_hs`'s `nv1_1*nv2_1`-style cross terms in
+`FMT.jl`, which assume every weighted density shares one common scale) still happens via
+the ordinary `density_scale=L` compensation in `evaluate_field!` below — only the *kernel
+construction* skips `_scaled_ω`, not the final compensation.
 """
-function VWeightedDensity(type::Symbol, width::Vector{Float64}, ω::RadialFrequency{FP}, ngrid, backend::Backend) where FP<:AbstractFloat
+function VWeightedDensity(type::Symbol, width::Vector{Float64}, ω::RadialFrequency{FP}, ngrid, backend::Backend, model) where FP<:AbstractFloat
     type == :∫ρzdz || error("Only :∫ρzdz vector weighted densities are supported for spherical/cylindrical coordinates")
     N = ngrid[1]
+    L = length_scale(model)
     Q = ω.Q
     ω̄ = ω.ω̄
-    Rk = FP.(2π .* width)
+    Rk = FP.(2π .* width .* L)
     nb = length(width)
 
     D = radial_derivative_matrix(FP.(Q.r))
@@ -267,14 +327,14 @@ function VWeightedDensity(type::Symbol, width::Vector{Float64}, ω::RadialFreque
         end
     end
 
-    return VWeightedDensity(type, width, T, Q, Q)
+    return VWeightedDensity(type, width, L, T, Q, Q)
 end
 
 function evaluate_field!(system::AbstractcDFTSystem, field::VWeightedDensity, ρ, nV, in_buf, out_buf, P::Hankel.QDHT, iP::Hankel.QDHT)
     field.type == :∫ρzdz || error("Unsupported vector weighted density type for spherical/cylindrical coordinates: $(field.type)")
     nd = length(system.structure.ngrid)
     nb = size(ρ,nd+1)
-    NA = eltype(ρ)(N_A)
+    NA = eltype(ρ)(N_A) * eltype(ρ)(field.density_scale)^3
     T = field.map
 
     for i in 1:nb
@@ -302,7 +362,7 @@ function evaluate_field!(system::AbstractcDFTSystem,field::VWeightedDensity, ρ,
     ngrid = system.structure.ngrid
     nd = length(ngrid)
     nb = size(ρ,nd+1)
-    NA = eltype(ρ)(N_A)
+    NA = eltype(ρ)(N_A) * eltype(ρ)(field.density_scale)^3
 
     map = field.map
     # @show eltype(nV)

@@ -85,15 +85,16 @@ end
 function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure, backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     nb = sum(species.nbeads)
     ngrid = structure.ngrid
+    L = length_scale(model)
     ω = structure_ω(structure, backend, FP)
-    d = species.size
+    d = species.size ./ L
     ψ = 1.5357
-    return [SWeightedDensity(:ρ,zeros(nb),ω,ngrid,backend),
-            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,backend),
-            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,backend),
-            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,backend),
-            SWeightedDensity(:∫ρz²dz,d,ω,ngrid,backend),
-            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,backend)]
+    return [SWeightedDensity(:ρ,zeros(nb),ω,ngrid,backend,model),
+            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,backend,model),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,backend,model),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,backend,model),
+            SWeightedDensity(:∫ρz²dz,d,ω,ngrid,backend,model),
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,backend,model)]
 
 end
 
@@ -192,9 +193,13 @@ end
     nbeads_for_group = params.nbeads_for_group
 
     FP      = eltype(n)
+    # `π/6*x` and `-2*π*x` (Int/Irrational combos before touching an FP value) promote
+    # to Float64, unlike `x*π`/`π*x` for x::FP — see PCSAFT.jl's f_disp for the same
+    # fix and the verified examples.
+    _π      = FP(π)
     ψ       = FP(1.5357)
     idx_ρz  = 5 + ND
-    factor  = 3 / (4*ψ*ψ*ψ*π)
+    factor  = 3 / (4*ψ*ψ*ψ*_π)
     ρ̄_tot   = zero(FP); m̄_num = zero(FP); η_sum = zero(FP)
     @inbounds for i in 1:NC
         di  = HSd[i]
@@ -204,7 +209,7 @@ end
         ρ̄_tot  += ρ̄i / _nti(nbeads_for_group, i)
     end
     m̄  = m̄_num / ρ̄_tot
-    ηd = π/6 * η_sum
+    ηd = _π/6 * η_sum
 
     m2ϵσ3_1 = zero(FP); m2ϵσ3_2 = zero(FP)
     @inbounds for i in 1:NC
@@ -228,7 +233,7 @@ end
               inv1ηd*inv1ηd*inv2ηd*inv2ηd
     I₁     = I_lite(PCSAFT_CORR1, m̄, ηd)
     I₂     = I_lite(PCSAFT_CORR2, m̄, ηd)
-    return -2*π*I₁*m2ϵσ3_1 - π*m̄*I₂*m2ϵσ3_2 / C₁
+    return -2*_π*I₁*m2ϵσ3_1 - _π*m̄*I₂*m2ϵσ3_2 / C₁
 end
 
 function preallocate_params(system::DFTSystem{<:HeterogcPCPSAFT})
@@ -265,10 +270,17 @@ function preallocate_params(system::DFTSystem{<:HeterogcPCPSAFT})
     bond_l_t           = ntuple(ib -> Int32(bond_l_list[ib]), n_bonds)
     nbeads_for_group_t = ntuple(i  -> Float64(nbeads_for_group[i]), nc_groups)
 
+    # Reduced units: divide every length-dimensioned parameter by L so it matches the
+    # `get_fields`-side kernel rescaling. See PCSAFT.jl's `get_fields`/`preallocate_params`
+    # docstrings for the full picture.
+    L           = length_scale(model)
+    HSd_local   = system.species.size ./ L
+    sigma_local = system.model.params.sigma.values ./ L
+
     base = (;
-        HSd              = adapt_to_device(backend, FP, system.species.size),
+        HSd              = adapt_to_device(backend, FP, HSd_local),
         m                = adapt_to_device(backend, FP, system.model.params.segment.values),
-        sigma            = adapt_to_device(backend, FP, system.model.params.sigma.values),
+        sigma            = adapt_to_device(backend, FP, sigma_local),
         epsilon          = adapt_to_device(backend, FP, system.model.params.epsilon.values),
         nbeads_for_group = nbeads_for_group_t,
         bond_k           = bond_k_t,
@@ -281,7 +293,7 @@ function preallocate_params(system::DFTSystem{<:HeterogcPCPSAFT})
          assoc_isite_v, assoc_jsite_v,
          assoc_eps_v, assoc_kap_v, assoc_sig3_v, assoc_dij_v,
          n_sites_flat_v, n_sites_cumsum_v, total_sites
-        ) = pack_assoc_params_gc(model, system.species.size)
+        ) = pack_assoc_params_gc(model, HSd_local, sigma_local)
 
         ia_global_v       = [n_sites_cumsum_v[assoc_icomp_v[p]] + assoc_isite_v[p] for p in 1:nn]
         jb_global_v       = [n_sites_cumsum_v[assoc_jcomp_v[p]] + assoc_jsite_v[p] for p in 1:nn]

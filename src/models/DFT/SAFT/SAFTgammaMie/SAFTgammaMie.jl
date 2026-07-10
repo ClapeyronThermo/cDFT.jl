@@ -88,21 +88,30 @@ function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DF
     nb = sum(species.nbeads)
     ngrid = structure.ngrid
     nd = dimension(structure)
-    ω = structure_ω(structure, device, FP)
-    d = species.size
+
+    # ψ is a dimensionless Barker-Henderson-style shape factor derived from the RAW
+    # (unscaled) diameter/sigma ratio — it must stay L-invariant, so compute it before
+    # any reduced-units rescaling is applied below. See PCSAFT.jl's `get_fields` docstring
+    # for the overall reduced-units scheme.
+    d   = species.size
     λ_r = diagvalues(model.params.lambda_r.values)
     λ_a = diagvalues(model.params.lambda_a.values)
     σ   = diagvalues(model.params.sigma.values)
     C = @. λ_r / (λ_r - λ_a) * (λ_r / λ_a)^(λ_a / (λ_r - λ_a))
     x = d ./ σ
     ψ = @. cbrt(3*C*(1/(λ_a-3)-1/(λ_r-3)))
-    return [SWeightedDensity(:ρ,zeros(nb),ω,ngrid,device),
-            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device),
-            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,device),
-            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,device),
-            SWeightedDensity(:∫ρz²dz,d,ω,ngrid,device),
-            SWeightedDensity(:∫ρdz,d,ω,ngrid,device),
-            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device)]
+
+    L = length_scale(model)
+    ω = structure_ω(structure, device, FP)
+    d_local = species.size ./ L
+
+    return [SWeightedDensity(:ρ,zeros(nb),ω,ngrid,device,model),
+            SWeightedDensity(:∫ρdz,0.5*d_local,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρz²dz,0.5*d_local,ω,ngrid,device,model),
+            VWeightedDensity(:∫ρzdz,0.5*d_local,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρz²dz,d_local,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρdz,d_local,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρz²dz,d_local .* ψ,ω,ngrid,device,model)]
 end
 
 function get_propagator(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
@@ -205,6 +214,13 @@ NC here is the total number of groups (sum of nbeads per component).
     nc_s     = length(nbeads_c)
 
     FP    = eltype(n)
+    # Bare `π` (an Irrational) promotes to Float64 when combined with an Int literal
+    # BEFORE ever touching an FP value (e.g. `4*π` alone is Float64, so `4*π*x` for
+    # x::Float32 stays Float64 — confirmed: `typeof(4*π*Float32(1)) == Float64` but
+    # `typeof(π*Float32(1)*4) == Float32`). Inside a runtime-conditional loop (see
+    # `_chain_bead_sum` below) this makes the accumulator's type branch-dependent — a
+    # genuine Union{Float32,Float64} that trips Enzyme's strict type analysis. Binding
+    # `π = FP(π)` once and using it everywhere below sidesteps the whole ordering trap.
     sg_idx = params.species_group_idx
     ρS_c  = zero(FP)
     @inbounds for s in 1:nc_s
@@ -306,7 +322,7 @@ end
         if j <= nb_s                 # nb_s is runtime but MNB (bound) is compile-time
             kg = _nti(sg_idx_s, j)
             dg = HSd[kg]
-            acc += n[kk, field_idx, kg] * 3/(4*π*dg^3)
+            acc += n[kk, field_idx, kg] * 3/(4*(π*dg^3))
         end
     end
     return acc
@@ -374,25 +390,38 @@ function preallocate_params(system::DFTSystem{<:SAFTgammaMieModel})
     nc_g = sum(system.species.nbeads)
     lr_g = model.params.lambda_r.values
     la_g = model.params.lambda_a.values
-    lambda_r_t = ntuple(i -> ntuple(j -> lr_g[i,j], nc_g), nc_g)
-    lambda_a_t = ntuple(i -> ntuple(j -> la_g[i,j], nc_g), nc_g)
+    lambda_r_t = ntuple(i -> ntuple(j -> FP(lr_g[i,j]), nc_g), nc_g)
+    lambda_a_t = ntuple(i -> ntuple(j -> FP(la_g[i,j]), nc_g), nc_g)
     ncs = size(model.vrmodel.params.lambda_r.values, 1)
     lr_s = model.vrmodel.params.lambda_r.values
     la_s = model.vrmodel.params.lambda_a.values
-    lambda_r_species_t = ntuple(i -> ntuple(j -> lr_s[i,j], ncs), ncs)
-    lambda_a_species_t = ntuple(i -> ntuple(j -> la_s[i,j], ncs), ncs)
+    lambda_r_species_t = ntuple(i -> ntuple(j -> FP(lr_s[i,j]), ncs), ncs)
+    lambda_a_species_t = ntuple(i -> ntuple(j -> FP(la_s[i,j]), ncs), ncs)
     nc_s_v   = length(system.species.nbeads)
     nbeads_v = system.species.nbeads
     max_nb   = maximum(nbeads_v)
     species_group_idx = ntuple(s -> ntuple(j -> (j <= nbeads_v[s] ? model.groups.i_groups[s][j] : 0), max_nb), nc_s_v)
     A_fp   = ntuple(i -> ntuple(j -> FP(SAFTVRMIE_A[i][j]),   4), 4)
     phi_fp = ntuple(i -> ntuple(j -> FP(SAFTVRMIE_PHI[i][j]), 6), 7)
+
+    # Reduced units: divide the GROUP-level length parameters by L so they match the
+    # `get_fields`-side kernel rescaling. `psi_eff` needs no separate treatment (reads
+    # the rescaled width back from `get_fields`). The SPECIES-level params below
+    # (HSd_species, sigma_species, etc., from model.vrmodel) are deliberately left
+    # unscaled — they only ever combine with each other as ratios/energies (see
+    # `f_chain`/`_assoc_delta`), never directly with the L-rescaled group-level HSd or a
+    # bare weighted density. See PCSAFT.jl's `get_fields`/`preallocate_params`
+    # docstrings for the full picture.
+    L           = length_scale(model)
+    HSd_local   = system.species.size ./ L
+    sigma_local = model.params.sigma.values ./ L
+
     base = (;
-        HSd                = adapt_to_device(backend, FP, system.species.size),
+        HSd                = adapt_to_device(backend, FP, HSd_local),
         m                  = adapt_to_device(backend, FP, m_vals),
         S                  = adapt_to_device(backend, FP, S_vals),
         meff               = adapt_to_device(backend, FP, meff),
-        sigma              = adapt_to_device(backend, FP, model.params.sigma.values),
+        sigma              = adapt_to_device(backend, FP, sigma_local),
         epsilon            = adapt_to_device(backend, FP, model.params.epsilon.values),
         lambda_r_t         = lambda_r_t,
         lambda_a_t         = lambda_a_t,
@@ -416,7 +445,7 @@ function preallocate_params(system::DFTSystem{<:SAFTgammaMieModel})
          assoc_isite_v, assoc_jsite_v,
          assoc_eps_v, assoc_kap_v, assoc_sig3_v, assoc_dij_v,
          n_sites_flat_v, n_sites_cumsum_v, total_sites
-        ) = pack_assoc_params_gc(model, system.species.size)
+        ) = pack_assoc_params_gc(model, HSd_local, sigma_local)
 
         ia_global_v       = [n_sites_cumsum_v[assoc_icomp_v[p]] + assoc_isite_v[p] for p in 1:nn]
         jb_global_v       = [n_sites_cumsum_v[assoc_jcomp_v[p]] + assoc_jsite_v[p] for p in 1:nn]
@@ -453,8 +482,14 @@ function preallocate_params(system::DFTSystem{<:SAFTgammaMieModel})
             assoc_n_ia      = assoc_n_ia_t,
             assoc_n_jb      = assoc_n_jb_t,
             assoc_eps       = adapt_to_device(backend, FP, assoc_eps_v),
-            assoc_kap       = adapt_to_device(backend, FP, assoc_kap_v),
-            assoc_sig3      = adapt_to_device(backend, FP, assoc_sig3_v),
+            # SAFTgammaMie's _assoc_delta (VR-Mie polynomial I(Tr,ρr)) uses assoc_kap
+            # directly with no compensating σ³ factor (unlike the PCSAFT-family default
+            # _assoc_delta, where assoc_sig3 already carries the /L^3 via sigma_local) —
+            # so assoc_kap needs its own explicit /L^3 here to stay consistent with the
+            # L³-inflated n0/xi it's multiplied against. assoc_sig3 is unused by this
+            # model's _assoc_delta but rescaled too for consistency.
+            assoc_kap       = adapt_to_device(backend, FP, assoc_kap_v ./ L^3),
+            assoc_sig3      = adapt_to_device(backend, FP, assoc_sig3_v ./ L^3),
             assoc_dij       = adapt_to_device(backend, FP, assoc_dij_v),
             n_sites_flat    = n_sites_flat_t,
             n_sites_cumsum  = n_sites_cumsum_t,
