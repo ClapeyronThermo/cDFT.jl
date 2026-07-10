@@ -82,18 +82,8 @@ end
 """
     initialize_profiles(model::EoSModel, structure::Union{Uniform1DCart,...}, species::SCFTSpecies, device, FP)
 
-SCFT-aware override of the generic per-structure `Uniform*Cart` seeding below: reads the
-already-correct, precomputed per-species bulk density (`species.bulk_density`, from
-`get_species`) directly, rather than replicating `structure.ρbulk[component]` unsplit
-across every species of that molecule type (correct for the DFT family's expanded,
-per-bead-occurrence indexing; wrong for SCFT's per-species-letter aggregation). Dispatch
-on `species::SCFTSpecies` (more specific than the untyped `species` the generic methods
-below take) is what lets `initialize_profiles(system::SCFTSystem; noise=0.0)` — just the
-generic `initialize_profiles(system::AbstractcDFTSystem;...)` above, no SCFT-specific
-override needed — build the correct base profile via this same shared entry point, and
-(together with `_SCFTUnsupportedStructure`'s guard now living in `SCFTSystem`'s
-constructor, `src/models/SCFT/scft.jl`, and the grand-total noise renormalization now
-generic above) is the last piece that made a full SCFT-specific override unnecessary.
+SCFT-aware override of the generic per-structure `Uniform*Cart` seeding below: reads the already-correct, precomputed per-species bulk density (`species.bulk_density`, from`get_species`) directly, rather than replicating `structure.ρbulk[component]` unsplit across every species of that molecule type (correct for the DFT family's expanded, per-bead-occurrence indexing; wrong for SCFT's per-species-letter aggregation). 
+Dispatch on `species::SCFTSpecies` (more specific than the untyped `species` the generic methods below take) is what lets `initialize_profiles(system::SCFTSystem; noise=0.0)` — just the generic `initialize_profiles(system::AbstractcDFTSystem;...)` above, no SCFT-specific override needed — build the correct base profile via this same shared entry point, and (together with `_SCFTUnsupportedStructure`'s guard now living in `SCFTSystem`'s constructor, `src/models/SCFT/scft.jl`, and the grand-total noise renormalization now generic above) is the last piece that made a full SCFT-specific override unnecessary.
 `LamellarStack*`/`HexLattice*`/`BCC3DCart`/`Gyroid3DCart` need no equivalent override:
 `src/structure/morphology.jl`'s `_fill_morphology!` is already per-species-aware
 (`sign[j]` differs per species `j` within a chain), unlike the `Uniform*` functions below.
@@ -108,21 +98,23 @@ function _scft_initialize_profiles(structure, species::SCFTSpecies, device, ::Ty
     return ρ
 end
 
+
+
 # Split into three methods (rather than one combined Union) to exactly match the
 # structure-type groupings of the generic methods below — a broader combined Union here
 # would be ambiguous with them (neither method strictly more specific than the other
 # across both the `structure` and `species` arguments at once).
-function initialize_profiles(model::EoSModel, structure::Union{Uniform1DCart,Uniform1DSphr,Uniform1DCyl}, species::SCFTSpecies, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel, structure::DFTStructure{1,Cartesian,UniformGrid}, species::SCFTSpecies, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     _scft_initialize_profiles(structure, species, device, FP)
 end
-function initialize_profiles(model::EoSModel, structure::Uniform2DCart, species::SCFTSpecies, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel, structure::DFTStructure{2,Cartesian,UniformGrid}, species::SCFTSpecies, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     _scft_initialize_profiles(structure, species, device, FP)
 end
-function initialize_profiles(model::EoSModel, structure::Uniform3DCart, species::SCFTSpecies, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel, structure::DFTStructure{3,Cartesian,UniformGrid}, species::SCFTSpecies, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     _scft_initialize_profiles(structure, species, device, FP)
 end
 
-function initialize_profiles(model::EoSModel,structure::Union{Uniform1DCart,Uniform1DSphr,Uniform1DCyl}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel,structure::DFTStructure{1,Cartesian,UniformGrid}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     ngrid = structure.ngrid
     ρbulk = structure.ρbulk
 
@@ -136,7 +128,7 @@ function initialize_profiles(model::EoSModel,structure::Union{Uniform1DCart,Unif
     return ρ
 end
 
-function initialize_profiles(model::EoSModel,structure::Uniform2DCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel,structure::DFTStructure{2,Cartesian,UniformGrid}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     nd = dimension(structure)
     ngrid = structure.ngrid
 
@@ -152,7 +144,7 @@ function initialize_profiles(model::EoSModel,structure::Uniform2DCart, species, 
     return ρ
 end
 
-function initialize_profiles(model::EoSModel,structure::Uniform3DCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel,structure::DFTStructure{3,Cartesian,UniformGrid}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     nd = dimension(structure)
     ngrid = structure.ngrid
 
@@ -227,7 +219,7 @@ function structure_dz(structure::DFTStructure)
     return ntuple(ff,nd)
 end
 
-function structure_ω(structure::Union{DFTStructureSphr,DFTStructureCyl}, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+function structure_ω(structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}}, device::Backend, ::Type{FP}=Float64) where {FP<:AbstractFloat}
     device isa CPU || error("Spherical/cylindrical coordinate systems are CPU-only for now")
     Q = radial_transform(structure)
     return RadialFrequency{FP,typeof(Q)}(Q, FP.(Q.k ./ (2π)))
@@ -239,10 +231,10 @@ end
 The real-space radial grid of a spherical/cylindrical structure, i.e. the (non-uniform,
 Bessel-zero-derived) sample points `Q.r` of its underlying `Hankel.QDHT`.
 """
-structure_r(structure::Union{DFTStructureSphr,DFTStructureCyl}) = radial_transform(structure).r
+structure_r(structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}}) where Q = radial_transform(structure).r
 export structure_r
 
-function get_coords(structure::Union{DFTStructureSphr,DFTStructureCyl})
+function get_coords(structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}}}) where Q
     r = structure_r(structure)
     return reshape(r, length(r), 1)
 end

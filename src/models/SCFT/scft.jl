@@ -32,8 +32,6 @@ export SCFTSystem
 # construction time, rather than waiting for `initialize_profiles` to be called, since
 # SCFT has no two-phase/interfacial-tension support at all (see
 # `surface_tension(::SCFTSystem, ρ)`) and the mismatch is knowable immediately.
-const _SCFTUnsupportedStructure = Union{TwoPhase1DCart,TwoPhase2DLamCart,TwoPhase3DLamCart,
-                                        TwoPhase2DHexCart,TwoPhase3DHexCart,TwoPhase3DSphrCart}
 
 nspecies(x::SCFTSystem) = length(x.model.groups.flattenedgroups)
 
@@ -43,7 +41,7 @@ nspecies(x::SCFTSystem) = length(x.model.groups.flattenedgroups)
 
 Construct an `SCFTSystem`, following the same pattern as `DFTSystem(model, structure,
 options)`: build the bulk `model`, build a `structure` (`Uniform1DCart`,
-`LamellarStack1DCart`, `BCC3DCart`, ... — any `DFTStructure` except `TwoPhase*`, which
+`LamellarStack1DCart`, `BCC3DCart`, ... — any `DFTStructure` except `TwoPhaseSystem`, which
 this constructor rejects; SCFT has no two-phase/interfacial-tension support), then
 combine them here.
 
@@ -85,10 +83,12 @@ function SCFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOption
     external_field = nothing,
 )
     @assert length(structure.ρbulk) == length(model.components) "structure.ρbulk must have one entry per molecule type ($(length(model.components))), got $(length(structure.ρbulk))"
-    structure isa _SCFTUnsupportedStructure && error(
-        "SCFTSystem does not support TwoPhase* structures — SCFT has no two-phase/" *
-        "interfacial-tension support yet (see surface_tension(::SCFTSystem, ρ)). Use a " *
-        "Uniform*Cart or morphology structure instead."
+    structure.system_type isa TwoPhaseSystem && error(
+        """
+        SCFTSystem does not support TwoPhaseSystem structures — SCFT has no two-phase/
+        interfacial-tension support yet (see surface_tension(::SCFTSystem, ρ)). Use a
+        Uniform*Cart or morphology structure instead.
+        """
     )
 
     # get_species reads off the expanded model (chain order baked into

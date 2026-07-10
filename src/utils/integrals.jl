@@ -18,13 +18,12 @@ matched to the structure's `QDHT`, which already incorporates the `r`/`r²` Jaco
 times the angular factor `Hankel.integrateR` itself omits (`4π` for a full sphere, `2π`
 for a cylinder's circular cross-section).
 """
-∫(f, structure::DFTStructureCart) = ∫(f, structure_dz(structure))
+∫(f, structure::DFTStructByCoord{Cartesian}) = ∫(f, structure_dz(structure))
 
-function ∫(f, structure::Union{DFTStructureSphr,DFTStructureCyl})
-    Q = radial_transform(structure)
-    angular = structure isa DFTStructureSphr ? 4π : 2π
-    return angular * Hankel.integrateR(f, Q)
-end
+∫(f, structure::DFTStructByCoord{Spherical})   = 4π * Hankel.integrateR(f, radial_transform(structure))
+∫(f, structure::DFTStructByCoord{Cylindrical}) = 4π * Hankel.integrateR(f, radial_transform(structure))
+
+
 #function _∫(f::AbstractArray,dz::Number,lastidx)
 #    return 1/3*dz*(f[1]+f[end]+4*sum(@view(f[2:2:end-1]))+2*sum(@view(f[3:2:end-1])))
 #end

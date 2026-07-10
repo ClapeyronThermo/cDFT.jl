@@ -1,11 +1,11 @@
-function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel,structure::DFTStructure{1,Cartesian,TwoPhaseSystem{:Cartesian}}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     lb,ub = bounds(structure,1)
     H = ub-lb
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
     (pressure, temperature) = structure.conditions
     ρ1 = structure.ρbulk
-    ρ2 = structure.ρbulk2
+    ρ2 = structure.system_type.ρbulk2
 
     pure = Clapeyron.split_model(model)
 
@@ -25,8 +25,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase1DCart, species,
     end
     return ρ
 end
-
-function initialize_profiles(model::EoSModel,structure::TwoPhase2DLamCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel,structure::DFTStructure{2,Cartesian,TwoPhaseSystem{:Lamellar}}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     lb,ub = bounds(structure,1)
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
@@ -35,7 +34,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase2DLamCart, speci
 
     (pressure, temperature) = structure.conditions
     ρ1 = structure.ρbulk
-    ρ2 = structure.ρbulk2
+    ρ2 = structure.system_type.ρbulk2
 
     pure = Clapeyron.split_model(model)
 
@@ -63,7 +62,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase2DLamCart, speci
 end
 
 
-function initialize_profiles(model::EoSModel,structure::TwoPhase3DLamCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel,structure::DFTStructure{3,Cartesian,TwoPhaseSystem{:Lamellar}}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     lb,ub = bounds(structure,1)
     mb = 0.5*(lb + ub)
     H = ub-lb
@@ -72,7 +71,7 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DLamCart, speci
     nd = dimension(structure)
     (pressure, temperature) = structure.conditions
     ρ1 = structure.ρbulk
-    ρ2 = structure.ρbulk2
+    ρ2 = structure.system_type.ρbulk2
 
     pure = Clapeyron.split_model(model)
 
@@ -101,14 +100,14 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DLamCart, speci
     return ρ
 end
 
-function initialize_profiles(model::EoSModel,structure::TwoPhase2DHexCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel,structure::DFTStructure{2,Cartesian,TwoPhaseSystem{:HexLattice}}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     lb,ub = bounds(structure,1)
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
     nd = dimension(structure)
     (pressure, temperature) = structure.conditions
     ρ1 = structure.ρbulk
-    ρ2 = structure.ρbulk2
+    ρ2 = structure.system_type.ρbulk2
 
     pure = Clapeyron.split_model(model)
 
@@ -145,14 +144,14 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase2DHexCart, speci
     return ρ
 end
 
-function initialize_profiles(model::EoSModel,structure::TwoPhase3DHexCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel,structure::DFTStructure{3,Cartesian,TwoPhaseSystem{:Lamellar}}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     lb,ub = bounds(structure,1)
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
     nd = dimension(structure)
     (pressure, temperature) = structure.conditions
     ρ1 = structure.ρbulk
-    ρ2 = structure.ρbulk2
+    ρ2 = structure.system_type.ρbulk2
 
     pure = Clapeyron.split_model(model)
 
@@ -188,14 +187,14 @@ function initialize_profiles(model::EoSModel,structure::TwoPhase3DHexCart, speci
     return ρ
 end
 
-function initialize_profiles(model::EoSModel,structure::TwoPhase3DSphrCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel,structure::DFTStructure{3,Cartesian,TwoPhaseSystem{:Spherical}}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     lb,ub = bounds(structure,1)
     mb = 0.5*(lb + ub)
     ngrid = structure.ngrid
     nd = dimension(structure)
     (pressure, temperature) = structure.conditions
     ρ1 = structure.ρbulk
-    ρ2 = structure.ρbulk2
+    ρ2 = structure.system_type.ρbulk2
 
     pure = Clapeyron.split_model(model)
 

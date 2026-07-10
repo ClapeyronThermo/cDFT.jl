@@ -5,8 +5,9 @@ Element type of the scratch buffer used to drive the radial/spatial transform fo
 `structure`: `Complex{FP}` for Cartesian (FFT-based), plain `FP` for spherical/
 cylindrical (QDHT-based, real-valued throughout).
 """
-transform_eltype(::DFTStructureCart, ::Type{FP}) where FP<:AbstractFloat = Complex{FP}
-transform_eltype(::Union{DFTStructureSphr,DFTStructureCyl}, ::Type{FP}) where FP<:AbstractFloat = FP
+transform_eltype(::DFTStructByCoord{Cartesian}, ::Type{FP}) where FP<:AbstractFloat = Complex{FP}
+transform_eltype(::DFTStructByCoord{Cylindrical}, ::Type{FP}) where {FP<:AbstractFloat} = FP
+transform_eltype(::DFTStructByCoord{Spherical}, ::Type{FP}) where {FP<:AbstractFloat} = FP
 
 """
     build_transform(structure, tmp, nd, backend)
@@ -15,12 +16,12 @@ Build the `(plan, iplan)` pair used by `convolve!` for `structure`: an FFTW plan
 inverse-plan pair for Cartesian structures, or the shared `Hankel.QDHT` object (used as
 both "plan" and "iplan", see `convolve!`) for spherical/cylindrical structures.
 """
-function build_transform(structure::DFTStructureCart, tmp::AbstractArray, nd::Int, backend::Backend)
+function build_transform(structure::DFTStructure, tmp::AbstractArray, nd::Int, backend::Backend)
     plan = backend isa CPU ? plan_fft!(tmp, 1:nd; num_threads=Threads.nthreads()) : plan_fft!(tmp, 1:nd)
     return plan, inv(plan)
 end
 
-function build_transform(structure::Union{DFTStructureSphr,DFTStructureCyl}, tmp::AbstractArray, nd::Int, backend::Backend)
+function build_transform(structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}} tmp::AbstractArray, nd::Int, backend::Backend)
     backend isa CPU || error("Spherical/cylindrical coordinate systems are CPU-only for now")
     Q = radial_transform(structure)
     return Q, Q
