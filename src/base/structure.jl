@@ -124,42 +124,6 @@ function _1d_to_3d(_bounds,_ngrid)
     return _new_bounds,_new_ngrid
 end
 
-struct ExternalField{E<: ExternalFieldModel} <: DFTStructureType
-    external_field::E
-    width::Float64
-end
-
-"""
-    ExternalField1DCart(conditions::Tuple{Float64,Float64}, ρbulk::Vector{Float64}, bounds::Vector{Float64}, ngrid::Int64, external_field::ExternalFieldModel, width::Float64)
-
-The generic structure type used when trying to simulate solid-fluid interfaces in 1D-cartesian coordinates. Its inputs are:
-- `conditions`: The p, T conditions of the total system before it splits between the two liquid phases.
-- `ρbulk`: The bulk density of each species in the system.
-- `bounds`: Specifies the location of the bounds of the system. The interface will be located in the middle.
-- `ngrids`: The number of grid points used to represent the density profile.
-- `external_field`: The external field model used to calculate the external field.
-- `width`: The surface-to-surface separation.
-
-Example:
-```julia
-julia> model = PCSAFT(["carbon dioxide"])
-
-julia> ρbulk = [molar_density(model,1e5,298.15)]
-
-julia> L = length_scale(model)
-
-julia> H = 10L
-
-julia> surface = Steele(["graphite"])
-
-julia> structure = ExternalField1DCart((p, T), ρbulk, [0.5L, H-0.5L], 201, surface, H)
-```
-"""
-function ExternalField1DCart(conditions,ρbulk,bounds,ngrid,external_field,width)
-    ext = ExternalField(external_field,width)
-    return Structure{1,Cartesian}(conditions,ρbulk,bounds,ngrid,ext)
-end
-
 struct UniformGrid{T} <: DFTStructureType
     transform::T
 end
@@ -497,8 +461,6 @@ function LamellarStack3DCart(conditions,ρbulk,bounds,ngrid; core_groups, amplit
     Structure{3,Cartesian}(conditions,ρbulk,bounds,ngrid,lam)
 end
 
-HexLattice(core_groups,amplitude,periods) = BlockCopolymerMorphology{:HexLattice}(core_groups,amplitude,periods)
-
 function assert_hex_bounds(bounds,::Val{N}) where N
     assert_bounds(bounds,Val(N))
     std_bounds = normalize_bounds(bound,Val(N))
@@ -520,7 +482,7 @@ initial guess, not the correctness of a subsequently converged/evolved profile).
 each dimension.
 """
 function HexLattice2DCart(conditions,ρbulk,bounds,ngrid; core_groups, amplitude=0.3, periods=1)
-    hex = HexLattice(core_groups,amplitude,periods)
+    hex = BlockCopolymerMorphology{:HexLattice}(core_groups,amplitude,periods)
     assert_hex_bounds(bounds,Val(2))
     Structure{2,Cartesian}(conditions,ρbulk,bounds,ngrid,hex)
 end
@@ -532,7 +494,7 @@ end
 cylinder lattice is extruded, uniform, along the third dimension.
 """
 function HexLattice3DCart(conditions,ρbulk,bounds,ngrid; core_groups, amplitude=0.3, periods=1)
-    hex = HexLattice(core_groups,amplitude,periods)
+    hex = BlockCopolymerMorphology{:HexLattice}(core_groups,amplitude,periods)
     assert_hex_bounds(bounds,Val(3))
     Structure{3,Cartesian}(conditions,ρbulk,bounds,ngrid,hex)
 end
