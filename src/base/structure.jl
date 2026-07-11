@@ -121,7 +121,7 @@ struct Structure{Dim,Coord,Top} <: DFTStructure{Dim,Coord,Type}
     topology::Top
 end
 
-function Structure{Dim,Coord}(conditions,bounds,ρbulk,ngrid,topology)
+function Structure{Dim,Coord}(conditions,bounds,ρbulk,ngrid,topology) where {Dim,Coord}
     assert_ngrid(ngrid)
     assert_bounds(bounds)
     norm_bounds = normalize_bounds(bounds, Val(Dim))
@@ -183,7 +183,7 @@ end
 
 #= utils =#
 
-assert_ngrid(::Number, ::Val{N}) = nothing
+assert_ngrid(::Number, ::Val{N}) where N = nothing
 assert_ngrid(::NTuple{D}, ::Val{D}) where D = nothing
 assert_ngrid(::Tuple, ::Val{D}) where D = throw(DimensionMismatch("Tuple length does not match $D"))
 
@@ -194,7 +194,7 @@ end
 
 assert_ngrid(::Any, ::Val) = throw(DimensionMismatch("Invalid grid type"))
 
-normalize_ngrid(x::Number, ::Val{N}) = ntuple(i -> x,Val(N))
+normalize_ngrid(x::Number, ::Val{N}) where N = ntuple(i -> x,Val(N))
 normalize_ngrid(t::NTuple{D}, ::Val{D}) where D = t
 normalize_ngrid(::Tuple, ::Val{D}) where D = throw(DimensionMismatch("Tuple length does not match $D"))
 
@@ -387,7 +387,6 @@ julia> structure = Uniform1DSphr((1.0, 300.0), [0.033], 10.0, 201)
 """
 Uniform1DSphr(conditions,ρbulk,bounds,ngrid) = to_radial(Structure{1,Spherical}(conditions,ρbulk,bounds,ngrid,UniformGrid(nothing)))
 Uniform1DSphr(conditions,ρbulk,ub::Real,ngrid) = Uniform1DSphr(conditions,ρbulk,(zero(ub),ub),ngrid)
-end
 
 """
     Uniform1DCyl(conditions, ρbulk, bounds, ngrid)
@@ -411,6 +410,7 @@ julia> structure = Uniform1DCyl((1.0, 300.0), [0.033], 20.0, 201)
 """
 Uniform1DCyl(conditions,ρbulk,bounds,ngrid) = to_radial(Structure{1,Cylindrical}(conditions,ρbulk,bounds,ngrid,UniformGrid(nothing)))
 Uniform1DCyl(conditions,ρbulk,ub::Real,ngrid) = Uniform1DCyl(conditions,ρbulk,(zero(ub),ub),ngrid)
+
 #=================
 
 Two Phase Systems
@@ -466,9 +466,7 @@ Returns a [`Structure`](@ref) with `Dim = 1`, `Coord = Cartesian`, and `topology
 julia> struct = TwoPhase1DCart((p_sat, T), ρ_liquid, ρ_vapour, [-10.0, 10.0], 201)
 ```
 """
-function TwoPhase1DCart(conditions,ρbulk,ρbulk2,bounds,ngrid)
-    return Structure{1,Cartesian}(conditions,ρbulk,bounds,ngrid,TwoPhaseSystem{:Cartesian}(ρbulk2))
-end
+TwoPhase1DCart(conditions,ρbulk,ρbulk2,bounds,ngrid) = Structure{1,Cartesian}(conditions,ρbulk,bounds,ngrid,TwoPhaseSystem{:Cartesian}(ρbulk2))
 
 """
     TwoPhase2DLamCart(conditions, ρbulk, ρbulk2, bounds, ngrid)
@@ -490,9 +488,7 @@ Returns a [`Structure`](@ref) with `Dim = 2`, `Coord = Cartesian`, and `topology
 julia> struct = TwoPhase2DLamCart((p, T), ρ1, ρ2, [0.0 20.0; 0.0 10.0], (256, 128))
 ```
 """
-function TwoPhase2DLamCart(conditions,ρbulk,ρbulk2,bounds,ngrid)
-    return Structure{2,Cartesian}(conditions,ρbulk,bounds,ngrid,TwoPhaseSystem{:Lamellar}(ρbulk2))
-end
+TwoPhase2DLamCart(conditions,ρbulk,ρbulk2,bounds,ngrid) = Structure{2,Cartesian}(conditions,ρbulk,bounds,ngrid,TwoPhaseSystem{:Lamellar}(ρbulk2))
 
 """
     TwoPhase3DLamCart(conditions, ρbulk, ρbulk2, bounds, ngrid)
@@ -516,9 +512,7 @@ Returns a [`Structure`](@ref) with `Dim = 3`, `Coord = Cartesian`, and
 julia> struct = TwoPhase3DLamCart((p, T), ρ1, ρ2, [0.0 20.0; 0.0 10.0; 0.0 10.0], (64, 32, 32))
 ```
 """
-function TwoPhase3DLamCart(conditions,ρbulk,ρbulk2,bounds,ngrid)
-    return Structure{3,Cartesian}(conditions,ρbulk,bounds,ngrid,TwoPhaseSystem{:Lamellar}(ρbulk2))
-end
+TwoPhase3DLamCart(conditions,ρbulk,ρbulk2,bounds,ngrid) = Structure{3,Cartesian}(conditions,ρbulk,bounds,ngrid,TwoPhaseSystem{:Lamellar}(ρbulk2))
 
 """
     TwoPhase2DHexCart(conditions, ρbulk, ρbulk2, bounds, ngrid)

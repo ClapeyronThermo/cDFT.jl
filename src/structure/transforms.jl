@@ -12,18 +12,18 @@ transform_eltype(::DFTStructByCoord{Spherical}, ::Type{FP}) where {FP<:AbstractF
 """
     build_transform(structure, tmp, nd, backend)
 
-Build the `(plan, iplan)` pair used by `convolve!` for `structure`: an FFTW plan/
-inverse-plan pair for Cartesian structures, or the shared `Hankel.QDHT` object (used as
-both "plan" and "iplan", see `convolve!`) for spherical/cylindrical structures.
+Build the `(plan, iplan)` pair used by `convolve!` for `structure`: an FFTW plan/inverse-plan pair for Cartesian structures, or the shared `Hankel.QDHT` object (used as both "plan" and "iplan", see `convolve!`) for spherical/cylindrical structures.
 """
 function build_transform(structure::DFTStructure, tmp::AbstractArray, nd::Int, backend::Backend)
     plan = backend isa CPU ? plan_fft!(tmp, 1:nd; num_threads=Threads.nthreads()) : plan_fft!(tmp, 1:nd)
     return plan, inv(plan)
 end
 
-function build_transform(structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}} tmp::AbstractArray, nd::Int, backend::Backend)
+function build_transform(structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}}, tmp::AbstractArray, nd::Int, backend::Backend)
     backend isa CPU || error("Spherical/cylindrical coordinate systems are CPU-only for now")
+    
     Q = radial_transform(structure)
+    #Q̄ = adapt_to_device(backend, eltype(tmp),Q)
     return Q, Q
 end
 

@@ -206,12 +206,11 @@ end
 The real-space radial grid of a spherical/cylindrical structure, i.e. the (non-uniform,
 Bessel-zero-derived) sample points `Q.r` of its underlying `Hankel.QDHT`.
 """
-structure_r(structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}}) where Q = radial_transform(structure).r
-export structure_r
+structure_r(structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}})= radial_transform(structure).r
 
-function get_coords(structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}}}) where Q
+function get_coords(structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}})
     r = structure_r(structure)
     return reshape(r, length(r), 1)
 end
 
-export get_coords, initialize_profiles
+export get_coords, initialize_profiles, structure_r

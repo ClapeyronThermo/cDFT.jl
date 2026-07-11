@@ -149,7 +149,7 @@ function initialize_profiles(model::EoSModel,structure::DFTStructure{2,Cartesian
     return ρ
 end
 
-function initialize_profiles(model::EoSModel,structure::DFTStructure{3,Cartesian,TwoPhaseSystem{:Lamellar}}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel,structure::DFTStructure{3,Cartesian,TwoPhaseSystem{:HexLattice}}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
     lb,ub = bounds(structure,1)
     H = ub - lb
     mb = 0.5*(lb + ub)
