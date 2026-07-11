@@ -118,11 +118,11 @@ end
 # structure-type groupings of the generic methods below — a broader combined Union here
 # would be ambiguous with them (neither method strictly more specific than the other
 # across both the `structure` and `species` arguments at once).
-function initialize_profiles(model::EoSModel, structure::DFTStructure{N,Cartesian,UniformGrid}, species::SCFTSpecies, device, ::Type{FP}=Float64) where {N,FP<:AbstractFloat}
+function initialize_profiles(model::EoSModel, structure::DFTStructure{N,Cartesian,<:UniformGrid}, species::SCFTSpecies, device, ::Type{FP}=Float64) where {N,FP<:AbstractFloat}
     _scft_initialize_profiles(structure, species, device, FP)
 end
 
-function initialize_profiles(model::EoSModel,structure::DFTStructure{N,Cartesian,UniformGrid}, species, device, ::Type{FP}=Float64) where {N,FP<:AbstractFloat}
+function initialize_profiles(model::EoSModel,structure::DFTStructure{N,Cartesian,<:UniformGrid}, species, device, ::Type{FP}=Float64) where {N,FP<:AbstractFloat}
     ngrid = structure.ngrid
     ρbulk = structure.ρbulk
     ρ = allocate(device, FP, ngrid..., sum(species.nbeads))

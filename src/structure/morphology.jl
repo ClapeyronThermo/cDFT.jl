@@ -23,7 +23,7 @@ end
 
 # Coordinate arrays shifted to start at 0 (one per dimension, each already broadcast to the
 # full ngrid shape via get_coords), plus the box length along each dimension.
-function _morph_coords(structure::DFTStructByType{BlockCopolymerMorphology})
+function _morph_coords(structure::DFTStructByType{<:BlockCopolymerMorphology})
     nd = dimension(structure)
     Z = get_coords(structure)
     lb_ub = ntuple(d -> bounds(structure,d), nd)
@@ -32,14 +32,14 @@ function _morph_coords(structure::DFTStructByType{BlockCopolymerMorphology})
     return coords, Ls
 end
 
-function lamellar_ψ(structure::DFTStructByType{BlockCopolymerMorphology})
+function lamellar_ψ(structure)
     coords, Ls = _morph_coords(structure)
     X, Lx = coords[1], Ls[1]
     n = structure.topology.periods
     return @. cos(2π*n*X/Lx)
 end
 
-function hex_ψ(structure::DFTStructByType{BlockCopolymerMorphology})
+function hex_ψ(structure)
     coords, Ls = _morph_coords(structure)
     X, Y = coords[1], coords[2]
     Lx, Ly = Ls[1], Ls[2]
@@ -47,7 +47,7 @@ function hex_ψ(structure::DFTStructByType{BlockCopolymerMorphology})
     return @. (1/3)*(cos(2π*n*(X/Lx + Y/Ly)) + cos(2π*n*(X/Lx - Y/Ly)) + cos(4π*n*Y/Ly))
 end
 
-function bcc_ψ(structure::DFTStructByType{BlockCopolymerMorphology})
+function bcc_ψ(structure)
     coords, Ls = _morph_coords(structure)
     X, Y, Z = coords
     L = Ls[1]
@@ -57,7 +57,7 @@ function bcc_ψ(structure::DFTStructByType{BlockCopolymerMorphology})
                       cos(2π*n*(Z+X)/L) + cos(2π*n*(Z-X)/L))
 end
 
-function gyroid_ψ(structure::DFTStructByType{BlockCopolymerMorphology})
+function gyroid_ψ(structure)
     coords, Ls = _morph_coords(structure)
     X, Y, Z = coords
     L = Ls[1]
@@ -67,7 +67,7 @@ end
 
 # Shared fill: ρ_k = ρbulk[component] * (1 + amplitude * sign_k * ψ). amplitude < 1
 # guarantees strict positivity everywhere, regardless of ψ's local value.
-function _fill_morphology!(ρ, structure::DFTStructByType{BlockCopolymerMorphology}, model, device, ::Type{FP}, ψ) where FP<:AbstractFloat
+function _fill_morphology!(ρ, structure::DFTStructByType{<:BlockCopolymerMorphology}, model, device, ::Type{FP}, ψ) where FP<:AbstractFloat
     sign = _domain_sign(model, structure.topology.core_groups)
     ρbulk = structure.ρbulk
     A = structure.topology.amplitude
@@ -87,7 +87,7 @@ morphology_ψ(structure::DFTStructByType{BlockCopolymerMorphology{:HexLattice}})
 morphology_ψ(structure::DFTStructByType{BlockCopolymerMorphology{:BodyCenteredCubic}}) = bcc_ψ(structure)
 morphology_ψ(structure::DFTStructByType{BlockCopolymerMorphology{:Gyroid}}) = gyroid_ψ(structure)
 
-function initialize_profiles(model::EoSModel, structure::DFTStructure{N,Cartesian,BlockCopolymerMorphology}, species, device, ::Type{FP}=Float64) where {N,FP<:AbstractFloat}
+function initialize_profiles(model::EoSModel, structure::DFTStructure{N,Cartesian,<:BlockCopolymerMorphology}, species, device, ::Type{FP}=Float64) where {N,FP<:AbstractFloat}
     ρ = allocate(device, FP, structure.ngrid..., sum(species.nbeads))
     return _fill_morphology!(ρ, structure, model, device, FP, morphology_ψ(structure))
 end
