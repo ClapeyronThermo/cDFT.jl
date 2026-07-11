@@ -121,9 +121,9 @@ struct Structure{Dim,Coord,Top} <: DFTStructure{Dim,Coord,Type}
     topology::Top
 end
 
-function Structure{Dim,Coord}(conditions,bounds,ρbulk,ngrid,topology) where {Dim,Coord}
-    assert_ngrid(ngrid)
-    assert_bounds(bounds)
+function Structure{Dim,Coord}(conditions, ρbulk, bounds, ngrid, topology) where {Dim,Coord}
+    assert_ngrid(ngrid,Val(Dim))
+    assert_bounds(bounds,Val(Dim))
     norm_bounds = normalize_bounds(bounds, Val(Dim))
     norm_ngrid = normalize_ngrid(ngrid, Val(Dim))
     return Structure{Dim,Coord,typeof(topology)}(conditions, norm_bounds, ρbulk, norm_ngrid, topology)
@@ -408,8 +408,8 @@ julia> structure = Uniform1DCyl((1.0, 300.0), [0.033], [0.0, 20.0], 201)
 julia> structure = Uniform1DCyl((1.0, 300.0), [0.033], 20.0, 201)
 ```
 """
-Uniform1DCyl(conditions,ρbulk,bounds,ngrid) = to_radial(Structure{1,Cylindrical}(conditions,ρbulk,bounds,ngrid,UniformGrid(nothing)))
-Uniform1DCyl(conditions,ρbulk,ub::Real,ngrid) = Uniform1DCyl(conditions,ρbulk,(zero(ub),ub),ngrid)
+Uniform1DCyl(conditions, ρbulk, bounds, ngrid) = to_radial(Structure{1,Cylindrical}(conditions,ρbulk,bounds,ngrid,UniformGrid(nothing)))
+Uniform1DCyl(conditions, ρbulk, ub::Real, ngrid) = Uniform1DCyl(conditions,ρbulk,(zero(ub),ub),ngrid)
 
 #=================
 
@@ -664,7 +664,7 @@ Returns a [`Structure`](@ref) with `Dim = 2`, `Coord = Cartesian`, and `topology
 - `amplitude::Float64`                 : Seeding amplitude (default `0.3`).
 - `periods::Int`                       : Number of lamellar periods seeded initially along the first dimension (default `1`).
 """
-function LamellarStack2DCart(conditions,ρbulk,bounds,ngrid; core_groups, amplitude=0.3, periods=1)
+function LamellarStack2DCart(conditions, ρbulk, bounds, ngrid; core_groups, amplitude=0.3, periods=1)
     lam = BlockCopolymerMorphology{:Lamellar}(core_groups,amplitude,periods)
     Structure{2,Cartesian}(conditions,ρbulk,bounds,ngrid,lam)
 end
@@ -685,7 +685,7 @@ Returns a [`Structure`](@ref) with `Dim = 3`, `Coord = Cartesian`, and `topology
 - `amplitude::Float64`                : Seeding amplitude (default `0.3`).
 - `periods::Int`                      : Number of lamellar periods seeded initially along the first dimension (default `1`).
 """
-function LamellarStack3DCart(conditions,ρbulk,bounds,ngrid; core_groups, amplitude=0.3, periods=1)
+function LamellarStack3DCart(conditions, ρbulk, bounds, ngrid; core_groups, amplitude=0.3, periods=1)
     lam = BlockCopolymerMorphology{:Lamellar}(core_groups,amplitude,periods)
     Structure{3,Cartesian}(conditions,ρbulk,bounds,ngrid,lam)
 end
@@ -723,10 +723,10 @@ Returns a [`Structure`](@ref) with `Dim = 2`, `Coord = Cartesian`, and `topology
 !!! note "Supercell aspect ratio"
     For a clean hexagonal tiling under periodic (FFT) boundary conditions, the box dimensions (Lx, Ly) should have a ratio near `√3`. A warning is emitted if this ratio deviates by more than 5%.
 """
-function HexLattice2DCart(conditions,ρbulk,bounds,ngrid; core_groups, amplitude=0.3, periods=1)
+function HexLattice2DCart(conditions, ρbulk, bounds, ngrid; core_groups, amplitude=0.3, periods=1)
     hex = BlockCopolymerMorphology{:HexLattice}(core_groups,amplitude,periods)
     assert_hex_bounds(bounds,Val(2))
-    Structure{2,Cartesian}(conditions,ρbulk,bounds,ngrid,hex)
+    Structure{2,Cartesian}(conditions, ρbulk, bounds, ngrid, hex)
 end
 
 """
@@ -745,10 +745,10 @@ Returns a [`Structure`](@ref) with `Dim = 3`, `Coord = Cartesian`, and `topology
 - `amplitude::Float64`                 : Seeding amplitude (default `0.3`).
 - `periods::Int`                       : Number of unit cells tiled along each dimension (default `1`).
 """
-function HexLattice3DCart(conditions,ρbulk,bounds,ngrid; core_groups, amplitude=0.3, periods=1)
+function HexLattice3DCart(conditions, ρbulk, bounds, ngrid; core_groups, amplitude=0.3, periods=1)
     hex = BlockCopolymerMorphology{:HexLattice}(core_groups,amplitude,periods)
     assert_hex_bounds(bounds,Val(3))
-    Structure{3,Cartesian}(conditions,ρbulk,bounds,ngrid,hex)
+    Structure{3,Cartesian}(conditions, ρbulk, bounds, ngrid, hex)
 end
 
 function assert_cubic_bounds(bounds)
@@ -782,7 +782,7 @@ julia> struct = BCC3DCart((1.0, 300.0), [0.1], [0.0 L; 0.0 L; 0.0 L], (64, 64, 6
                           core_groups=["A"], amplitude=0.4, periods=2)
 ```
 """
-function BCC3DCart(conditions,ρbulk,bounds,ngrid; core_groups, amplitude=0.3, periods=1)
+function BCC3DCart(conditions, ρbulk, bounds, ngrid; core_groups, amplitude=0.3, periods=1)
     bcc = BlockCopolymerMorphology{:BodyCenteredCubic}(core_groups,amplitude,periods)
     assert_cubic_bounds(bounds)
     Structure{3,Cartesian}(conditions,ρbulk,bounds,ngrid,bcc)
@@ -811,7 +811,7 @@ julia> struct = Gyroid3DCart((p, T), [0.1], [0.0 L; 0.0 L; 0.0 L], (64, 64, 64);
                              core_groups=["A"], periods=2)
 ```
 """
-function Gyroid3DCart(conditions,ρbulk,bounds,ngrid; core_groups, amplitude=0.3, periods=1)
+function Gyroid3DCart(conditions, ρbulk, bounds, ngrid; core_groups, amplitude=0.3, periods=1)
     gyr = BlockCopolymerMorphology{:Gyroid}(core_groups,amplitude,periods)
     assert_cubic_bounds(bounds)
     Structure{3,Cartesian}(conditions,ρbulk,bounds,ngrid,gyr)

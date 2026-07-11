@@ -43,6 +43,7 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend
     CT = eltype(ω)
     FP = real(CT)
     L = length_scale(model)
+    PI = FP(π)
     # :ρ doesn't use ω at all (Ω≡1 below), so unconditionally rescaling here is harmless
     # for it and required for :∫ρdz/:∫ρz²dz — unlike VWeightedDensity's :∇ρ case, there's
     # no type here that needs ω left raw.
@@ -60,16 +61,16 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend
 
     if type == :∫ρdz
         ω̄ = sqrt.(sum(abs2, ω, dims=nd+1))
-
-        ω̄R   = ω̄ .* R                                 # (Nx,Ny,Nz,Nb)
+        
+        #Ω .= sinc.(PI .* ω̄ .* R) .* R
 
         mask = ω̄ .== 0
-
         Ω .= ifelse.(mask,
-                2*R ,                                    # ω̄=0 case
+                2*R ,                  # ω̄=0 case
                 2*sin.(ω̄.*R)./ω̄        # ω̄≠0 case
             )
         Ω ./= FP(2π)
+    
     elseif type == :∫ρz²dz
         ω̄ = sqrt.(sum(abs2, ω, dims=nd+1))
         ω̄R   = ω̄ .* R                                 # (Nx,Ny,Nz,Nb)
@@ -77,7 +78,7 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend
         mask = ω̄ .== 0
         Ω .= ifelse.(mask,
                 FP(4π)*R.^3/3,                                    # ω̄=0 case
-                FP(4π)./ω̄.^3 .*(sin.(ω̄R)-R.*ω̄.*cos.(ω̄R))        # ω̄≠0 case
+                FP(4π)./ω̄.^3 .*(sin.(ω̄R) - R.*ω̄.*cos.(ω̄R))        # ω̄≠0 case
             )
         Ω ./= FP(2π)^3
     elseif type == :ρ
