@@ -83,7 +83,7 @@ function SCFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOption
     external_field = nothing,
 )
     @assert length(structure.ρbulk) == length(model.components) "structure.ρbulk must have one entry per molecule type ($(length(model.components))), got $(length(structure.ρbulk))"
-    structure.system_type isa TwoPhaseSystem && error(
+    structure.topology isa TwoPhaseSystem && error(
         """
         SCFTSystem does not support TwoPhaseSystem structures — SCFT has no two-phase/
         interfacial-tension support yet (see surface_tension(::SCFTSystem, ρ)). Use a

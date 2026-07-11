@@ -13,7 +13,7 @@ function initialize_profiles(model::EoSModel,structure::DFTStructure{1,Cartesian
 
     (pressure, temperature) = structure.conditions
     ρ1 = structure.ρbulk
-    ρ2 = structure.system_type.ρbulk2
+    ρ2 = structure.topology.ρbulk2
 
     pure = Clapeyron.split_pure_model(model)
 
@@ -43,7 +43,7 @@ function initialize_profiles(model::EoSModel,structure::DFTStructure{2,Cartesian
 
     (pressure, temperature) = structure.conditions
     ρ1 = structure.ρbulk
-    ρ2 = structure.system_type.ρbulk2
+    ρ2 = structure.topology.ρbulk2
 
     pure = Clapeyron.split_pure_model(model)
 
@@ -78,7 +78,7 @@ function initialize_profiles(model::EoSModel,structure::DFTStructure{3,Cartesian
 
     (pressure, temperature) = structure.conditions
     ρ1 = structure.ρbulk
-    ρ2 = structure.system_type.ρbulk2
+    ρ2 = structure.topology.ρbulk2
 
     pure = Clapeyron.split_pure_model(model)
 
@@ -114,7 +114,7 @@ function initialize_profiles(model::EoSModel,structure::DFTStructure{2,Cartesian
 
     (pressure, temperature) = structure.conditions
     ρ1 = structure.ρbulk
-    ρ2 = structure.system_type.ρbulk2
+    ρ2 = structure.topology.ρbulk2
 
     pure = Clapeyron.split_pure_model(model)
 
@@ -158,7 +158,7 @@ function initialize_profiles(model::EoSModel,structure::DFTStructure{3,Cartesian
 
     (pressure, temperature) = structure.conditions
     ρ1 = structure.ρbulk
-    ρ2 = structure.system_type.ρbulk2
+    ρ2 = structure.topology.ρbulk2
 
     pure = Clapeyron.split_pure_model(model)
 
@@ -201,7 +201,7 @@ function initialize_profiles(model::EoSModel,structure::DFTStructure{3,Cartesian
 
     (pressure, temperature) = structure.conditions
     ρ1 = structure.ρbulk
-    ρ2 = structure.system_type.ρbulk2
+    ρ2 = structure.topology.ρbulk2
 
     pure = Clapeyron.split_pure_model(model)
 

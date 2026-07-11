@@ -35,7 +35,7 @@ end
 function lamellar_ψ(structure::DFTStructByType{BlockCopolymerMorphology})
     coords, Ls = _morph_coords(structure)
     X, Lx = coords[1], Ls[1]
-    n = structure.system_type.periods
+    n = structure.topology.periods
     return @. cos(2π*n*X/Lx)
 end
 
@@ -43,7 +43,7 @@ function hex_ψ(structure::DFTStructByType{BlockCopolymerMorphology})
     coords, Ls = _morph_coords(structure)
     X, Y = coords[1], coords[2]
     Lx, Ly = Ls[1], Ls[2]
-    n = structure.system_type.periods
+    n = structure.topology.periods
     return @. (1/3)*(cos(2π*n*(X/Lx + Y/Ly)) + cos(2π*n*(X/Lx - Y/Ly)) + cos(4π*n*Y/Ly))
 end
 
@@ -51,7 +51,7 @@ function bcc_ψ(structure::DFTStructByType{BlockCopolymerMorphology})
     coords, Ls = _morph_coords(structure)
     X, Y, Z = coords
     L = Ls[1]
-    n = structure.system_type.periods
+    n = structure.topology.periods
     return @. (1/6)*(cos(2π*n*(X+Y)/L) + cos(2π*n*(X-Y)/L) +
                       cos(2π*n*(Y+Z)/L) + cos(2π*n*(Y-Z)/L) +
                       cos(2π*n*(Z+X)/L) + cos(2π*n*(Z-X)/L))
@@ -61,16 +61,16 @@ function gyroid_ψ(structure::DFTStructByType{BlockCopolymerMorphology})
     coords, Ls = _morph_coords(structure)
     X, Y, Z = coords
     L = Ls[1]
-    n = structure.system_type.periods
+    n = structure.topology.periods
     return @. (sin(2π*n*X/L)*cos(2π*n*Y/L) + sin(2π*n*Y/L)*cos(2π*n*Z/L) + sin(2π*n*Z/L)*cos(2π*n*X/L)) / 1.5
 end
 
 # Shared fill: ρ_k = ρbulk[component] * (1 + amplitude * sign_k * ψ). amplitude < 1
 # guarantees strict positivity everywhere, regardless of ψ's local value.
 function _fill_morphology!(ρ, structure::DFTStructByType{BlockCopolymerMorphology}, model, device, ::Type{FP}, ψ) where FP<:AbstractFloat
-    sign = _domain_sign(model, structure.system_type.core_groups)
+    sign = _domain_sign(model, structure.topology.core_groups)
     ρbulk = structure.ρbulk
-    A = structure.system_type.amplitude
+    A = structure.topology.amplitude
     nd = dimension(structure)
     for i in @comps
         for j in @chain(i)
