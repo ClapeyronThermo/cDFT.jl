@@ -113,10 +113,10 @@ struct = TwoPhase2DLamCart((0.1, 350.0), [0.03], [0.001],
                            [0.0 20.0; 0.0 10.0], (256, 128))
 ```
 """
-struct Structure{Dim,Coord,Top} <: DFTStructure{Dim,Coord,Type}
+struct Structure{Dim,Coord,Top} <: DFTStructure{Dim,Coord,Top}
     conditions::Tuple{Float64,Float64}
-    bounds::NTuple{Dim,NTuple{2,Float64}}
     ρbulk::Vector{Float64}
+    bounds::NTuple{Dim,NTuple{2,Float64}}
     ngrid::NTuple{Dim,Int64}
     topology::Top
 end
@@ -126,7 +126,7 @@ function Structure{Dim,Coord}(conditions, ρbulk, bounds, ngrid, topology) where
     assert_bounds(bounds,Val(Dim))
     norm_bounds = normalize_bounds(bounds, Val(Dim))
     norm_ngrid = normalize_ngrid(ngrid, Val(Dim))
-    return Structure{Dim,Coord,typeof(topology)}(conditions, norm_bounds, ρbulk, norm_ngrid, topology)
+    return Structure{Dim,Coord,typeof(topology)}(conditions, ρbulk, norm_bounds, norm_ngrid, topology)
 end
 
 #a way to check the struct first: DFTStructByCoord{Cartesian} = DFTStructure{N,Cartesian}
@@ -161,14 +161,14 @@ dimension(::Type{<:DFTStructure{N}}) where N = N
 
 Return the lower and upper bounds for the given dimension `dim` of the structure.
 """
-bounds(structure::DFTStructure,dim::Int) = structure.bounds[dim]
+bounds(structure::DFTStructure,dim::Int = 1) = structure.bounds[dim]
 
 """
     ngrid(structure::DFTStructure, dim::Int) -> Int
 
 Return the number of grid points for the given dimension `dim` of the structure.
 """
-ngrid(structure::DFTStructure,dim) =  structure.ngrid[dim]
+ngrid(structure::DFTStructure,dim = 1) =  structure.ngrid[dim]
 
 """
     uniform_range(structure::DFTStructure, dim::Int = 1) -> LinRange
@@ -179,7 +179,6 @@ function uniform_range(structure::DFTStructure,dim::Int)
     lb,ub = bounds(structure,dim)
     return LinRange(lb,ub,ngrid(structure,dim))
 end
-
 
 #= utils =#
 
@@ -204,7 +203,10 @@ function normalize_ngrid(arr::AbstractArray, ::Val{D}) where D
 end
 normalize_ngrid(::Any, ::Val) = throw(DimensionMismatch("Invalid grid type"))
 
-function assert_bounds(t::Tuple, ::Val{N}) where N
+function assert_bounds(t::NTuple, ::Val{N}) where N
+    if N == 1 && length(t) == 2
+        return nothing
+    end
     length(t) == N || throw(DimensionMismatch("Tuple length $(length(t)) != $N"))
     for (i, x) in enumerate(t)
         if !(x isa Tuple && length(x) == 2 && x[1] isa Number && x[2] isa Number)
@@ -230,6 +232,7 @@ end
 
 assert_bounds(::Any, ::Val) =  throw(DimensionMismatch("Invalid bounds type"))
 
+normalize_bounds(t::NTuple{2}, ::Val{1}) = (t,)
 normalize_bounds(t::NTuple{N,NTuple{2,Float64}}, ::Val{N}) where N = t
 normalize_bounds(v::AbstractVector, ::Val{1}) = ((v[1], v[2]),)
 normalize_bounds(m::AbstractMatrix, ::Val{N}) where N = ntuple(i -> (m[i,1], m[i,2]), Val(N))
@@ -255,6 +258,22 @@ function _1d_to_3d(bounds, ngrid)
     return new_bounds, new_ngrid
 end
 
+function Base.show(io::IO,::MIME"text/plain",structure::DFTStructure{N,C,P}) where {N,C,P}
+    print(io,N,"D ")
+    p,T = structure.conditions
+    compact_io = IOContext(io, :compact => true)
+    println(compact_io,typeof(structure),"(p = $p, T = $T):")
+    println(compact_io," number of species: ",length(structure.ρbulk))
+    if N == 1
+        println(compact_io," bounds           : ",only(structure.bounds))
+        println(" grid points      : ",only(structure.ngrid))
+    else
+        println(compact_io," bounds           : ",structure.bounds)
+        println(compact_io," grid points      : ",structure.ngrid)
+    end
+    print(compact_io," topology         : ",structure.topology)
+end
+
 """
     UniformGrid{T} <: DFTTopology
 
@@ -267,6 +286,8 @@ struct UniformGrid{T} <: DFTTopology
 end
 
 UniformGrid() = UniformGrid(nothing)
+
+Base.show(io::IO,x::UniformGrid) = print(io,typeof(x),"()")
 
 """
     Uniform1DCart(conditions, ρbulk, bounds, ngrid)
@@ -344,7 +365,7 @@ radial_transform(data::UniformGrid{Q}) where Q = data.transform
 function to_radial(s0::DFTStructure{1,Spherical,UniformGrid{Nothing}})
     _,ub = bounds(s0)
     grid = UniformGrid(Hankel.QDHT(0, 2, ub, ngrid(s0)))
-    Structure{1,Spherical}(s0.conditions,s0.ρbulk,s0.bounds,s0.ngrid,grid)
+    Structure{1,Spherical,typeof(grid)}(s0.conditions,s0.ρbulk,s0.bounds,s0.ngrid,grid)
 end
 
 function to_radial(s0::DFTStructure{1,Cylindrical,UniformGrid{Nothing}})
@@ -443,6 +464,7 @@ struct TwoPhaseSystem{T} <: DFTTopology
     ρbulk2::Vector{Float64}
 end
 
+Base.show(io::IO,top::TwoPhaseSystem) = print(io,typeof(top),"()")
 """
     TwoPhase1DCart(conditions, ρbulk, ρbulk2, bounds, ngrid)
 
@@ -619,6 +641,8 @@ struct BlockCopolymerMorphology{T} <: DFTTopology
         return new{T}(core_groups,amplitude,periods)
     end
 end
+
+Base.show(io::IO,top::BlockCopolymerMorphology) = Clapeyron.show_as_namedtuple(io,top)
 
 """
     LamellarStack1DCart(conditions, ρbulk, bounds, ngrid; core_groups, amplitude=0.3, periods=1)
@@ -819,7 +843,7 @@ end
 
 export Structure, Cartesian, Cylindrical, Spherical
 export UniformGrid, TwoPhaseSystem, BlockCopolymerMorphology
-export Uniform1DCart, ExternalField1DCart
+export Uniform1DCart, Uniform2DCart, Uniform3DCart
 export Uniform1DSphr, Uniform1DCyl
 export TwoPhase1DCart, TwoPhase2DLamCart, TwoPhase3DLamCart
 export TwoPhase2DHexCart
