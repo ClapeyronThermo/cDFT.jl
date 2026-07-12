@@ -16,7 +16,7 @@ function ElectrolyteDFTSystem(model::ElectrolyteModel, structure::DFTStructure, 
     species.chempot_res .= μres
 
     fields = get_fields(model.neutralmodel, species, structure, options.device, FP)
-    fields_ion = get_fields(model.ionmodel, ion_species, structure, options.device, FP; L=length_scale(model))
+    fields_ion = get_fields((model.ionmodel,FP(length_scale(model))), ion_species, structure, options.device, FP)
     append!(fields,fields_ion)
 
     typed_fields = tuple(fields...)
@@ -43,7 +43,7 @@ function ElectrolyteDFTSystem(model::ElectrolyteModel, structure::DFTStructure, 
     species.chempot_res .= μres
 
     fields = get_fields(model.neutralmodel, species, structure, device, FP)
-    fields_ion = get_fields(model.ionmodel, ion_species, structure, device, FP; L=length_scale(model))
+    fields_ion = get_fields((model.ionmodel,FP(length_scale(model))), ion_species, structure, device, FP)
     append!(fields,fields_ion)
 
     typed_fields = tuple(fields...)
