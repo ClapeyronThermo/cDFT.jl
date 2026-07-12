@@ -171,8 +171,7 @@ end
 """
     compute_bulk_fields(model::EoSModel, bulk_densities::Vector{Float64})
 
-Compute bulk (uniform) fields from bulk densities. Returns a vector of field
-values, one per species.
+Compute bulk (uniform) fields from bulk densities. Returns a vector of field values, one per species.
 """
 function compute_bulk_fields(model::EoSModel, bulk_densities::AbstractVector{T}) where {T<:AbstractFloat}
     nspecies = length(bulk_densities)

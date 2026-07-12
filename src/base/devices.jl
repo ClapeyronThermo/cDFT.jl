@@ -106,9 +106,9 @@ whatever forward/backward propagator arrays and FFT plans that propagator needs.
 """
 function preallocate_propagator(system, ρ)
     backend = system.options.device
-    propagtor = system.propagator
+    propagator = system.propagator
 
-    return preallocate_propagator(system, propagtor, ρ, backend)
+    return preallocate_propagator(system, propagator, ρ, backend)
 end
 
 export CPU, DFTOptions, fptype

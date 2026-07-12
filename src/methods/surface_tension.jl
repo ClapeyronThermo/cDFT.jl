@@ -37,19 +37,19 @@ function surface_tension(system::AbstractcDFTSystem,ρ)
 
     F = free_energy(system,ρ)
 
-    (pressure, temperature) = system.structure.conditions
+    (p, T) = system.structure.conditions
     ρl = system.structure.ρbulk
     x = ρl/sum(ρl)
     vl = 1/sum(ρl)
 
-    μ = Clapeyron.VT_chemical_potential(model,vl,temperature,x)
+    μ = Clapeyron.VT_chemical_potential(model,vl,T,x)
     chem_pot_term = 0.
     for i in @comps
         for k in @chain(i)
             chem_pot_term += μ[i]*∫(ρ[:,k],system.structure)/system.species.nbeads[i]
         end
     end
-    return F*k_B*temperature-chem_pot_term+pressure*∫(ones(only(ngrid...)),system.structure)
+    return F*k_B*T - chem_pot_term + p*∫(ones(only(ngrid...)),system.structure)
 end
 
 export surface_tension

@@ -38,8 +38,7 @@ struct SWeightedDensity{M,P,iP} <: ScalarField
     iplan::iP
 end
 
-function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend, model)
-    nd = length(ngrid)
+function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid::NTuple{nd,<:Any}, backend::Backend, model) where nd
     CT = eltype(ω)
     FP = real(CT)
     L = length_scale(model)
@@ -88,7 +87,7 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend
     end
 
     tmp = complex(Array(selectdim(Ω,nd+1,1)))
-    plan = plan_fft!(tmp, 1:length(ngrid); num_threads=Threads.nthreads())
+    plan = plan_fft!(tmp, 1:nd; num_threads=Threads.nthreads())
     iplan = inv(plan)
     return SWeightedDensity(type,width,L,Ω,plan,iplan)
 end
@@ -204,8 +203,7 @@ struct VWeightedDensity{M,P,iP} <: VectorField
     iplan::iP
 end
 
-function VWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend, model)
-    nd = length(ngrid)
+function VWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid::NTuple{nd,<:Any}, backend::Backend, model) where nd
     CT = eltype(ω)
     FP = real(CT)
     L = length_scale(model)
@@ -255,7 +253,7 @@ function VWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend
     end
 
     tmp = complex(Array(selectdim(selectdim(Ω,nd+1,1),nd+1,1)))
-    plan = plan_fft!(tmp, 1:length(ngrid); num_threads=Threads.nthreads())
+    plan = plan_fft!(tmp, 1:nd; num_threads=Threads.nthreads())
     iplan = inv(plan)
     return VWeightedDensity(type,width,L,Ω,plan,iplan)
 end
