@@ -44,7 +44,7 @@ intermediate weighted-density value near O(1) regardless of floating-point preci
 consumed directly (unconvolved) by `f_hc`/`f_disp`, and `F_res` for the compensating
 `1/L^3` applied to the returned scalar free energy.
 """
-function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}) where FP<:AbstractFloat
     nc = length(model)
     ngrid = structure.ngrid
     #f = [ngrid[i]/(structure.bounds[i,2]-structure.bounds[i,1]) for i in 1:length(ngrid)]
@@ -52,21 +52,16 @@ function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStruc
     ω = structure_ω(structure, device, FP)
     ψ = 1.3862
     d = species.size ./ L
-    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid,device,model),
+    return (SWeightedDensity(:ρ,zeros(nc),ω,ngrid,device,model),
             SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device,model),
             SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,device,model),
             VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,device,model),
             SWeightedDensity(:∫ρz²dz,d,ω,ngrid,device,model),
             SWeightedDensity(:∫ρdz,d,ω,ngrid,device,model),
-            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device,model)]
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device,model))
 end
 
 
-"""
-    get_species(model::EoSModel, structure::DFTStructure)
-
-For a given `model` and `structure`, define the relevant parameters for each species. These structs will contain additional information not present by default in the inital `model`, such as the bead size, the number of beads and the connectivity of the beads.
-"""
 function get_species(model::PCSAFTModel,structure::DFTStructure)
     (pressure, temperature) = structure.conditions
     ρbulk = structure.ρbulk
@@ -76,25 +71,14 @@ function get_species(model::PCSAFTModel,structure::DFTStructure)
     return PCSAFTSpecies(ones(Int64,nc),size,ρbulk,μres)
 end
 
-"""
-    get_propagator(model::EoSModel, species::DFTSpecies, structure::DFTStructure)
 
-For a given `model`, define the relevant propagator. 
-"""
 function get_propagator(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure, backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     return IdealPropagator()
 end
 
-"""
-    length_scale(model::EoSModel)
-
-Obtains the maximum length scale in the model and helps define the dimensions of the DFT system. This is typically equal to the size of the largest bead.
-"""
 function length_scale(model::SAFTModel)
     return maximum(model.params.sigma.values)
 end
-
-export length_scale
 
 # ── Enzyme / KernelAbstractions kernel support ──────────────────────────────
 # These constants are GPU-safe (no heap allocation, no Clapeyron calls).

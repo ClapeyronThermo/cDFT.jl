@@ -19,7 +19,7 @@ struct SAFTVRMieSpecies <: DFTSpecies
     chempot_res::Vector{Float64}
 end
 
-function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}) where FP<:AbstractFloat
     nc = length(model)
     ngrid = structure.ngrid
 
@@ -38,13 +38,13 @@ function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTSt
     ω = structure_ω(structure, device, FP)
     d = species.size ./ L
 
-    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid,device,model),
+    return (SWeightedDensity(:ρ,zeros(nc),ω,ngrid,device,model),
             SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device,model),
             SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,device,model),
             VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,device,model),
             SWeightedDensity(:∫ρz²dz,d,ω,ngrid,device,model),
             SWeightedDensity(:∫ρdz,d,ω,ngrid,device,model),
-            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device,model)]
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device,model))
 end
 
 function get_species(model::SAFTVRMieModel,structure::DFTStructure)
