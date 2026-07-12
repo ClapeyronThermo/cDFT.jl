@@ -57,39 +57,37 @@ struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,EF,P<:DFTPropagator
     chunksize::Val{C}
 end
 
-function DFTSystem(model::EoSModel, structure::DFTStructure, external_field::Vector{ExternalFieldModel}, options::DFTOptions = DFTOptions())
+function build_DFT_system(orig_model,structure,external_field,options,mol_structure)
+    model = expand_model(orig_model, mol_structure) #if the model has no groups, it does nothing
     species = get_species(model, structure)
     FP = fptype(options)
-    fields = get_fields(model, species, structure, options.device, FP)
-    typed_fields = tuple(fields...)
-    propagator = get_propagator(model, species, structure, options.device, FP)
+    device = options.device
+    fields = get_fields(model, species, structure, device, FP)
+    propagator = get_propagator(model, species, structure, device, FP)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, typed_fields, external_field, propagator, options,chunksize)
-end
-
-function DFTSystem(model::EoSModel, structure::DFTStructure, external_field::ExternalFieldModel, options::DFTOptions = DFTOptions())
-    species = get_species(model, structure)
-    FP = fptype(options)
-    fields = get_fields(model, species, structure, options.device, FP)
-    typed_fields = tuple(fields...)
-    propagator = get_propagator(model, species, structure, options.device, FP)
-    NF = compute_field_len(fields,dimension(structure))
-    chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, typed_fields, [external_field], propagator, options,chunksize)
+    init_external_field = external_field isa ExternalFieldModel ? [external_field] : external_field
+    return DFTSystem(model, species, structure, fields, init_external_field, propagator, options, chunksize)
 end
 
 
-function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
-    species = get_species(model, structure)
-    FP = fptype(options)
-    fields = get_fields(model, species, structure, options.device, FP)
-    typed_fields = tuple(fields...)
-    propagator = get_propagator(model, species, structure, options.device, FP)
-    NF = compute_field_len(fields,dimension(structure))
-    chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, typed_fields, nothing, propagator, options,chunksize)
+function DFTSystem(model::EoSModel, structure::DFTStructure; mol_structure = nothing)
+    return build_DFT_system(model,structure,nothing,DFTOptions(),mol_structure)
 end
+
+function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions; mol_structure = nothing)
+    return build_DFT_system(model,structure,nothing,options,mol_structure)
+end
+
+function DFTSystem(model::EoSModel, structure::DFTStructure, external_field::Union{ExternalFieldModel,Vector{<:ExternalFieldModel},Nothing}; mol_structure = nothing)
+    build_DFT_system(model,structure,external_field,DFTOptions(),mol_structure)
+end
+
+function DFTSystem(model::EoSModel, structure::DFTStructure, external_field::Union{ExternalFieldModel,Vector{<:ExternalFieldModel},Nothing},options::DFTOptions; mol_structure = nothing)
+    build_DFT_system(model,structure,external_field,options,mol_structure)
+end
+
+get_fields(model, species, structure, device) = get_fields(model, species, structure, device, Float64)
 
 """
     DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStructure, external_field, options::DFTOptions)
