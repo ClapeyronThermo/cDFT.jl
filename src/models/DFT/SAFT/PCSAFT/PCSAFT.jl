@@ -183,7 +183,8 @@ Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the po
         end
     end
     ηd2    = ηd*ηd
-    ηd4    = (one(FP)-ηd)^4
+    m1ηd   = one(FP)-ηd
+    ηd4    = m1ηd*m1ηd*m1ηd*m1ηd
     inv1ηd = one(FP)/(one(FP)-ηd)
     inv2ηd = one(FP)/(2-ηd)
     C₁     = one(FP) + m̄*(8*ηd-2*ηd2)/ηd4 +
@@ -191,23 +192,22 @@ Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the po
               inv1ηd*inv1ηd*inv2ηd*inv2ηd
     I₁     = I_lite(PCSAFT_CORR1, m̄, ηd)
     I₂     = I_lite(PCSAFT_CORR2, m̄, ηd)
-    res_disp = -2*_π*I₁*m2ϵσ3_1 - _π*m̄*I₂*m2ϵσ3_2 / C₁
+    res_disp = -2*(_π*I₁*m2ϵσ3_1) - _π*m̄*I₂*m2ϵσ3_2 / C₁
     return res_disp, m̄, ηd
 end
 
 @inline function I_lite(corr, m̄, η)
-    T  = typeof(m̄)
-    res = zero(T)
+    FP = typeof(m̄)
     m2 = (m̄ - 1) / m̄
     m3 = m2 * (m̄ - 2) / m̄
-    c1 = corr[1]; res += (T(c1[1]) + m2*T(c1[2]) + m3*T(c1[3]))
-    c2 = corr[2]; res += (T(c2[1]) + m2*T(c2[2]) + m3*T(c2[3])) * η
-    c3 = corr[3]; res += (T(c3[1]) + m2*T(c3[2]) + m3*T(c3[3])) * η * η
-    c4 = corr[4]; res += (T(c4[1]) + m2*T(c4[2]) + m3*T(c4[3])) * η * η * η
-    c5 = corr[5]; res += (T(c5[1]) + m2*T(c5[2]) + m3*T(c5[3])) * η * η * η * η
-    c6 = corr[6]; res += (T(c6[1]) + m2*T(c6[2]) + m3*T(c6[3])) * η * η * η * η * η
-    c7 = corr[7]; res += (T(c7[1]) + m2*T(c7[2]) + m3*T(c7[3])) * η * η * η * η * η * η
-    return res
+    c1 = corr[1]; a1 = FP(c1[1]) + m2*FP(c1[2]) + m3*FP(c1[3])
+    c2 = corr[2]; a2 = FP(c2[1]) + m2*FP(c2[2]) + m3*FP(c2[3])
+    c3 = corr[3]; a3 = FP(c3[1]) + m2*FP(c3[2]) + m3*FP(c3[3])
+    c4 = corr[4]; a4 = FP(c4[1]) + m2*FP(c4[2]) + m3*FP(c4[3])
+    c5 = corr[5]; a5 = FP(c5[1]) + m2*FP(c5[2]) + m3*FP(c5[3])
+    c6 = corr[6]; a6 = FP(c6[1]) + m2*FP(c6[2]) + m3*FP(c6[3])
+    c7 = corr[7]; a7 = FP(c7[1]) + m2*FP(c7[2]) + m3*FP(c7[3])
+    return evalpoly(η, (a1, a2, a3, a4, a5, a6, a7))
 end
 
 function preallocate_params(system::DFTSystem{<:PCSAFTModel})

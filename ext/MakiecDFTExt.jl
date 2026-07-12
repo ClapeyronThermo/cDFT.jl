@@ -1,6 +1,7 @@
 module MakiecDFTExt
 
 using cDFT
+using Adapt
 using Makie
 
 _maybe_texlabel(s, latex::Bool) = latex ? cDFT.texlabel(s) : s
@@ -113,6 +114,7 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
     bounds = structure.bounds
     z = cDFT.uniform_range(structure)
     L = cDFT.length_scale(model)
+    _ρ = Adapt.adapt(CPU(), profiles)
 
     fig = Figure()
     ax = Axis(fig[1, 1];
@@ -133,14 +135,14 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
     function bead_Y(i, k)
         norm_const = _norm_const(species, model, i, k)
         if y_units == :normalized
-            return profiles[:,k].*norm_const
+            return _ρ[:,k].*norm_const
         elseif y_units == :mass
             Mw = model.params.Mw[k]
-            return profiles[:,k].*Mw/1e3
+            return _ρ[:,k].*Mw/1e3
         elseif y_units == :angstrom
-            return profiles[:,k].*cDFT.N_A/1e30
+            return _ρ[:,k].*cDFT.N_A/1e30
         else
-            return profiles[:,k]
+            return _ρ[:,k]
         end
     end
 
@@ -197,6 +199,8 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTSt
     z = cDFT.structure_r(structure)
     L = cDFT.length_scale(model)
 
+    _ρ = Adapt.adapt(CPU(), profiles)
+
     fig = Figure()
     ax = Axis(fig[1, 1];
         xgridvisible=false, ygridvisible=false,
@@ -216,14 +220,14 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTSt
     function bead_Y(i, k)
         norm_const = _norm_const(species, model, i, k)
         if y_units == :normalized
-            return profiles[:,k].*norm_const
+            return _ρ[:,k].*norm_const
         elseif y_units == :mass
             Mw = model.params.Mw[k]
-            return profiles[:,k].*Mw/1e3
+            return _ρ[:,k].*Mw/1e3
         elseif y_units == :angstrom
-            return profiles[:,k].*cDFT.N_A/1e30
+            return _ρ[:,k].*cDFT.N_A/1e30
         else
-            return profiles[:,k]
+            return _ρ[:,k]
         end
     end
 
@@ -275,6 +279,7 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
 
     bounds = structure.bounds
 
+    _ρ = Adapt.adapt(CPU(), profiles)
     x = cDFT.uniform_range(structure,1)
     y = cDFT.uniform_range(structure,2)
     L = cDFT.length_scale(model)
@@ -304,7 +309,7 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
 
     function bead_Z(i, k)
         norm_const = _norm_const(species, model, i, k)
-        return profiles[:,:,k].*norm_const
+        return _ρ[:,:,k].*norm_const
     end
 
     groups = _plot_groups(species, model, plot_by)
@@ -355,6 +360,7 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
     structure = system.structure
     model = system.model
     species = system.species
+    _ρ = Adapt.adapt(CPU(), profiles)
 
     x = cDFT.uniform_range(structure,1)
     y = cDFT.uniform_range(structure,2)
@@ -386,7 +392,7 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
 
     function bead_ρ(i, k)
         norm_const = _norm_const(species, model, i, k)
-        return profiles[:,:,:,k].*norm_const
+        return _ρ[:,:,:,k].*norm_const
     end
 
     groups = _plot_groups(species, model, plot_by)

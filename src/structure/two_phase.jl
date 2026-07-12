@@ -28,7 +28,7 @@ function initialize_profiles(model::EoSModel,structure::DFTStructure{1,Cartesian
         coef = sqrt(coef^2-1)/4
         for j in @chain(i)
             ρ_points = @. cos_prof(X/(ub-lb), ρ1[i], ρ2[i], (ub / 4 + 3 * lb / 4), coef)
-            ρ[:,j] = ρ_points
+            ρ[:,j] = adapt_to_device(device, FP, ρ_points)
         end
     end
     return ρ

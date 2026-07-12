@@ -16,6 +16,7 @@ propagate→partition-functions→densities→fields sequence into the same
 """
 function get_new_profile!(system::Union{DFTSystem,DGTSystem,ElectrolyteDFTSystem}, ρ, δfδρ_res, caches)
     (; cache_model, cache_external, cache_propagator, ln_Gx) = caches
+    FP = fptype(system.options)
     nd = dimension(system)
     species = system.species
     model = system.model
@@ -26,9 +27,10 @@ function get_new_profile!(system::Union{DFTSystem,DGTSystem,ElectrolyteDFTSystem
 
     propagate!(system, ρ, δfδρ_res, cache_propagator)
 
+    chem_pot_res_dens = FP.(species.chempot_res .+ log.(species.bulk_density))
+
     for i in @comps
-        chem_pot_res_dens_i = log(species.bulk_density[i]) .+
-                                        species.chempot_res[i]
+        chem_pot_res_dens_i = chem_pot_res_dens[i]
         for k in @chain(i)
             if system.species.nbeads[i] != 1
                 α = findall(model.groups.n_intergroups[i][k,:] .== 1 .&& species.levels .> species.levels[k])
@@ -54,7 +56,7 @@ function get_new_profile!(system::Union{DFTSystem,DGTSystem,ElectrolyteDFTSystem
         end
     end
 
-    clamp!(ln_Gx, -100, Inf)
+    clamp!(ln_Gx, -100, 100)
 
     return nothing
 end
@@ -95,15 +97,20 @@ since SCFT iterates on the field `w` rather than `ln(ρ)`.
 """
 function converge!(system::Union{DFTSystem,DGTSystem,ElectrolyteDFTSystem}, ρ;
     maxit          :: Int  = 10000,
-    beta                   = 1e-3,
+    beta                   = 1e-2,
     tol                    = 1e-4,
     anderson_start         = 1e-1,
-    anderson_m     :: Int  = 0,
+    anderson_m     :: Int  = 5,
     log_interval   :: Int  = 0,
     save_interval  :: Int  = 0,
     save_callback           = nothing,
     verbose        :: Bool = false,
 )
+
+    FP = fptype(system.options)
+    beta = FP(beta)
+    tol = FP(tol)
+    anderson_start = FP(anderson_start)
     ngrid = system.structure.ngrid
     nd = dimension(system)
     nbeads = size(ρ,nd+1)

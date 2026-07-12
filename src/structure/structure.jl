@@ -129,7 +129,7 @@ function initialize_profiles(model::EoSModel,structure::DFTStructure{N,Cartesian
     for i in @comps
         for j in @chain(i)
             ρj = selectdim(ρ,N,j)
-            ρj .= ρbulk[i]
+            ρj .= FP(ρbulk[i])
         end
     end
     return ρ

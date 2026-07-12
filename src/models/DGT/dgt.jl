@@ -94,9 +94,9 @@ function preallocate_model(system::DGTSystem, ρ)
 
     # Mirrors preallocate_model(::DFTSystem,...)/(::ElectrolyteDFTSystem,...)
     # (src/models/models.jl) — δFδρ_res! destructures fwd_cache unconditionally whenever
-    # system.options.ad_mode === :forward (the DFTOptions default), so DGT needs the same
-    # dn_seeds/df_outs/batch construction, not just `nothing`.
-    if system.options.ad_mode === :forward
+    # system.options.ad_mode is :forward or :forward_batch (the DFTOptions default), so
+    # DGT needs the same dn_seeds/df_outs/batch construction, not just `nothing`.
+    if system.options.ad_mode === :forward || system.options.ad_mode === :forward_batch
         batch = nf * nc
         dn_seeds = ntuple(Val(batch)) do k
             f_idx = (k - 1) ÷ nc + 1

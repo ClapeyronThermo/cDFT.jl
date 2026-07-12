@@ -8,15 +8,15 @@ module SciMLBasecDFTExt
     ################### DYNAMIC DENSITY FUNCTIONAL THEORY ###################
 
     function SciMLBase.ODEProblem(system::cDFT.AbstractcDFTSystem, ρ, tspan, kwargs...)
-        k        = cDFT.structure_ω(system.structure, system.options.device) .* cDFT.length_scale(system.model)
-
+        FP = cDFT.fptype(system.options)
         ngrid    = system.structure.ngrid
-        FP       = cDFT.fptype(system.options)
-
         nd       = length(ngrid)
+        L        = FP(cDFT.length_scale(system.model))
+        k        = cDFT.structure_ω(system.structure, system.options.device, FP) .* L
 
-        map_grad =  2π .* k .* im
-        map_lapl = dropdims(-(2π)^2 .* sum(k.^2, dims=nd+1), dims=nd+1)
+        map_grad =  2(π .* k .* im)
+        _2π² = FP((2π)^2)
+        map_lapl = dropdims(-_2π².* sum(k.^2, dims=nd+1), dims=nd+1)
 
         tmp      = KA.allocate(system.options.device, FP, ngrid...)
         buf      = KA.allocate(system.options.device, Complex{FP}, ngrid...)

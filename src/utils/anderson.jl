@@ -243,9 +243,9 @@ function aasol(
     k = 0
     ~keepsolhist || (@views solhist[:, k+1] .= sol)
     gx = EvalF!(GFix!, gx, sol, pdata)
-    (beta == 1.0) || (gx = betafix!(gx, sol, beta))
+    (beta == 1) || (gx = betafix!(gx, sol, beta))
     copy!(res, gx)
-    axpy!(-1.0, sol, res)
+    axpy!(-1, sol, res)
     resnorm       = norm(res)
     resnorm_up_bd = 1.e4 * resnorm
     tol           = rtol * resnorm + atol
@@ -266,9 +266,9 @@ function aasol(
         copy!(sol, gx)
         for _ in 1:picard_maxit - 1
             gx = EvalF!(GFix!, gx, sol, pdata)
-            (picard_beta == 1.0) || (gx = betafix!(gx, sol, picard_beta))
+            (picard_beta == 1) || (gx = betafix!(gx, sol, picard_beta))
             copy!(res, gx)
-            axpy!(-1.0, sol, res)
+            axpy!(-1, sol, res)
             resnorm = norm(res)
             updateHist!(ItData, resnorm)
             if verbose
@@ -286,7 +286,7 @@ function aasol(
     # ----------------------------------------------------------------
     if ~toosoon
         copy!(sol, gx)
-        alpha = zeros(m + 1)
+        alpha = zeros(eltype(x0), m + 1)
         k += 1
         ~keepsolhist || (@views solhist[:, k+1] .= sol)
         (gx, dg, df, res, resnorm) =
@@ -297,10 +297,10 @@ function aasol(
         end
     end
 
-    RF     = zeros(m, m)
-    RP     = zeros(m, m)
-    ThetA  = zeros(m)
-    TmPReS = zeros(m)
+    RF     = zeros(eltype(x0), m, m)
+    RP     = zeros(eltype(x0), m, m)
+    ThetA  = zeros(eltype(x0), m)
+    TmPReS = zeros(eltype(x0), m)
     # Device-side temporaries for the m-dimensional coefficient vectors.
     # When gx lives on CPU these are plain Arrays; when on GPU they are device
     # arrays, keeping the two large N-dim mul! calls on-device while the tiny
@@ -313,8 +313,8 @@ function aasol(
            ~toosoon                   &&
            (resnorm < resnorm_up_bd))
         if m == 0
-            alphanrm = 1.0
-            condit   = 1.0
+            alphanrm = 1
+            condit   = 1
             copy!(sol, gx)
         else
             BuildDG!(DG, m, k + 1, dg)
@@ -325,13 +325,13 @@ function aasol(
             @views theta = ThetA[1:mk]
             @views tres  = TmPReS[1:mk]
             mul!(view(tres_dev, 1:mk), QA', res)
-            copyto!(tres, view(tres_dev, 1:mk))
+            copyto!(TmPReS, 1, tres_dev, 1, mk)
             theta   .= RA \ tres
             condit   = cond(RA)
             alphanrm = falpha(alpha, theta, min(m, k))
             copy!(sol, gx)
-            copyto!(view(theta_dev, 1:mk), theta)
-            @views mul!(sol, DG[:, 1:mk], view(theta_dev, 1:mk), -1.0, 1.0)
+            copyto!(theta_dev, 1, ThetA, 1, mk)
+            @views mul!(sol, DG[:, 1:mk], view(theta_dev, 1:mk), -1, 1)
         end
         updateStats!(ItData, condit, alphanrm)
         k += 1
@@ -388,12 +388,12 @@ for the optimisation problem.
 function aa_point!(gx, gfix, sol, res, dg, df, beta, pdata)
     copy!(dg, -gx)
     gx = EvalF!(gfix, gx, sol, pdata)
-    (beta == 1.0) || (gx = betafix!(gx, sol, beta))
-    axpy!(1.0, gx, dg)
+    (beta == 1) || (gx = betafix!(gx, sol, beta))
+    axpy!(1, gx, dg)
     copy!(df, -res)
     copy!(res, gx)
-    axpy!(-1.0, sol, res)
-    axpy!(1.0, res, df)
+    axpy!(-1, sol, res)
+    axpy!(1, res, df)
     resnorm = norm(res)
     return (gx, dg, df, res, resnorm)
 end
@@ -404,7 +404,7 @@ betafix!(gx, sol, beta)
 Apply the mixing parameter: gx ← (1-beta)*sol + beta*gx.
 """
 function betafix!(gx, sol, beta)
-    gx = axpby!((1.0 - beta), sol, beta, gx)
+    gx = axpby!((1 - beta), sol, beta, gx)
     return gx
 end
 
@@ -446,11 +446,11 @@ function Orthogonalize!(Qkm, hv, vnew, mode="cgs2")
     if k > 0
         # First Gram-Schmidt pass
         h1 = Qkm' * vnew
-        mul!(vnew, Qkm, h1, -1.0, 1.0)   # vnew .-= Qkm * h1
+        mul!(vnew, Qkm, h1, -1, 1)   # vnew .-= Qkm * h1
         # Second pass (reorthogonalization), accumulated for numerical stability
         h2 = Qkm' * vnew
-        mul!(vnew, Qkm, h2, -1.0, 1.0)
-        hv[1:k] .= h1 .+ h2
+        mul!(vnew, Qkm, h2, -1, 1)
+        hv[1:k] .= Array(h1 .+ h2)
     end
     hv[k+1] = norm(vnew)
     vnew ./= hv[k+1]
@@ -476,7 +476,7 @@ function downdate_aaqr!(Q, R, m, Qd)
     Rd = Matrix(G.R)
     Qx = Matrix(G.Q)
     @views R[1:m-1, 1:m-1] .= Rd
-    @views R[:, m]          .= 0.0
+    @views R[:, m]          .= 0
     # Qx is a small CPU Matrix (m×m); send it to the same device as Q so
     # the large N×m matrix multiply stays on-device.
     Qx_dev = similar(Q, size(Qx)...)
@@ -496,7 +496,7 @@ function downdate_aaqr!(Q, R, m, Qd)
             @views Qsec[:, 1:m-1] .= QZ
         end
     end
-    @views Q[:, m] .= 0.0
+    @views Q[:, m] .= 0
     return (Q, R)
 end
 
@@ -545,7 +545,8 @@ mutable struct ItStatsA{T<:Real}
 end
 
 function ItStatsA(rnorm)
-    ItStatsA([1.0], [1.0], [rnorm])
+    FP = eltype(rnorm)
+    ItStatsA([FP(1)], [FP(1)], [rnorm])
 end
 
 """
@@ -581,7 +582,7 @@ history if requested. Emits a @warn in low-storage mode (fewer than
 """
 function Anderson_Init(x0, Vstore, m, maxit, beta, keepsolhist)
     blocksize = 1024
-    (0.0 < abs(beta) <= 1) || error("abs(beta) must be in (0,1]")
+    (0 < abs(beta) <= 1) || error("abs(beta) must be in (0,1]")
     sol = copy(x0)
     n   = length(x0)
     (mv, nv) = size(Vstore)
@@ -590,7 +591,7 @@ function Anderson_Init(x0, Vstore, m, maxit, beta, keepsolhist)
     #
     # Reinitialise in case Vstore is being reused across calls.
     #
-    Vstore .= 0.0
+    Vstore .= 0
     if m == 0
         Qd      = []
         QP      = []
@@ -687,7 +688,7 @@ function falpha(alpha, theta, mk)
     for ia = 2:mk
         alpha[ia] = theta[ia] - theta[ia-1]
     end
-    alpha[mk+1] = 1.0 - theta[mk]
+    alpha[mk+1] = 1 - theta[mk]
     return norm(alpha, 1)
 end
 
