@@ -5,10 +5,13 @@ _kernel_type(system::DGTSystem)          = typeof(system)
 
 """
     length_scale(model::EoSModel)
+    length_scale(L::Real) = L
 
 Obtains the maximum length scale in the model and helps define the dimensions of the DFT system. This is typically equal to the size of the largest bead.
+For real numbers is just the identity function.
 """
 function length_scale end
+length_scale(L::Real) = L
 
 """
     get_species(model::EoSModel, structure::DFTStructure)

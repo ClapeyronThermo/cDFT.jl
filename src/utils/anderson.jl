@@ -45,7 +45,7 @@ If `m = 0` (Picard) then `Vstore` must have at least 4 columns.
 - `beta`:
   Anderson mixing parameter. 
   Changes `G(x)` to `(1 - beta)*x + beta*G(x)`.
-  Equivalent to accelerating damped Picard iteration. 
+  Equivalent to accelerating damped Picard iteration.
   The history vector is the one for the damped fixed point map, not the original one.
   Keep this in mind when comparing results.
 

@@ -309,11 +309,11 @@ lb_volume(model::SCFTLatticeFluid, T, z) =
     sum(z[i]*sum(model.groups.n_flattenedgroups[i]) for i in eachindex(z)) / (2*model.rho0)
 T_scale(model::SCFTLatticeFluid, z) = one(eltype(z))
 
-"""
+#=
     length_scale(model::SCFTLatticeFluid)
 
 The largest statistical segment length `b` across every species — the SCFT analogue of
 `length_scale(model::SAFTModel) = maximum(model.params.sigma.values)`, used the same way
 (e.g. for choosing grid bounds, and by the Makie plotting recipe's axis normalization).
-"""
+=#
 length_scale(model::SCFTLatticeFluid) = maximum(model.params.b.values)
