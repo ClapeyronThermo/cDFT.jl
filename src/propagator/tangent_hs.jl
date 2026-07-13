@@ -2,20 +2,25 @@ function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTS
     ngrid = structure.ngrid
     nbeads = sum(species.nbeads)
     nd = dimension(structure)
+    L = length_scale(model)
     Ω = allocate(device,Complex{FP},ngrid...,nbeads,nbeads)
     ω = structure_ω(structure, device, FP)
     ω = Adapt.adapt(device, ω)
+    ω = _scaled_ω(ω, L, FP)
     for i in @comps
         l = 1
         for j in @chain(i)
             for k in @chain(i)[l:end]
-                R = (species.size[j] + species.size[k])*π
+                R = FP((species.size[j] + species.size[k])/L*π)
                 
                 ω̄ = dropdims(sqrt.(sum(abs2, ω, dims=nd+1)), dims=nd+1)  # lives on same backend as ω
 
 
-                val = @. (2*R * (ω̄ == 0.0) + 2*sin(ω̄*R)/max(ω̄, eps()) * (ω̄ != 0.0)) / R / 2
-                
+                mask = ω̄ .== 0
+                val = ifelse.(mask,
+                        1 ,                  # ω̄=0 case
+                        sin.(ω̄.*R)./ω̄        # ω̄≠0 case
+                    )
                 selectdim(selectdim(Ω, nd+1, j), nd+1, k) .= val
                 selectdim(selectdim(Ω, nd+1, k), nd+1, j) .= val
             end
@@ -38,13 +43,14 @@ function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::Unio
     ngrid = structure.ngrid
     nbeads = sum(species.nbeads)
     nd = dimension(structure)
-    ω̄ = structure_ω(structure, device, FP).ω̄
+    L = length_scale(model)
+    ω̄ = _scaled_ω(structure_ω(structure, device, FP), L, FP).ω̄
     Ω = allocate(device,FP,ngrid...,nbeads,nbeads)
     for i in @comps
         l = 1
         for j in @chain(i)
             for k in @chain(i)[l:end]
-                R = (species.size[j] + species.size[k])*π
+                R = (species.size[j] + species.size[k])/L*π
 
                 val = @. 2*sin(ω̄*R)/ω̄ / R / 2
 
@@ -116,7 +122,7 @@ function propagate!(system::AbstractcDFTSystem, propagate::TangentHSPropagator, 
                 i_group_level = i_groups[findall(levels[i_groups].==L)]
                 for k in i_group_level
                     if k == i_root
-                        selectdim(Gp,nd+1,k) .= 1.
+                        selectdim(Gp,nd+1,k) .= 1
                     else
                         l = findall(n_intergroups[k,:] .&& levels.==L-1)[1]
 

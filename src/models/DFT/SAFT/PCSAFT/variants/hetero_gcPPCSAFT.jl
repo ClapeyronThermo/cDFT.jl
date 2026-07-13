@@ -169,7 +169,7 @@ end
 
 # Bond-loop helper: NB is a WHERE-clause type param so the loop bound is always
 # compile-time inside this function, regardless of how autodiff_deferred specialises.
-@inline function _f_hc_bonds(n, bond_k::NTuple{NB, Int32}, bond_l::NTuple{NB, Int32},
+@inline function _f_hc_bonds(n, bond_k::NTuple{NB, Int}, bond_l::NTuple{NB, Int},
                                HSd, kk, ζ₂, inv1ζ₃) where NB
     FP     = typeof(ζ₂)
     res_hc = zero(FP)
@@ -209,7 +209,7 @@ end
         ρ̄_tot  += ρ̄i / _nti(nbeads_for_group, i)
     end
     m̄  = m̄_num / ρ̄_tot
-    ηd = _π/6 * η_sum
+    ηd = _π * η_sum /6
 
     m2ϵσ3_1 = zero(FP); m2ϵσ3_2 = zero(FP)
     @inbounds for i in 1:NC
@@ -233,6 +233,7 @@ end
               inv1ηd*inv1ηd*inv2ηd*inv2ηd
     I₁     = I_lite(PCSAFT_CORR1, m̄, ηd)
     I₂     = I_lite(PCSAFT_CORR2, m̄, ηd)
+    # println(m2ϵσ3_1, ", ", m2ϵσ3_2)
     return -2*_π*I₁*m2ϵσ3_1 - _π*m̄*I₂*m2ϵσ3_2 / C₁
 end
 
@@ -244,31 +245,31 @@ function preallocate_params(system::DFTSystem{<:HeterogcPCPSAFT})
     nbeads   = system.species.nbeads
     nc_groups = sum(nbeads)
 
-    bond_k_list = Int32[]
-    bond_l_list = Int32[]
+    bond_k_list = Int[]
+    bond_l_list = Int[]
     for i in 1:nc_spec
         i_groups        = model.groups.i_groups[i]
         n_intergroups_i = model.groups.n_intergroups[i]
         for k in i_groups
             for l in findall(n_intergroups_i[k,:] .== 1)
-                push!(bond_k_list, Int32(k))
-                push!(bond_l_list, Int32(l))
+                push!(bond_k_list, k)
+                push!(bond_l_list, l)
             end
         end
     end
 
-    nbeads_for_group = Vector{Float64}(undef, nc_groups)
+    nbeads_for_group = Vector{FP}(undef, nc_groups)
     for i in 1:nc_spec
-        nbi = Float64(nbeads[i])
+        nbi = FP(nbeads[i])
         for k in model.groups.i_groups[i]
             nbeads_for_group[k] = nbi
         end
     end
 
     n_bonds = length(bond_k_list)
-    bond_k_t           = ntuple(ib -> Int32(bond_k_list[ib]), n_bonds)
-    bond_l_t           = ntuple(ib -> Int32(bond_l_list[ib]), n_bonds)
-    nbeads_for_group_t = ntuple(i  -> Float64(nbeads_for_group[i]), nc_groups)
+    bond_k_t           = ntuple(ib -> bond_k_list[ib], n_bonds)
+    bond_l_t           = ntuple(ib -> bond_l_list[ib], n_bonds)
+    nbeads_for_group_t = ntuple(i  -> nbeads_for_group[i], nc_groups)
 
     # Reduced units: divide every length-dimensioned parameter by L so it matches the
     # `get_fields`-side kernel rescaling. See PCSAFT.jl's `get_fields`/`preallocate_params`
