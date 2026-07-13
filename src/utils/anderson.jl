@@ -1,134 +1,116 @@
 """
-aasol(GFix!, x0, m, Vstore; maxit=20,
-      rtol=1.e-10, atol=1.e-10, beta=1.0, pdata=nothing, keepsolhist=false,
-      picard_maxit=0, picard_beta=1.0, verbose=false)
+    aasol(GFix!, x0, m, Vstore; maxit=20,
+        rtol=1.e-10, atol=1.e-10, beta=1.0, pdata=nothing, keepsolhist=false,
+        picard_maxit=0, picard_beta=1.0, verbose=false)
+
+    aasol(GFix!,x0)
 
 C. T. Kelley, 2022. Modified 2024.
 
 Julia code for Anderson acceleration. Nothing fancy.
 
-Solvers fixed point problems x = G(x).
+Solvers fixed point problems `x = G(x)`.
 
-You must allocate storage for the function and fixed point map
-history --> in the calling program <-- in the array Vstore.
+You must allocate storage for the function and fixed point map history --> in the calling program <-- in the array `Vstore`.
 
-For an n dimensional problem with Anderson(m), Vstore must have
-at least 2m + 4 columns and 3m + 3 is better.  If m=0 (Picard) then
-V must have at least 4 columns.
+For an n dimensional problem with Anderson(m), `Vstore` must have at least `2m + 4` columns and `3m + 3` is better.
+If `m = 0` (Picard) then `Vstore` must have at least 4 columns.
 
-Inputs:
+## Inputs:
 
-- GFix!: fixed-point map, the ! indicates that GFix! overwrites G, your
-    preallocated storage for the function value G=G(xin).
-    So G=GFix!(G,xin) or G=GFix!(G,xin,pdata) returns G=G(xin).
-    Your GFix function MUST end with --> return G <--. See the example
-    in the docstrings.
+- `GFix!`: fixed-point map, the `!` indicates that `GFix!` overwrites `G`, your preallocated storage for the function value `G = G(xin)`. So `G = GFix!(G,xin)` or `G = GFix!(G,xin,pdata)` returns `G = G(xin)`.
+  Your `GFix` function MUST return the output vector `G`.
 
-- x0: Initial iterate. It is a vector of size N.
+- `x0`: Initial iterate. It is a vector of size N.
   You should store it as (N) and design G! to use vectors of size (N).
-  If you use (N,1) consistently instead, the solvers may work, but I make
-  no guarantees.
+  If you use (N,1) consistently instead, the solvers may work, but I make no guarantees.
 
-- m: depth for Anderson acceleration. m=0 is Picard iteration.
+- `m`: depth for Anderson acceleration. m = 0 is Picard iteration.
 
-- Vstore: Working storage array. For an n dimensional problem Vstore
-  should have at least 3m+3 columns unless you are storage bound. If storage
-  is a problem, then you can allocate a minimum of 2m+4 columns. The smaller
-  allocation exacts a performance penalty, especially for small problems
-  and small values of m. So for Anderson(3), Vstore should be no smaller
-  than zeros(N,8) with zeros(N,11) a better choice.
+- `Vstore`: Working storage array. 
+  For an n dimensional problem Vstore should have at least 3m+3 columns unless you are storage bound. 
+  If storage is a problem, then you can allocate a minimum of 2m + 4 columns. 
+  The smaller allocation exacts a performance penalty, especially for small problems and small values of m. 
+  So for Anderson(3), Vstore should be no smaller than zeros(N,8) with zeros(N,11) a better choice.
+  If m = 0, then Vstore needs at least 4 columns.
 
-  If m=0, then Vstore needs 4 columns.
+## Keyword Arguments:
 
-Keyword Arguments (kwargs):
-
-maxit: default = 20
+- `maxit`: default = 20
   Limit on Anderson iterations (after any Picard warmup).
 
-rtol and atol: default = 1.e-10
+- `rtol` and `atol`: default = 1.e-10
   Relative and absolute error tolerances.
 
-beta:
-  Anderson mixing parameter. Changes G(x) to (1-beta)x + beta G(x).
-  Equivalent to accelerating damped Picard iteration. The history
-  vector is the one for the damped fixed point map, not the original
-  one. Keep this in mind when comparing results.
+- `beta`:
+  Anderson mixing parameter. 
+  Changes `G(x)` to `(1 - beta)*x + beta*G(x)`.
+  Equivalent to accelerating damped Picard iteration. 
+  The history vector is the one for the damped fixed point map, not the original one.
+  Keep this in mind when comparing results.
 
-pdata:
-  Precomputed data for the fixed point map. Things will go better if
-  you use this rather than hide the data in global variables.
+- `pdata`:
+  Precomputed data for the fixed point map. 
+  Things will go better if you use this rather than hide the data in global variables.
 
-keepsolhist: default = false
-  Set this to true to get the history of the iteration in the output
-  tuple. Only turn it on if you have use for the data, which can get
-  REALLY LARGE.
+- `keepsolhist`: default = `false`
+  Set this to true to get the history of the iteration in the output tuple. 
+  Only turn it on if you have use for the data, which can get *REALLY LARGE*.
 
-picard_maxit: default = 0
-  Number of plain Picard iterations to run before handing off to
-  Anderson. Useful for stabilising ill-conditioned problems, or when
-  Anderson requires the iterates to already be close to the fixed
-  point before it is started. Setting this to 0 (the default) recovers
-  the original behaviour exactly.
+- `picard_maxit`: default = `0`
+  Number of plain Picard iterations to run before handing off to Anderson. 
+  Useful for stabilising ill-conditioned problems, or when Anderson requires the iterates to already be close to the fixed point before it is started. 
+  Setting this to 0 (the default) recovers the original behaviour exactly.
 
-picard_beta: default = 1.0
+- `picard_beta`: default = `1.0`
   Damping factor applied during the Picard warmup phase only.
-  Independent of the Anderson `beta`. Changes G(x) to
-  (1-picard_beta)*x + picard_beta*G(x) during warmup.
+  Independent of the Anderson `beta`. Changes `G(x)` to `(1- picard_beta)*x + picard_beta*G(x)` during warmup.
 
-verbose: default = false
-  Print a one-line summary for every iteration to stdout. Each line
-  shows the phase (Picard warmup or Anderson), the iteration counter,
-  the current residual norm, and the running atol and rtol tolerances.
+- `verbose`: default = `false`
+  Print a one-line summary for every iteration to stdout. 
+  Each line shows the phase (Picard warmup or Anderson), the iteration counter, the current residual norm, and the running atol and rtol tolerances.
   Example output:
-
+    ```
     Anderson  k=  1  |res|= 4.487e-01  atol= 1.000e-10  rtol= 1.000e-10
     Anderson  k=  2  |res|= 2.615e-02  atol= 1.000e-10  rtol= 1.000e-10
     ...
     Converged after 8 iterations.
+    ```
+## Output:
 
-Output:
-- A named tuple (solution, functionval, history, stats, idid, errcode, solhist)
-  where
+- A named tuple `(solution, functionval, history, stats, idid, errcode, solhist)` where:
 
-   -- solution = converged result
+- `solution` : converged result
 
-   -- functionval = G(solution)
-      You might want to use functionval as your solution since it's
-      a Picard iteration applied to the converged Anderson result. If G
-      is a contraction it will be better than the solution.
+- `functionval`: `G(solution)`
+  You might want to use functionval as your solution since it's a Picard iteration applied to the converged Anderson result. 
+  If G is a contraction it will be better than the solution.
 
-   -- history = the vector of residual norms (||x-G(x)||) for the full
-                iteration, including any Picard warmup steps.
+- `history`: The vector of residual norms `(||x-G(x)||)` for the full iteration, including any Picard warmup steps.
 
-   -- stats = named tuple (condhist, alphanorm) of the history of the
-              condition numbers of the optimisation problem and l1 norm
-              of the coefficients. Only covers the Anderson phase.
+- `stats` : named tuple (`condhist`, `alphanorm`) of the history of the condition numbers of the optimisation problem and l1 norm of the coefficients. 
+  Only covers the Anderson phase.
+  `condhist[k]` and `alphanorm[k]` are the condition number and coefficient norm for the optimisation problem that computes iteration `k + 1` from iteration `k`. 
+  Recorded for Anderson iterations `k = 1,...` until the final iteration `K`; not recorded for `k = 0` or the final iteration. 
+  If history has length K + 1 for iterations `0...K` then `condhist` and `alphanorm` have length `K - 1`.
 
-      condhist[k] and alphanorm[k] are the condition number and
-      coefficient norm for the optimisation problem that computes
-      iteration k+1 from iteration k. Recorded for Anderson iterations
-      k=1,... until the final iteration K; not recorded for k=0 or the
-      final iteration. If history has length K+1 for iterations 0...K
-      then condhist and alphanorm have length K-1.
+- `idid` : `true` if the iteration succeeded and `false` if not.
 
-   -- idid = true if the iteration succeeded and false if not.
+- `errcode`: iteration status code
+  = 0  if the iteration succeeded
+  = -1 if the initial iterate satisfies the termination criteria
+  = -2 if ||residual|| > 1e4 * ||residual_0|| (divergence guard)
+  = 10 if no convergence after maxit iterations
 
-   -- errcode = 0  if the iteration succeeded
-              = -1 if the initial iterate satisfies the termination criteria
-              = -2 if ||residual|| > 1e4 * ||residual_0|| (divergence guard)
-              = 10 if no convergence after maxit iterations
+- `solhist`: This is the entire history of the iteration if `keepsolhist = true`.
+  `solhist` is an `N x K` array where `N` is the length of `x` and `K` is the number of iterations + 1. 
+  Otherwise nothing.
 
-   -- solhist:
-      This is the entire history of the iteration if keepsolhist=true.
-      solhist is an N x K array where N is the length of x and K is the
-      number of iterations + 1. Otherwise nothing.
+## Examples for `aasol`
 
-### Examples for aasol
+### Duplicate Table 1 from Toth-Kelley 2015.
 
-#### Duplicate Table 1 from Toth-Kelley 2015.
-
-The final entries in the condition number and coefficient norm statistics
-are never used in the computation and we don't compute them in Julia.
+The final entries in the condition number and coefficient norm statistics are never used in the computation and we don't compute them in Julia.
 See the docstrings, notebook, and the print book for the story on this.
 
 ```jldoctest
@@ -162,7 +144,7 @@ julia> [aout.stats.condhist aout.stats.alphanorm]
  3.67694e+10  1.00171e+00
 ```
 
-Now with beta = .5 mixing:
+Now with `beta = .5` mixing:
 
 ```
 julia> bout=aasol(tothk!, u0, m, Vstore; rtol = 1.e-10, beta=.5);
@@ -177,7 +159,7 @@ julia> bout.history
  2.18196e-12
 ```
 
-#### H-equation example with m=2.
+#### H-equation example with `m = 2`.
 
 ```jldoctest
 julia> n=16; x0=ones(n,); Vstore=zeros(n,20); m=2;
@@ -206,13 +188,90 @@ julia> u0=ones(2,); m=2; vdim=3*m+3; Vstore=zeros(2,vdim);
 julia> aout = aasol(tothk!, u0, m, Vstore; picard_maxit=5, picard_beta=0.5);
 ```
 """
+function aasol end
 
-# Private helper: format one verbose iteration line without Printf.
-function _aa_verbose_line(phase::String, k::Int, resnorm, tol)
-    fmt(x) = lpad(string(round(x, sigdigits=4)), 11)
-    println(rpad(phase, 10), "  k=", lpad(k, 3),
-            "  |res|=", fmt(resnorm),
-            "  tol=",  fmt(tol))
+struct AASol{T,P,V<:AbstractArray{T,2}}
+    m::Int
+    Vstore::V
+    maxit::Int
+    rtol::T
+    atol::T
+    beta::T
+    pdata::P
+    keepsolhist::Bool
+    picard_maxit::Int
+    picard_beta::T
+    picard_rtol::T
+    picard_atol::T
+    verbose::Bool
+end
+
+"""
+    AASol(m, Vstore; kwargs...)
+    AASol(x0::AbstractArray{T},m = 5; kwargs...)
+    AASol(m;kwargs...)
+
+Construct an `AASol` object from the mandatory Anderson depth `m` and working array `Vstore`.
+Used internally by [`aasol`](@ref). for more details of the arguments, check the `aasol` documentation.
+If an `x0` abstract array is passed as first argument, then `Vstore` will be created according with `max(3*m + 3,4))` columns.
+If only `m` is provided, `VStore` will be allocated only at `aasol` time.
+"""
+AASol
+
+function AASol(m::Int, Vstore::AbstractArray{T,2};
+               maxit::Int = 20,
+               rtol::Real = 1e-10,
+               atol::Real = 1e-10,
+               beta::Real = 1.0,
+               pdata = nothing,
+               keepsolhist::Bool = false,
+               picard_maxit::Int = 0,
+               picard_beta::Real = 1.0,
+               picard_rtol::Real = 1e-2,
+               picard_atol::Real = 1e-2,
+               verbose::Bool = false) where {T}
+
+    @assert m >= 0
+    T_conv = T
+    rtolT      = convert(T_conv, rtol)
+    atolT      = convert(T_conv, atol)
+    betaT      = convert(T_conv, beta)
+    picard_betaT    = convert(T_conv, picard_beta)
+    picard_rtolT    = convert(T_conv, picard_rtol)
+    picard_atolT    = convert(T_conv, picard_atol)
+    P = typeof(pdata)
+    V = typeof(Vstore)
+    return AASol{T,P,V}(m, Vstore, maxit, rtolT, atolT, betaT, pdata, keepsolhist,
+                        picard_maxit, picard_betaT, picard_rtolT, picard_atolT, verbose)
+end
+
+function AASol(x0::AbstractArray{T}, method::AASol) where {T}
+    return AASol(x0, method.m;
+        maxit=method.maxit,
+        rtol=method.rtol,
+        atol=method.atol,
+        beta=method.beta,
+        pdata=method.pdata,
+        keepsolhist=method.keepsolhist,
+        picard_maxit=method.picard_maxit,
+        picard_beta=method.picard_beta,
+        picard_rtol=method.picard_rtol,
+        picard_atol=method.picard_atol,
+        verbose=method.verbose)
+end
+
+function AASol(x0::AbstractArray{T}, m::Int = 5; kwargs...) where {T}
+    Vstore = similar(x0,(length(x0),max(3*m + 3,4))) # recommended size
+    return AASol(m, Vstore; kwargs...)
+end
+
+struct NoVstore{T} <: AbstractArray{T,2} end
+
+Base.size(::NoVstore) = (0,0)
+
+function AASol(m::Int = 5; kwargs...)
+    Vstore = NoVstore{Float64}() # just a sentinel value.
+    return AASol(m, Vstore; kwargs...)
 end
 
 function aasol(
@@ -232,6 +291,29 @@ function aasol(
     picard_atol  = 1e-2,
     verbose      = false,
 )
+    method = AASol(m,Vstore;maxit,rtol,atol,beta,pdata,keepsolhist,picard_maxit,picard_beta,picard_rtol,picard_atol,verbose)
+    return aasol(GFix!, x0, method)
+
+end
+
+aasol(GFix!,x0,method::AASol{Float64,P,NoVstore{Float64}}) where P = aasol(GFix!,AASol(x0,method))
+
+function aasol(GFix!, x0, method::AASol{T,P,V}) where {T,P,V}
+    # unpack options from the struct
+    m              = method.m
+    Vstore         = method.Vstore
+    maxit          = method.maxit
+    rtol           = method.rtol
+    atol           = method.atol
+    beta           = method.beta
+    pdata          = method.pdata
+    keepsolhist    = method.keepsolhist
+    picard_maxit   = method.picard_maxit
+    picard_beta    = method.picard_beta
+    picard_rtol    = method.picard_rtol
+    picard_atol    = method.picard_atol
+    verbose        = method.verbose
+
     #
     # Startup
     #
@@ -550,7 +632,7 @@ function ItStatsA(rnorm)
 end
 
 """
-CollectStats(ItData)
+    CollectStats(ItData)
 
 Strip the dummy sentinel entries from condhist and alphanorm and return
 a clean named tuple suitable for the solver output.
@@ -593,9 +675,10 @@ function Anderson_Init(x0, Vstore, m, maxit, beta, keepsolhist)
     #
     Vstore .= 0
     if m == 0
-        Qd      = []
-        QP      = []
-        DG      = []
+        #not used, but defined for type stability.
+        Qd      = @views Vstore[:, 1:0]
+        QP      = Qd
+        DG      = Qd
         nvblock = 1
     else
         QP = @views Vstore[:, 1:m]
@@ -711,3 +794,18 @@ function EvalF!(F!, FS::Real, x::Real, pdata)
     FS = F!(x, pdata)
     return FS
 end
+
+# Helper to initialise solution history
+function solhistinit(n, maxit, sol)
+    return zeros(eltype(sol), n, maxit + 1)
+end
+
+# Private helper: format one verbose iteration line without Printf.
+function _aa_verbose_line(phase::String, k::Int, resnorm, tol)
+    fmt(x) = lpad(string(round(x, sigdigits=4)), 11)
+    println(rpad(phase, 10), "  k=", lpad(k, 3),
+            "  |res|=", fmt(resnorm),
+            "  tol=",  fmt(tol))
+end
+
+export aasol, AASol
