@@ -9,39 +9,6 @@ The bulk model can be obtained from Clapeyron.
 """
 HeterogcPCPSAFT
 
-function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, options::DFTOptions=DFTOptions();
-                   mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
-    model = expand_model(model, mol_structure)
-    species = get_species(model, structure)
-    fields = get_fields(model, species, structure, options.device)
-    propagator = get_propagator(model, species, structure, options.device)
-    NF = compute_field_len(fields,dimension(structure))
-    chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, fields, nothing, propagator, options, chunksize)
-end
-
-function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, external_fields::Vector{ExternalFieldModel}, options::DFTOptions=DFTOptions();
-                   mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
-    model = expand_model(model, mol_structure)
-    species = get_species(model, structure)
-    fields = get_fields(model, species, structure, options.device)
-    propagator = get_propagator(model, species, structure, options.device)
-    NF = compute_field_len(fields,dimension(structure))
-    chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, fields, external_fields, propagator, options, chunksize)
-end
-
-function DFTSystem(model::HeterogcPCPSAFT, structure::DFTStructure, external_field::ExternalFieldModel, options::DFTOptions=DFTOptions();
-                   mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
-    model = expand_model(model, mol_structure)
-    species = get_species(model, structure)
-    fields = get_fields(model, species, structure, options.device)
-    propagator = get_propagator(model, species, structure, options.device)
-    NF = compute_field_len(fields,dimension(structure))
-    chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, fields, [external_field], propagator, options, chunksize)
-end
-
 struct gcPCPSAFTSpecies <: DFTSpecies
     nbeads::Vector{Int64}
     size::Vector{Float64}
@@ -82,19 +49,19 @@ function get_species(model::HeterogcPCPSAFT,structure::DFTStructure)
     return gcPCPSAFTSpecies(nbeads,HSd,levels,structure.ρbulk,μres)
 end
 
-function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure, backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+function get_fields(model::HeterogcPCPSAFT, species::DFTSpecies, structure::DFTStructure, backend::Backend, ::Type{FP}) where FP<:AbstractFloat
     nb = sum(species.nbeads)
     ngrid = structure.ngrid
     L = length_scale(model)
     ω = structure_ω(structure, backend, FP)
     d = species.size ./ L
     ψ = 1.5357
-    return [SWeightedDensity(:ρ,zeros(nb),ω,ngrid,backend,model),
+    return (SWeightedDensity(:ρ,zeros(nb),ω,ngrid,backend,model),
             SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,backend,model),
             SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,backend,model),
             VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,backend,model),
             SWeightedDensity(:∫ρz²dz,d,ω,ngrid,backend,model),
-            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,backend,model)]
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,backend,model))
 
 end
 

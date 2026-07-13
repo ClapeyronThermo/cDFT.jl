@@ -61,24 +61,16 @@ struct DHSpecies <: DFTSpecies
 end
 
 """
-    get_fields(ionmodel::DHModel, species, structure, device, FP; L=length_scale(ionmodel))
+    get_fields(ionmodel::DHModel, species, structure, device, FP)
+    get_fields(ionmodel_and_L::Tuple{<:DHModel,FP} species, structure, device, FP)
 
-Builds the ion field in reduced units, mirroring PCSAFT.jl's scheme, so it stays
-numerically consistent with the neutral model's own (already reduced-units) fields when
-both are combined into one `ElectrolyteDFTSystem`. `L` defaults to `length_scale(ionmodel)`
-for standalone use, but `ElectrolyteDFTSystem`'s constructor (base.jl) explicitly passes
-`length_scale(model)` (== `length_scale(model.neutralmodel)`) instead — the neutral and ion
-contributions MUST share the same `L`, since only one global `_energy_scale`/`L^3`
-correction is applied to their combined `F_res`. See PCSAFT.jl's `get_fields` docstring for
-the overall reduced-units scheme, and `f_dh`'s docstring below for how the compensating
-`N_A*L^3` factor is threaded through this model's own free-energy kernel (which — unlike
-the SAFT-family models — reads `n[]` directly rather than via an `HSd^3`-normalized ratio,
-so it needs its own explicit compensation rather than an automatic cancellation). The
-resolved `L` (a plain `Float64`, not `ionmodel` itself) is passed straight through to
-`SWeightedDensity` in place of a model — see `length_scale(::Real)`'s docstring
-(`weighted_densities.jl`) for the dispatch trick that makes this work.
+Builds the ion field in reduced units, mirroring PCSAFT.jl's scheme, so it stays numerically consistent with the neutral model's own (already reduced-units) fields when both are combined into one `ElectrolyteDFTSystem`. 
+`L` defaults to `length_scale(ionmodel)` for standalone use, but `ElectrolyteDFTSystem`'s constructor explicitly passes `length_scale(model)` (== `length_scale(model.neutralmodel)`) instead — the neutral and ion contributions MUST share the same `L`, since only one global `_energy_scale`/`L^3` correction is applied to their combined `F_res`. 
+See PCSAFT.jl's `get_fields` docstring for the overall reduced-units scheme, and `f_dh`'s docstring below for how the compensating `N_A*L^3` factor is threaded through this model's own free-energy kernel (which — unlike the SAFT-family models — reads `n[]` directly rather than via an `HSd^3`-normalized ratio, so it needs its own explicit compensation rather than an automatic cancellation). 
+The resolved `L` (a plain `Float64`, not `ionmodel` itself) is passed along the DH model to maintain the length scale consistency between the neutral model and the DH model.
 """
-function get_fields(ionmodel::DHModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64; L=length_scale(ionmodel)) where FP<:AbstractFloat
+function get_fields(tup::Tuple{<:DHModel,FP}, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}) where FP<:AbstractFloat
+    ionmodel,L = tup
     (pressure, temperature) = structure.conditions
     ρbulk = structure.ρbulk
     ngrid = structure.ngrid
@@ -91,15 +83,14 @@ function get_fields(ionmodel::DHModel, species::DFTSpecies, structure::DFTStruct
     # internal `length_scale(model)` call dispatches to the `length_scale(::Real)` identity
     # method for it. See that method's docstring for why this must be the neutral model's L,
     # not `length_scale(ionmodel)`.
-    return [SWeightedDensity(:∫ρdz,width,ω,ngrid,device,L)]
+    return (SWeightedDensity(:∫ρdz,width,ω,ngrid,device,L),)
 end
 
+function get_fields(ionmodel::DHModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}) where FP <: AbstractFloat
+    L = FP(length_scale(ionmodel))
+    return get_fields((ionmodel,L), species, structure, device, FP)
+end
 
-"""
-    get_species(model::EoSModel, structure::DFTStructure)
-
-For a given `model` and `structure`, define the relevant parameters for each species. These structs will contain additional information not present by default in the inital `model`, such as the bead size, the number of beads and the connectivity of the beads.
-"""
 function get_species(ionmodel::DHModel,model::EoSModel,charges::Vector{Int64},structure::DFTStructure)
     (pressure, temperature) = structure.conditions
     ρbulk = structure.ρbulk
@@ -108,11 +99,7 @@ function get_species(ionmodel::DHModel,model::EoSModel,charges::Vector{Int64},st
     return DHSpecies(ones(Int64,nc),charges,size,ρbulk)
 end
 
-"""
-    get_propagator(model::EoSModel, species::DFTSpecies, structure::DFTStructure)
 
-For a given `model`, define the relevant propagator. 
-"""
 function get_propagator(model::DHModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     return IdealPropagator()
 end
@@ -223,4 +210,3 @@ function length_scale(model::DHModel)
     return maximum(model.params.sigma.values)
 end
 
-export length_scale

@@ -32,14 +32,14 @@ function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTS
 end
 
 """
-    TangentHSPropagator(model, species, structure::Union{DFTStructureSphr,DFTStructureCyl}, device, FP)
+    TangentHSPropagator(model, species, structure::DFTStructure{N,Union{Cylindrical,Spherical}}, device, FP)
 
 Spherical/cylindrical (QDHT-based) counterpart of the Cartesian `TangentHSPropagator`
 constructor above. Reuses the same tangent-sphere kernel formula, substituting
 `ω̄ = structure_ω(structure,...).ω̄` for the Cartesian `ω̄ = sqrt.(sum(abs2,ω,dims=nd+1))`
 and dropping the `ω̄=0` branch (QDHT never samples the origin in k-space).
 """
-function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::Union{DFTStructureSphr,DFTStructureCyl},device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}},device::Backend, ::Type{FP}=Float64) where {FP<:AbstractFloat}
     ngrid = structure.ngrid
     nbeads = sum(species.nbeads)
     nd = dimension(structure)
@@ -69,9 +69,9 @@ function preallocate_propagator(system::AbstractcDFTSystem,propagator::TangentHS
     ngrid = system.structure.ngrid
     FP = eltype(ρ)
     Gcα = allocate(backend, FP, size(ρ)..., sum(system.species.nbeads))
-    Gcα .= 1.0
+    Gcα .= 1
     Gp = allocate(backend, FP, size(ρ)...)
-    Gp .= 1.0
+    Gp .= 1
     CT = transform_eltype(system.structure, FP)
     buf = similar(selectdim(ρ,nd+1,1), CT)
     scratch = allocate(backend, FP, ngrid...)

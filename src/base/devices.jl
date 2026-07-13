@@ -1,5 +1,4 @@
 import KernelAbstractions: Backend, get_backend, synchronize
-using Base: ScopedValue
 
 
 """
@@ -48,8 +47,7 @@ Return the floating-point type (`Float64` by default) that `options` was configu
 """
 fptype(::DFTOptions{D,FP}) where {D,FP} = FP
 
-adapt_to_device(backend, ::Type{FP}, arr::AbstractArray) where FP<:AbstractFloat =
-    Adapt.adapt(backend, FP.(arr))
+adapt_to_device(backend, ::Type{FP}, arr::AbstractArray) where FP<:AbstractFloat = Adapt.adapt(backend, FP.(arr))
 
 function preallocate(system, ρ; kwargs...)
     backend = system.options.device
@@ -116,9 +114,9 @@ whatever forward/backward propagator arrays and FFT plans that propagator needs.
 """
 function preallocate_propagator(system, ρ)
     backend = system.options.device
-    propagtor = system.propagator
+    propagator = system.propagator
 
-    return preallocate_propagator(system, propagtor, ρ, backend)
+    return preallocate_propagator(system, propagator, ρ, backend)
 end
 
 export CPU, DFTOptions, fptype

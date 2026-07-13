@@ -10,7 +10,7 @@ The bulk model can be obtained from Clapeyron.
 """
 COFFEE
 
-function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}) where FP<:AbstractFloat
     nc = length(model)
     ψ = 1.3862
     ngrid = structure.ngrid
@@ -31,11 +31,11 @@ function get_fields(model::COFFEEModel, species::DFTSpecies, structure::DFTStruc
     ω = structure_ω(structure, device, FP)
     d = species.size ./ L
 
-    return [SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device,model),
+    return (SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device,model),
             SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,device,model),
             VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,device,model),
             SWeightedDensity(:∫ρz²dz,ψ*d,ω,ngrid,device,model),
-            SWeightedDensity(:∫ρz²dz,ψ1.*d,ω,ngrid,device,model)]
+            SWeightedDensity(:∫ρz²dz,ψ1.*d,ω,ngrid,device,model))
 end
 
 # ── Enzyme / KernelAbstractions kernel support ──────────────────────────────

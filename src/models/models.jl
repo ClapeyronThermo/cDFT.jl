@@ -3,6 +3,27 @@ import Clapeyron: a_res
 _kernel_type(system::AbstractcDFTSystem) = typeof(system.model)
 _kernel_type(system::DGTSystem)          = typeof(system)
 
+"""
+    length_scale(model::EoSModel)
+
+Obtains the maximum length scale in the model and helps define the dimensions of the DFT system. This is typically equal to the size of the largest bead.
+"""
+function length_scale end
+
+"""
+    get_species(model::EoSModel, structure::DFTStructure)
+
+For a given `model` and `structure`, define the relevant parameters for each species. These structs will contain additional information not present by default in the inital `model`, such as the bead size, the number of beads and the connectivity of the beads.
+"""
+function get_species end
+
+"""
+    get_propagator(model::EoSModel, species::DFTSpecies, structure::DFTStructure)
+
+For a given `model`, return the relevant propagator structure.
+"""
+function get_propagator end
+
 include("BasicIdeal.jl")
 include("DFT/dft.jl")
 include("DGT/dgt.jl")
@@ -374,3 +395,7 @@ receives ∂f_res(n[kk,:])/∂n[kk, f_k, c_k].
         Const(params), Const(temperature), Const(Val(NC)), Const(Val(ND))
     )
 end
+
+export length_scale
+export expand_groups, expand_model
+export get_species, get_propagator

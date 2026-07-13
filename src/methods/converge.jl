@@ -65,13 +65,17 @@ end
     converge!(system::DFTSystem, ρ; kwargs...)
 
 For a given system, converge the profiles using the solver specified under `system.options.solver`. Convergence is achieved by solving the generic equation:
+
 ```julia
 ρi = ρi_bulk*exp(β(μi_res - δFδρ_res))
 ```
+
 For stability purposes, the equation has be reformulated as:
+
 ```julia
 ln(ρi) = ln(ρi_bulk) + β(μi_res - δFδρ_res)
 ```
+
 via `aasol` (`src/utils/anderson.jl`), with an optional Picard warmup phase before
 handing off to Anderson mixing. `get_new_profile!` (above) is the fixed-point map
 `ln(ρ) -> ln_G(δfδρ_res(ρ))`.
@@ -81,21 +85,15 @@ the SCFT-family method — same function name and kwarg vocabulary, dispatched s
 since SCFT iterates on the field `w` rather than `ln(ρ)`.
 
 # Keyword Arguments
-- `maxit::Int=10000`: Maximum Anderson-phase iterations (also used as the Picard-phase
-  cap, since the Picard phase is expected to exit via `anderson_start` well before
-  either cap in practice).
+- `maxit::Int=10000`: Maximum Anderson-phase iterations (also used as the Picard-phase cap, since the Picard phase is expected to exit via `anderson_start` well before either cap in practice).
 - `beta=1e-3`: Mixing coefficient for both the Picard warmup and Anderson phases.
 - `tol=1e-4`: Convergence tolerance (used as both `aasol`'s `rtol` and `atol`).
-- `anderson_start=1e-1`: Switch from Picard to Anderson once the residual norm drops
-  below this (used as both `aasol`'s `picard_rtol` and `picard_atol`).
-- `anderson_m::Int=0`: Anderson history length (number of past iterates kept). The
-  default of `0` recovers pure (damped) Picard iteration throughout — the historical
-  default behavior. Set to a positive integer to enable real Anderson acceleration.
+- `anderson_start=1e-1`: Switch from Picard to Anderson once the residual norm drops below this (used as both `aasol`'s `picard_rtol` and `picard_atol`).
+- `anderson_m::Int=0`: Anderson history length (number of past iterates kept). The default of `0` recovers pure (damped) Picard iteration throughout — the historical default behavior. Set to a positive integer to enable real Anderson acceleration.
 - `log_interval::Int=0`: Log the free energy every N iterations (0 = never).
 - `save_interval::Int=0`: Call `save_callback` every N iterations (0 = never).
 - `save_callback`: `f(iter, ρ_array)` called at each save interval.
-- `verbose::Bool=false`: Print `aasol`'s per-iteration convergence summary, plus a final
-  convergence/free-energy summary line.
+- `verbose::Bool=false`: Print `aasol`'s per-iteration convergence summary, plus a final convergence/free-energy summary line.
 """
 function converge!(system::Union{DFTSystem,DGTSystem,ElectrolyteDFTSystem}, ρ;
     maxit          :: Int  = 10000,
@@ -259,7 +257,7 @@ function converge!(system::SCFTSystem, ρ;
     log_interval   :: Int     = 100,
     save_interval  :: Int     = 0,
     save_callback             = nothing,
-    verbose        :: Bool    = true,
+    verbose        :: Bool    = false,
 )
     dz = structure_dz(system.structure)
     FT = eltype(ρ)

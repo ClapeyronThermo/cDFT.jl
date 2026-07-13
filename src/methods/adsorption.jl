@@ -16,11 +16,7 @@ function adsorption(system,ρ)
     # Integrate over all profiles
     nc = length(system.model)
     nd = dimension(system)
-    if nd == 1
-        V = prod(diff(system.structure.bounds))
-    else
-        V = prod(diff(system.structure.bounds; dims=2))
-    end
+    V = prod([system.structure.bounds[i][2]-system.structure.bounds[i][1] for i in 1:nd])
     return [∫(selectdim(ρ,nd+1,i)[:],system.structure)/V for i in 1:nc]
 end
 

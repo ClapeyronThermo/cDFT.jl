@@ -10,41 +10,6 @@ The bulk model can be obtained from Clapeyron.
 """
 SAFTgammaMie
 
-function DFTSystem(model::SAFTgammaMieModel, structure::DFTStructure, options::DFTOptions = DFTOptions();
-                   mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
-    model = expand_model(model, mol_structure)
-    species = get_species(model, structure)
-    fields = get_fields(model, species, structure, options.device)
-    propagator = get_propagator(model, species, structure, options.device)
-    NF = compute_field_len(fields,dimension(structure))
-    chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, fields, nothing, propagator, options, chunksize)
-end
-
-function DFTSystem(model::SAFTgammaMieModel, structure::DFTStructure, external_field::ExternalFieldModel, options::DFTOptions = DFTOptions();
-                   mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
-    model = expand_model(model, mol_structure)
-    species = get_species(model, structure)
-    fields = get_fields(model, species, structure, options.device)
-    propagator = get_propagator(model, species, structure, options.device)
-    NF = compute_field_len(fields,dimension(structure))
-    chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, fields, [external_field], propagator, options, chunksize)
-end
-
-function DFTSystem(model::SAFTgammaMieModel, structure::DFTStructure, external_field::Vector{ExternalFieldModel}, options::DFTOptions = DFTOptions();
-                   mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
-    model = expand_model(model, mol_structure)
-    species = get_species(model, structure)
-    fields = get_fields(model, species, structure, options.device)
-    propagator = get_propagator(model, species, structure, options.device)
-    NF = compute_field_len(fields,dimension(structure))
-    chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, fields, external_field, propagator, options, chunksize)
-end
-
-
-
 struct SAFTgammaMieSpecies <: DFTSpecies
     nbeads::Vector{Int64}
     size::Vector{Float64}
@@ -84,7 +49,7 @@ function get_species(model::SAFTgammaMie,structure::DFTStructure)
     return SAFTgammaMieSpecies(nbeads,HSd,levels,ρbulk,μres)
 end
 
-function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}) where FP<:AbstractFloat
     nb = sum(species.nbeads)
     ngrid = structure.ngrid
     nd = dimension(structure)
@@ -105,20 +70,18 @@ function get_fields(model::SAFTgammaMieModel, species::DFTSpecies, structure::DF
     ω = structure_ω(structure, device, FP)
     d_local = species.size ./ L
 
-    return [SWeightedDensity(:ρ,zeros(nb),ω,ngrid,device,model),
+    return (SWeightedDensity(:ρ,zeros(nb),ω,ngrid,device,model),
             SWeightedDensity(:∫ρdz,0.5*d_local,ω,ngrid,device,model),
             SWeightedDensity(:∫ρz²dz,0.5*d_local,ω,ngrid,device,model),
             VWeightedDensity(:∫ρzdz,0.5*d_local,ω,ngrid,device,model),
             SWeightedDensity(:∫ρz²dz,d_local,ω,ngrid,device,model),
             SWeightedDensity(:∫ρdz,d_local,ω,ngrid,device,model),
-            SWeightedDensity(:∫ρz²dz,d_local .* ψ,ω,ngrid,device,model)]
+            SWeightedDensity(:∫ρz²dz,d_local .* ψ,ω,ngrid,device,model))
 end
 
 function get_propagator(model::SAFTgammaMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     return TangentHSPropagator(model, species, structure, device, FP)
 end
-
-
 
 function expand_model(model::SAFTgammaMieModel,
         mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
