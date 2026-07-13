@@ -1,3 +1,37 @@
+#wrapper for the AASol constructor that uses the keyword arguments in converge!
+
+function __AASol(;maxit, beta, tol, anderson_start, anderson_m, verbose)
+    return AASol(anderson_m;
+            beta=beta, rtol=tol, atol=tol, maxit=maxit,
+            picard_maxit=maxit, picard_beta=beta,
+            picard_rtol=anderson_start, picard_atol=anderson_start,
+            verbose=verbose)
+end
+
+#dispatches for specific defaults
+__AASol(system::Union{DFTSystem,DGTSystem,ElectrolyteDFTSystem};maxit=10000,beta=1e-2,tol= 1e-4,anderson_start=1e-1,anderson_m=5,verbose=false) = __AASol(;maxit, beta, tol, anderson_start, anderson_m, verbose)
+__AASol(system::SCFTSystem;maxit=5000,beta=1e-1,tol= 1e-6,anderson_start=1e-2,anderson_m=5,verbose=false) = __AASol(;maxit, beta, tol, anderson_start, anderson_m, verbose)
+
+struct cDFTProfileSolver{A,C}
+    fixpoint::A
+    quadrature:: Symbol
+    log_interval::Int
+    save_interval::Int
+    save_callback::C
+    verbose:: Bool
+end
+
+function cDFTProfileSolver(fixpoint_method::T;
+                            quadrature              = :trapz,
+                            log_interval            = 100,
+                            save_interval           = 0,
+                            save_callback           = nothing,
+                            verbose                 = false,) where T
+
+
+    cDFTProfileSolver(fixpoint_method,quadrature,log_interval,save_interval,save_callback,verbose)
+end
+
 """
     get_new_profile!(system, ρ, δfδρ_res, caches)
 
