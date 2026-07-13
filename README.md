@@ -1,7 +1,5 @@
 ![cDFT_logo](docs/cDFT_logo.svg)
 
-# cDFT.jl
-
 [![Build Status](https://github.com/ClapeyronThermo/cDFT.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/ClapeyronThermo/cDFT.jl/actions/workflows/ci.yml)
 [![Docs stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://clapeyronthermo.github.io/cDFT.jl/stable)
 [![Docs dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://clapeyronthermo.github.io/cDFT.jl/dev)
