@@ -64,7 +64,7 @@ function evaluate_external_field!(structure::DFTStructure,external_field::Electr
     Z = model.charge
     ngrid = structure.ngrid
     bounds = structure.bounds
-    L = bounds[2] - bounds[1]
+    L = [bounds[i][2]-bounds[i][1] for i in 1:length(bounds)]
     Vol = prod(L)
     nbeads = length(Z)
     nd = length(ngrid)

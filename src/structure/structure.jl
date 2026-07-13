@@ -122,13 +122,13 @@ function initialize_profiles(model::EoSModel, structure::DFTStructure{N,Cartesia
     _scft_initialize_profiles(structure, species, device, FP)
 end
 
-function initialize_profiles(model::EoSModel,structure::DFTStructure{N,Cartesian,<:UniformGrid}, species, device, ::Type{FP}=Float64) where {N,FP<:AbstractFloat}
+function initialize_profiles(model::EoSModel,structure::DFTStructure{N,C,<:UniformGrid}, species, device, ::Type{FP}=Float64) where {N,C,FP<:AbstractFloat}
     ngrid = structure.ngrid
     ρbulk = structure.ρbulk
     ρ = allocate(device, FP, ngrid..., sum(species.nbeads))
     for i in @comps
         for j in @chain(i)
-            ρj = selectdim(ρ,N,j)
+            ρj = selectdim(ρ,N+1,j)
             ρj .= FP(ρbulk[i])
         end
     end

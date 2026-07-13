@@ -1,4 +1,4 @@
-function __coeff_cos_prof_correlation(pure,T,scale = one(T))
+function __coeff_cos_prof_correlation(model,T,scale = one(T))
     Tc,_,_ = crit_pure(model)
     Tr = T/Tc
     c0 = 2.4728 - 2.3625*Tr
@@ -17,7 +17,7 @@ function initialize_profiles(model::EoSModel,structure::DFTStructure{1,Cartesian
 
     pure = Clapeyron.split_pure_model(model)
 
-    x = uniform_range(structure) |> collect
+    x = uniform_range(structure, 1) |> collect
     X = collect(x)
 
     L = length_scale(model)
@@ -47,7 +47,7 @@ function initialize_profiles(model::EoSModel,structure::DFTStructure{2,Cartesian
 
     pure = Clapeyron.split_pure_model(model)
 
-    x = uniform_range(structure,1)
+    x = uniform_range(structure, 1)
     X = zeros(ngrid)
 
     for i in 1:ngrid[1]

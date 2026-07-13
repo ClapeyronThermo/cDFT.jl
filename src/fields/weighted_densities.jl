@@ -102,7 +102,7 @@ to sample them), substituting `ω.ω̄` for the Cartesian `ω̄ = sqrt.(sum(abs2
 and dropping the `ω̄=0` branch (QDHT never samples the origin in k-space). `map`/`plan`/
 `iplan` are all real-valued (no `Complex` cast) since QDHT operates on real arrays.
 """
-function SWeightedDensity(type::Symbol, width::Vector{Float64}, ω::RadialFrequency{FP}, ngrid, backend::Backend, model) where FP<:AbstractFloat
+function SWeightedDensity(type::Symbol, width::Vector{Float64}, ω::RadialFrequency{FP}, ngrid::NTuple{nd,Int} where nd, backend::Backend, model) where FP<:AbstractFloat
     N = ngrid[1]
     L = length_scale(model)
     ω = _scaled_ω(ω, L, FP)
@@ -300,7 +300,7 @@ reduced-units footing as `n0`-`n3` — see `f_hs`'s `nv1_1*nv2_1`-style cross te
 the ordinary `density_scale=L` compensation in `evaluate_field!` below — only the *kernel
 construction* skips `_scaled_ω`, not the final compensation.
 """
-function VWeightedDensity(type::Symbol, width::Vector{Float64}, ω::RadialFrequency{FP}, ngrid, backend::Backend, model) where FP<:AbstractFloat
+function VWeightedDensity(type::Symbol, width::Vector{Float64}, ω::RadialFrequency{FP}, ngrid::NTuple{nd,Int} where nd, backend::Backend, model) where FP<:AbstractFloat
     type == :∫ρzdz || error("Only :∫ρzdz vector weighted densities are supported for spherical/cylindrical coordinates")
     N = ngrid[1]
     L = length_scale(model)

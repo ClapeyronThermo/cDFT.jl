@@ -257,7 +257,7 @@ function converge!(system::SCFTSystem, ρ;
     log_interval   :: Int     = 100,
     save_interval  :: Int     = 0,
     save_callback             = nothing,
-    verbose        :: Bool    = true,
+    verbose        :: Bool    = false,
 )
     dz = structure_dz(system.structure)
     FT = eltype(ρ)
