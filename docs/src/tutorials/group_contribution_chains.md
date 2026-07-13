@@ -94,5 +94,5 @@ julia> fig = plot(system, ρ)
 
 ## Next steps
 
-[Multi-Dimensional Interfaces & Copolymer Phases](@ref) uses `custom_structure` together
+[Multi-Dimensional Interfaces](@ref) uses `custom_structure` together
 with a 2D/3D two-phase structure to build a microphase-separating diblock copolymer melt.

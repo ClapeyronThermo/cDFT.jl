@@ -89,4 +89,4 @@ julia> save("vle_profile.png", fig)
 
 This tutorial only covers a 1D planar interface. For interfaces with additional
 translationally-invariant dimensions, curved (droplet) interfaces, or microphase-separated
-copolymer melts, see [Multi-Dimensional Interfaces & Copolymer Phases](@ref).
+copolymer melts, see [Multi-Dimensional Interfaces](@ref) and [Copolymer Microphase Morphologies](@ref), respectively.

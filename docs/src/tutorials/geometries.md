@@ -7,7 +7,7 @@ Full type-by-type reference is on the [Structures](@ref) page; this tutorial is 
 
 | Type | Use it for |
 |:-----|:-----------|
-| [`Uniform1DCart`](@ref cDFT.Uniform1DCart) / [`ExternalField1DCart`](@ref cDFT.ExternalField1DCart) | A fluid next to a flat wall or in a slit pore — see [Getting Started](@ref) and the adsorption section below. |
+| [`Uniform1DCart`](@ref cDFT.Uniform1DCart) | A fluid next to a flat wall or in a slit pore — see [Getting Started](@ref) and the adsorption section below. |
 | [`Uniform1DCyl`](@ref cDFT.Uniform1DCyl) | A fluid inside a cylindrical pore, or outside a cylindrical particle/nanotube — see the cylindrical confinement section below. |
 | [`Uniform1DSphr`](@ref cDFT.Uniform1DSphr) | A fluid inside a spherical pore, or outside a spherical nanoparticle — same `bounds=[lb,ub]` idea as `Uniform1DCyl`. |
 | [`Uniform2DCart`](@ref cDFT.Uniform2DCart) / [`Uniform3DCart`](@ref cDFT.Uniform3DCart) | A fluid around an arbitrary, non-symmetric object, or a periodic block-copolymer unit cell. The workhorse for [Dynamic DFT](@ref) and multi-dimensional interfaces. |
@@ -23,7 +23,7 @@ Full type-by-type reference is on the [Structures](@ref) page; this tutorial is 
 | [`TwoPhase2DHexCart`](@ref cDFT.TwoPhase2DHexCart) / [`TwoPhase3DHexCart`](@ref cDFT.TwoPhase3DHexCart) | A hexagonally-packed cylindrical copolymer microdomain, viewed end-on (2D) or extruded (3D). |
 | [`TwoPhase3DSphrCart`](@ref cDFT.TwoPhase3DSphrCart) | A spherical droplet or bubble embedded in a 3D box — a GPU-compatible alternative to `Uniform1DSphr` for a symmetric interface. |
 
-See [Multi-Dimensional Interfaces & Copolymer Phases](@ref) for worked examples of the lamellar/hexagonal/spherical two-phase structures.
+See [Copolymer Microphase Morphologies](@ref), respectively. for worked examples of the lamellar/hexagonal/spherical two-phase structures.
 
 ## Comparing planar and cylindrical confinement
 

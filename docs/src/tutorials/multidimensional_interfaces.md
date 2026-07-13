@@ -1,4 +1,4 @@
-# Multi-Dimensional Interfaces & Copolymer Phases
+# Multi-Dimensional Interfaces
 
 [Vapour-Liquid Interfaces](@ref) covered the simplest case: a planar interface with a
 single coordinate. Real interfaces are often curved (e.g. a micelle). cDFT's
