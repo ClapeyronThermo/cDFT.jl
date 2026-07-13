@@ -10,21 +10,15 @@ Integrates a collection of points `f`, with constant `dz`, using simpson rule.
 """
     ∫(f, structure::DFTStructure)
 
-Coordinate-aware integral of `f` (sampled on `structure`'s grid) over the physical
-domain. For Cartesian structures this is Simpson's rule with the structure's uniform
-grid spacing (unchanged behavior, just re-routed through `structure_dz`). For
-spherical/cylindrical structures, this uses `Hankel.integrateR` (the radial quadrature
-matched to the structure's `QDHT`, which already incorporates the `r`/`r²` Jacobian)
-times the angular factor `Hankel.integrateR` itself omits (`4π` for a full sphere, `2π`
-for a cylinder's circular cross-section).
+Coordinate-aware integral of `f` (sampled on `structure`'s grid) over the physical domain. 
+For Cartesian structures this is Simpson's rule with the structure's uniform grid spacing (unchanged behavior, just re-routed through `structure_dz`). 
+For spherical/cylindrical structures, this uses `Hankel.integrateR` (the radial quadrature matched to the structure's `QDHT`, which already incorporates the `r`/`r²` Jacobian) times the angular factor `Hankel.integrateR` itself omits (`4π` for a full sphere, `2π` for a cylinder's circular cross-section).
 """
-∫(f, structure::DFTStructureCart) = ∫(f, structure_dz(structure))
+∫(f, structure::DFTStructByCoord{Cartesian}) = ∫(f, structure_dz(structure))
+∫(f, structure::DFTStructByCoord{Spherical})   = 4π * Hankel.integrateR(f, radial_transform(structure))
+∫(f, structure::DFTStructByCoord{Cylindrical}) = 2π * Hankel.integrateR(f, radial_transform(structure))
 
-function ∫(f, structure::Union{DFTStructureSphr,DFTStructureCyl})
-    Q = radial_transform(structure)
-    angular = structure isa DFTStructureSphr ? 4π : 2π
-    return angular * Hankel.integrateR(f, Q)
-end
+
 #function _∫(f::AbstractArray,dz::Number,lastidx)
 #    return 1/3*dz*(f[1]+f[end]+4*sum(@view(f[2:2:end-1]))+2*sum(@view(f[3:2:end-1])))
 #end
@@ -50,12 +44,8 @@ end
     trapz_weights(ngrid, dz, device)
 
 Precompute the multi-dimensional periodic trapezoidal quadrature weight array on `device`.
-Returns an array of shape `ngrid` where every element equals `prod(dz)`, so that
-`sum(f .* weights)` approximates `∫ f dV` using the periodic composite trapezoidal rule.
-
-For smooth periodic functions (e.g. SCFT density profiles in a periodic box) this rule
-converges spectrally (exponentially in N) via the Euler-Maclaurin theorem, compared to
-O(h⁴) for Simpson's rule. Works for any N (odd or even).
+Returns an array of shape `ngrid` where every element equals `prod(dz)`, so that `sum(f .* weights)` approximates `∫ f dV` using the periodic composite trapezoidal rule.
+For smooth periodic functions (e.g. SCFT density profiles in a periodic box) this rule converges spectrally (exponentially in N) via the Euler-Maclaurin theorem, compared to O(h⁴) for Simpson's rule. Works for any N (odd or even).
 """
 function trapz_weights(ngrid::Tuple, dz, options::DFTOptions)
     FT = fptype(options)
@@ -67,11 +57,8 @@ end
     simpson_weights(ngrid, dz, device)
 
 Precompute the multi-dimensional composite Simpson quadrature weight array on `device`.
-Returns an array of shape `ngrid` such that `sum(f .* weights)` equals `∫(Array(f), dz)`
-for any array `f` of the same shape, without requiring `f` to be on the CPU.
-
-The weights replicate the coefficient pattern of `_∫` (1/4/2 pattern per dimension)
-as an outer product, multiplied by `prod(dz ./ 3)`. Requires odd N in each dimension.
+Returns an array of shape `ngrid` such that `sum(f .* weights)` equals `∫(Array(f), dz)` for any array `f` of the same shape, without requiring `f` to be on the CPU.
+The weights replicate the coefficient pattern of `_∫` (1/4/2 pattern per dimension) as an outer product, multiplied by `prod(dz ./ 3)`. Requires odd N in each dimension.
 """
 function simpson_weights(ngrid::Tuple, dz, options::DFTOptions)
     nd = length(ngrid)
@@ -97,6 +84,7 @@ function simpson_weights(ngrid::Tuple, dz, options::DFTOptions)
     end
     return Adapt.adapt(options.device, weights)
 end
+
 function convolve!(result, profile, kernel, P, iP, buf)
     if profile !== buf
         buf .= complex.(profile)
@@ -143,6 +131,7 @@ function convolve!(result, profile, kernel, P::Hankel.QDHT, iP::Hankel.QDHT, buf
     tmp = similar(buf)
     LinearAlgebra.mul!(tmp, P, buf)
     tmp .*= kernel
-    LinearAlgebra.ldiv!(buf, iP, tmp)
+    LinearAlgebra.ldiv!(buf, P, tmp)
+    #LinearAlgebra.ldiv!(buf, iP, tmp)
     result .= buf
 end

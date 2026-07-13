@@ -21,27 +21,14 @@ abstract type SCFTLatticeFluidModel <: LatticeFluidModel end
 """
     SCFTLatticeFluid(grouplist, b, chi; rho0, kappa, idealmodel=BasicIdeal, references=String[])
 
-A compressible Flory-Huggins-Helfand lattice-fluid `EoSModel` for SCFT bulk
-thermodynamics. Chain order and ensemble/count bookkeeping for a particular SCFT
-calculation live on `SCFTSpecies` (`get_species`), not here — those describe a specific
-calculation's setup, not the bulk EoS.
+A compressible Flory-Huggins-Helfand lattice-fluid `EoSModel` for SCFT bulk thermodynamics. 
+Chain order and ensemble/count bookkeeping for a particular SCFT calculation live on `SCFTSpecies` (`get_species`), not here — those describe a specific calculation's setup, not the bulk EoS.
 
-`grouplist` is Clapeyron's own group-contribution format
-(`Vector{Tuple{String,Vector{Pair{String,Int}}}}`), e.g.
-`[("diblock", ["A"=>4,"B"=>4]), ("solvent", ["S"=>1])]` — `components` are molecule types
-(chains and solvents, unified: a solvent is just an `N=1` molecule type), `b`/`chi` are
-indexed by species (`groups.flattenedgroups`, the union of group names across `grouplist`).
+`grouplist` is Clapeyron's own group-contribution format (`Vector{Tuple{String,Vector{Pair{String,Int}}}}`), e.g. `[("diblock", ["A"=>4,"B"=>4]), ("solvent", ["S"=>1])]` — `components` are molecule types (chains and solvents, unified: a solvent is just an `N=1` molecule type), `b`/`chi` are indexed by species (`groups.flattenedgroups`, the union of group names across `grouplist`).
 
-`a_res` is defined so that, for `z` indexed by `components` (molecule-type mole amounts,
-matching Clapeyron's convention), `VT_chemical_potential_res(model, V, T, z)_i / (R̄*T)`
-equals `Σ_α n_flattenedgroups[i][α] · w_α(ρ)`, i.e. molecule type `i`'s residual chemical
-potential is the sum of its constituent segments' potentials — where `w_α` is exactly
-`src/models/SCFT/scft.jl`'s `compute_fields!`/`compute_bulk_fields` mean field. It
-deliberately omits any chain translational/mixing entropy contribution, since that entropy
-is already counted once by cDFT's SCFT free energy via the single-chain partition function
-`Q` (`src/models/SCFT/scft.jl`'s `compute_partition_functions`/`free_energy`). Do not add an
-entropy term here without also removing the corresponding double-count from wherever `Q` is
-used.
+`a_res` is defined so that, for `z` indexed by `components` (molecule-type mole amounts, matching Clapeyron's convention), `VT_chemical_potential_res(model, V, T, z)_i / (R̄*T)` equals `Σ_α n_flattenedgroups[i][α] · w_α(ρ)`, i.e. molecule type `i`'s residual chemical potential is the sum of its constituent segments' potentials — where `w_α` is exactly `src/models/SCFT/scft.jl`'s `compute_fields!`/`compute_bulk_fields` mean field. 
+It deliberately omits any chain translational/mixing entropy contribution, since that entropy is already counted once by cDFT's SCFT free energy via the single-chain partition function `Q` (`src/models/SCFT/scft.jl`'s `compute_partition_functions`/`free_energy`). 
+Do not add an entropy term here without also removing the corresponding double-count from wherever `Q` is used.
 """
 struct SCFTLatticeFluid{I<:IdealModel} <: SCFTLatticeFluidModel
     components::Vector{String}
@@ -205,7 +192,7 @@ function expand_groups(model::SCFTLatticeFluid, mol_structure::Dict{String,<:Mol
                                   flattenedgroups, n_flattenedgroups, model.groups.sourcecsvs)
     return expanded_groups, ngroups_k
 end
-export expand_groups
+
 
 """
     expand_model(model::SCFTLatticeFluid, mol_structure)
@@ -229,7 +216,6 @@ function expand_model(model::SCFTLatticeFluid, mol_structure::Dict{String,<:MolS
     return SCFTLatticeFluid(expanded_groups.components, expanded_groups, expanded_params,
                              model.rho0, model.kappa, model.idealmodel, model.references)
 end
-export expand_model
 
 """
     get_species(model::SCFTLatticeFluid, structure::DFTStructure; ensemble, n_molecules)
@@ -284,7 +270,6 @@ function get_species(model::SCFTLatticeFluid, structure::DFTStructure;
 
     return SCFTSpecies(sequence, nbeads, ensemble, n_molecules_f, molecule_bulk_density, bulk_density)
 end
-export get_species
 
 """
     get_propagator(model::SCFTLatticeFluid, species::SCFTSpecies, structure::DFTStructure, backend, FP=Float64)
@@ -297,7 +282,6 @@ function get_propagator(model::SCFTLatticeFluid, species::SCFTSpecies, structure
                          backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     return DiscreteGaussianChainPropagator(model, species, structure, backend, FP)
 end
-export get_propagator
 
 function a_res(model::SCFTLatticeFluid, V, T, z)
     Σz = sum(z)

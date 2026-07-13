@@ -112,7 +112,7 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
     species = system.species
 
     bounds = structure.bounds
-    z = cDFT.uniform_range(structure)
+    z = cDFT.uniform_range(structure, 1)
     L = cDFT.length_scale(model)
     _ρ = Adapt.adapt(CPU(), profiles)
 

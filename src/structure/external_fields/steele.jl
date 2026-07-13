@@ -85,7 +85,7 @@ function evaluate_external_field!(structure::DFTStructure,external_field::Steele
 end
 
 """
-    evaluate_external_field!(structure::Union{DFTStructureSphr,DFTStructureCyl}, external_field::SteeleModel, model::SAFTModel, ρ, δfδρ_res, r, Vext=nothing)
+    evaluate_external_field!(structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}}, external_field::SteeleModel, model::SAFTModel, ρ, δfδρ_res, r, Vext=nothing)
 
 Spherical/cylindrical counterpart of the planar Steele wall above, reusing the same
 single-wall LJ-9-3 formula. Since the QDHT-based radial grid always spans from ~0 to
@@ -108,7 +108,7 @@ one convolution pass. The clamp is applied uniformly for `r` on both sides of th
 potential stays smooth and bounded throughout, including deep inside the excluded
 region.
 """
-function evaluate_external_field!(structure::Union{DFTStructureSphr,DFTStructureCyl},external_field::SteeleModel,model::SAFTModel,ρ,δfδρ_res,r,Vext=nothing)
+function evaluate_external_field!(structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}},external_field::SteeleModel,model::SAFTModel,ρ,δfδρ_res,r,Vext=nothing)
     if Vext === nothing
         Vext = zeros(eltype(ρ), size(ρ))
         nd = dimension(structure)
@@ -142,6 +142,6 @@ function evaluate_external_field!(structure::Union{DFTStructureSphr,DFTStructure
     end
 end
 
-function evaluate_external_field!(structure::Union{DFTStructureSphr,DFTStructureCyl},external_field::SteeleModel,model::ElectrolyteModel,ρ,δfδρ_res,r,Vext=nothing)
+function evaluate_external_field!(structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}},external_field::SteeleModel,model::ElectrolyteModel,ρ,δfδρ_res,r,Vext=nothing)
     evaluate_external_field!(structure,external_field,model.neutralmodel,ρ,δfδρ_res,r, Vext)
 end

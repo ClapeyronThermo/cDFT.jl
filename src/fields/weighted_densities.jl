@@ -38,11 +38,11 @@ struct SWeightedDensity{M,P,iP} <: ScalarField
     iplan::iP
 end
 
-function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend, model)
-    nd = length(ngrid)
+function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid::NTuple{nd,<:Any}, backend::Backend, model) where nd
     CT = eltype(ω)
     FP = real(CT)
     L = length_scale(model)
+    PI = FP(π)
     # :ρ doesn't use ω at all (Ω≡1 below), so unconditionally rescaling here is harmless
     # for it and required for :∫ρdz/:∫ρz²dz — unlike VWeightedDensity's :∇ρ case, there's
     # no type here that needs ω left raw.
@@ -60,16 +60,16 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend
 
     if type == :∫ρdz
         ω̄ = sqrt.(sum(abs2, ω, dims=nd+1))
-
-        ω̄R   = ω̄ .* R                                 # (Nx,Ny,Nz,Nb)
+        
+        #Ω .= sinc.(PI .* ω̄ .* R) .* R
 
         mask = ω̄ .== 0
-
         Ω .= ifelse.(mask,
-                2*R ,                                    # ω̄=0 case
+                2*R ,                  # ω̄=0 case
                 2*sin.(ω̄.*R)./ω̄        # ω̄≠0 case
             )
         Ω ./= FP(2π)
+    
     elseif type == :∫ρz²dz
         ω̄ = sqrt.(sum(abs2, ω, dims=nd+1))
         ω̄R   = ω̄ .* R                                 # (Nx,Ny,Nz,Nb)
@@ -77,7 +77,7 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend
         mask = ω̄ .== 0
         Ω .= ifelse.(mask,
                 FP(4π)*R.^3/3,                                    # ω̄=0 case
-                FP(4π)./ω̄.^3 .*(sin.(ω̄R)-R.*ω̄.*cos.(ω̄R))        # ω̄≠0 case
+                FP(4π)./ω̄.^3 .*(sin.(ω̄R) - R.*ω̄.*cos.(ω̄R))        # ω̄≠0 case
             )
         Ω ./= FP(2π)^3
     elseif type == :ρ
@@ -87,7 +87,7 @@ function SWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend
     end
 
     tmp = complex(Array(selectdim(Ω,nd+1,1)))
-    plan = plan_fft!(tmp, 1:length(ngrid); num_threads=Threads.nthreads())
+    plan = plan_fft!(tmp, 1:nd; num_threads=Threads.nthreads())
     iplan = inv(plan)
     return SWeightedDensity(type,width,L,Ω,plan,iplan)
 end
@@ -102,7 +102,7 @@ to sample them), substituting `ω.ω̄` for the Cartesian `ω̄ = sqrt.(sum(abs2
 and dropping the `ω̄=0` branch (QDHT never samples the origin in k-space). `map`/`plan`/
 `iplan` are all real-valued (no `Complex` cast) since QDHT operates on real arrays.
 """
-function SWeightedDensity(type::Symbol, width::Vector{Float64}, ω::RadialFrequency{FP}, ngrid, backend::Backend, model) where FP<:AbstractFloat
+function SWeightedDensity(type::Symbol, width::Vector{Float64}, ω::RadialFrequency{FP}, ngrid::NTuple{nd,Int} where nd, backend::Backend, model) where FP<:AbstractFloat
     N = ngrid[1]
     L = length_scale(model)
     ω = _scaled_ω(ω, L, FP)
@@ -203,8 +203,7 @@ struct VWeightedDensity{M,P,iP} <: VectorField
     iplan::iP
 end
 
-function VWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend::Backend, model)
-    nd = length(ngrid)
+function VWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid::NTuple{nd,<:Any}, backend::Backend, model) where nd
     CT = eltype(ω)
     FP = real(CT)
     L = length_scale(model)
@@ -254,7 +253,7 @@ function VWeightedDensity(type::Symbol,width::Vector{Float64},ω, ngrid, backend
     end
 
     tmp = complex(Array(selectdim(selectdim(Ω,nd+1,1),nd+1,1)))
-    plan = plan_fft!(tmp, 1:length(ngrid); num_threads=Threads.nthreads())
+    plan = plan_fft!(tmp, 1:nd; num_threads=Threads.nthreads())
     iplan = inv(plan)
     return VWeightedDensity(type,width,L,Ω,plan,iplan)
 end
@@ -301,7 +300,7 @@ reduced-units footing as `n0`-`n3` — see `f_hs`'s `nv1_1*nv2_1`-style cross te
 the ordinary `density_scale=L` compensation in `evaluate_field!` below — only the *kernel
 construction* skips `_scaled_ω`, not the final compensation.
 """
-function VWeightedDensity(type::Symbol, width::Vector{Float64}, ω::RadialFrequency{FP}, ngrid, backend::Backend, model) where FP<:AbstractFloat
+function VWeightedDensity(type::Symbol, width::Vector{Float64}, ω::RadialFrequency{FP}, ngrid::NTuple{nd,Int} where nd, backend::Backend, model) where FP<:AbstractFloat
     type == :∫ρzdz || error("Only :∫ρzdz vector weighted densities are supported for spherical/cylindrical coordinates")
     N = ngrid[1]
     L = length_scale(model)

@@ -21,7 +21,7 @@ function Plots.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
 
     bounds = structure.bounds
 
-    z = cDFT.uniform_range(structure)
+    z = cDFT.uniform_range(structure, 1)
     L = cDFT.length_scale(model)
 
     plt = Plots.plot(grid=:off,
