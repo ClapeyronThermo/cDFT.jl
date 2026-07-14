@@ -16,7 +16,7 @@ function F_ideal(system::AbstractcDFTSystem,ρ)
     n = zeros(ngrid...,length(model))
     for i in @comps
         for k in @chain(i)
-            selectdim(n,nd+1,i) .+= selectdim(ρ,nd+1,k)/system.species.nbeads[i]
+            selectdim(n,nd+1,i) .+= Adapt.adapt(CPU(), selectdim(ρ,nd+1,k))/system.species.nbeads[i]
         end
     end
     

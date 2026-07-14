@@ -19,12 +19,14 @@ struct SAFTVRMieSpecies <: DFTSpecies
     chempot_res::Vector{Float64}
 end
 
-function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}) where FP<:AbstractFloat
     nc = length(model)
     ngrid = structure.ngrid
-    ω = structure_ω(structure, device, FP)
-    d = species.size
 
+    # ψ is a dimensionless Barker-Henderson-style shape factor derived from the RAW
+    # (unscaled) diameter/sigma ratio — it must stay L-invariant, so compute it before
+    # any reduced-units rescaling is applied below. See PCSAFT.jl's `get_fields` docstring
+    # for the overall reduced-units scheme.
     λ_r = diagvalues(model.params.lambda_r.values)
     λ_a = diagvalues(model.params.lambda_a.values)
     σ   = diagvalues(model.params.sigma.values)
@@ -32,13 +34,17 @@ function get_fields(model::SAFTVRMieModel, species::DFTSpecies, structure::DFTSt
     x = species.size ./ σ
     ψ = @. cbrt(3*C*x^3*(x^-λ_a/(λ_a-3)-x^-λ_r/(λ_r-3)))
 
-    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid,device),
-            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device),
-            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,device),
-            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,device),
-            SWeightedDensity(:∫ρz²dz,d,ω,ngrid,device),
-            SWeightedDensity(:∫ρdz,d,ω,ngrid,device),
-            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device)]
+    L = length_scale(model)
+    ω = structure_ω(structure, device, FP)
+    d = species.size ./ L
+
+    return (SWeightedDensity(:ρ,zeros(nc),ω,ngrid,device,model),
+            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,device,model),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρz²dz,d,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρdz,d,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device,model))
 end
 
 function get_species(model::SAFTVRMieModel,structure::DFTStructure)
@@ -98,23 +104,24 @@ SAFT-VR Mie chain contribution (gMie contact value) at grid point `kk`.
     A       = params.A
     ϕ       = params.phi
     FP      = eltype(n)
-
+    # See SAFTgammaMie.jl's f_chain for why bare `π` needs this: `4*π` (Int*Irrational)
+    # promotes to Float64 before ever touching an FP value, unlike `π*x` for x::FP.
     idx_ζ = 4+ND;  idx_λ = 5+ND
 
     ρS_c = zero(FP)
     @inbounds for i in 1:NC
-        ρS_c += n[kk,idx_ζ,i] * 3/(4*π*HSd[i]^3) * m_seg[i]
+        ρS_c += n[kk,idx_ζ,i] * 3/(4*(π*HSd[i]^3)) * m_seg[i]
     end
     kρS_c = ρS_c * π/6/8
 
     ζ_Xc = zero(FP);  σ3_xc = zero(FP)
     @inbounds for i in 1:NC
         di   = HSd[i]
-        ρ̄hci = n[kk,idx_ζ,i] * 3/(4*π*di^3)
+        ρ̄hci = n[kk,idx_ζ,i] * 3/(4*(π*di^3))
         x_Si = ρ̄hci * m_seg[i] / ρS_c
         @inbounds for j in 1:NC
             dj   = HSd[j]
-            ρ̄hcj = n[kk,idx_ζ,j] * 3/(4*π*dj^3)
+            ρ̄hcj = n[kk,idx_ζ,j] * 3/(4*(π*dj^3))
             x_Sj = ρ̄hcj * m_seg[j] / ρS_c
             σ3_xc += x_Si*x_Sj*σ[i,j]^3
             ζ_Xc  += kρS_c*x_Si*x_Sj*(di+dj)^3
@@ -127,7 +134,7 @@ SAFT-VR Mie chain contribution (gMie contact value) at grid point `kk`.
     res_chain = zero(FP)
     @inbounds for i in 1:NC
         di   = HSd[i]
-        ρ̄hci = n[kk,idx_ζ,i] * 3/(4*π*di^3)
+        ρ̄hci = n[kk,idx_ζ,i] * 3/(4*(π*di^3))
         x_Si = ρ̄hci * m_seg[i] / ρS_c
 
         λa = λa_mat[i][i];  λr = λr_mat[i][i]
@@ -316,18 +323,18 @@ Used by SAFTVRMieModel, SAFTgammaMieModel, COFFEEModel.
     FP = eltype(n)
     ρS_d = zero(FP)
     @inbounds for i in 1:NC
-        ρS_d += n[kk, IDX_ρz, i] * 3/(4*π*psi_eff[i]^3) * meff[i]
+        ρS_d += n[kk, IDX_ρz, i] * 3/(4*(π*psi_eff[i]^3)) * meff[i]
     end
     kρS_d = ρS_d * π/6/8
 
     ζ_Xd=zero(FP);  σ3_xd=zero(FP)
     @inbounds for i in 1:NC
         di   = HSd[i]
-        ρ̄zi  = n[kk, IDX_ρz, i] * 3/(4*π*psi_eff[i]^3)
+        ρ̄zi  = n[kk, IDX_ρz, i] * 3/(4*(π*psi_eff[i]^3))
         x_Si = ρ̄zi * meff[i] / ρS_d
         @inbounds for j in 1:NC
             dj   = HSd[j]
-            ρ̄zj  = n[kk, IDX_ρz, j] * 3/(4*π*psi_eff[j]^3)
+            ρ̄zj  = n[kk, IDX_ρz, j] * 3/(4*(π*psi_eff[j]^3))
             x_Sj = ρ̄zj * meff[j] / ρS_d
             σ3_xd += x_Si*x_Sj*sigma[i,j]^3
             ζ_Xd  += kρS_d*x_Si*x_Sj*(di+dj)^3
@@ -340,13 +347,13 @@ Used by SAFTVRMieModel, SAFTgammaMieModel, COFFEEModel.
     a₁=zero(FP);  a₂=zero(FP);  a₃=zero(FP)
     @inbounds for i in 1:NC
         di   = HSd[i]
-        ρ̄zi  = n[kk, IDX_ρz, i] * 3/(4*π*psi_eff[i]^3)
+        ρ̄zi  = n[kk, IDX_ρz, i] * 3/(4*(π*psi_eff[i]^3))
         x_Si = ρ̄zi * meff[i] / ρS_d
         λa=lambda_a[i][i]; λr=lambda_r[i][i]; σii=sigma[i,i]; ϵii=epsilon[i,i]
         _C=_Cλ_kernel(λa,λr);  x0=σii/di;  dij3=di^3
         aS1_a=_aS1_kernel(λa,   ζ_Xd,A); B_a=_B_kernel(λa,   x0,ζ_Xd)
         aS1_r=_aS1_kernel(λr,   ζ_Xd,A); B_r=_B_kernel(λr,   x0,ζ_Xd)
-        a1ij = 2*π*ϵii*dij3*_C*ρS_d*(x0^λa*(aS1_a+B_a)-x0^λr*(aS1_r+B_r))
+        a1ij = 2*(π*ϵii)*dij3*_C*ρS_d*(x0^λa*(aS1_a+B_a)-x0^λr*(aS1_r+B_r))
         aS1_2a=_aS1_kernel(2*λa, ζ_Xd,A); B_2a=_B_kernel(2*λa, x0,ζ_Xd)
         aS1_2r=_aS1_kernel(2*λr, ζ_Xd,A); B_2r=_B_kernel(2*λr, x0,ζ_Xd)
         aS1_ar=_aS1_kernel(λa+λr,ζ_Xd,A); B_ar=_B_kernel(λa+λr,x0,ζ_Xd)
@@ -362,13 +369,13 @@ Used by SAFTVRMieModel, SAFTgammaMieModel, COFFEEModel.
         @inbounds for j in 1:NC
             if j != i
                 dj    = HSd[j]
-                ρ̄zj   = n[kk, IDX_ρz, j] * 3/(4*π*psi_eff[j]^3)
+                ρ̄zj   = n[kk, IDX_ρz, j] * 3/(4*(π*psi_eff[j]^3))
                 x_Sj  = ρ̄zj * meff[j] / ρS_d
                 λa2=lambda_a[i][j]; λr2=lambda_r[i][j]; σij=sigma[i,j]; ϵij=epsilon[i,j]
                 _C2=_Cλ_kernel(λa2,λr2); dij2=(di+dj)/2; dij3_2=dij2^3; x0ij=σij/dij2
                 aS1_a2=_aS1_kernel(λa2,    ζ_Xd,A); B_a2=_B_kernel(λa2,    x0ij,ζ_Xd)
                 aS1_r2=_aS1_kernel(λr2,    ζ_Xd,A); B_r2=_B_kernel(λr2,    x0ij,ζ_Xd)
-                a1ij2 = 2*π*ϵij*dij3_2*_C2*ρS_d*(x0ij^λa2*(aS1_a2+B_a2)-x0ij^λr2*(aS1_r2+B_r2))
+                a1ij2 = 2*(π*ϵij)*dij3_2*_C2*ρS_d*(x0ij^λa2*(aS1_a2+B_a2)-x0ij^λr2*(aS1_r2+B_r2))
                 aS1_2a2=_aS1_kernel(2*λa2, ζ_Xd,A); B_2a2=_B_kernel(2*λa2, x0ij,ζ_Xd)
                 aS1_2r2=_aS1_kernel(2*λr2, ζ_Xd,A); B_2r2=_B_kernel(2*λr2, x0ij,ζ_Xd)
                 aS1_ar2=_aS1_kernel(λa2+λr2,ζ_Xd,A); B_ar2=_B_kernel(λa2+λr2,x0ij,ζ_Xd)
@@ -434,7 +441,7 @@ end
         ρrn *= ρr
     end
 
-    return expm1(params.assoc_eps[p] / T) * params.assoc_kap[p] * I_val
+    return (exp(params.assoc_eps[p] / T)-1) * params.assoc_kap[p] * I_val
 end
 
 function preallocate_params(system::DFTSystem{<:SAFTVRMieModel})
@@ -444,15 +451,24 @@ function preallocate_params(system::DFTSystem{<:SAFTVRMieModel})
     nc = length(model)
     lr = model.params.lambda_r.values
     la = model.params.lambda_a.values
-    lambda_r_t = ntuple(i -> ntuple(j -> lr[i,j], nc), nc)
-    lambda_a_t = ntuple(i -> ntuple(j -> la[i,j], nc), nc)
+    lambda_r_t = ntuple(i -> ntuple(j -> FP(lr[i,j]), nc), nc)
+    lambda_a_t = ntuple(i -> ntuple(j -> FP(la[i,j]), nc), nc)
     A_fp  = ntuple(i -> ntuple(j -> FP(SAFTVRMIE_A[i][j]),   4), 4)
     phi_fp = ntuple(i -> ntuple(j -> FP(SAFTVRMIE_PHI[i][j]), 6), 7)
+
+    # Reduced units: divide every length-dimensioned parameter by L so it matches the
+    # `get_fields`-side kernel rescaling. `psi_eff` (system.fields[end].width) needs no
+    # separate treatment — it already reads the rescaled width back from `get_fields`.
+    # See PCSAFT.jl's `get_fields`/`preallocate_params` docstrings for the full picture.
+    L           = length_scale(model)
+    HSd_local   = system.species.size ./ L
+    sigma_local = model.params.sigma.values ./ L
+
     base = (;
-        HSd        = adapt_to_device(backend, FP, system.species.size),
+        HSd        = adapt_to_device(backend, FP, HSd_local),
         m          = adapt_to_device(backend, FP, model.params.segment.values),
         meff       = adapt_to_device(backend, FP, model.params.segment.values),
-        sigma      = adapt_to_device(backend, FP, model.params.sigma.values),
+        sigma      = adapt_to_device(backend, FP, sigma_local),
         epsilon    = adapt_to_device(backend, FP, model.params.epsilon.values),
         lambda_r_t = lambda_r_t,
         lambda_a_t = lambda_a_t,
@@ -466,7 +482,7 @@ function preallocate_params(system::DFTSystem{<:SAFTVRMieModel})
         (assoc_icomp_v, assoc_jcomp_v, assoc_isite_v, assoc_jsite_v,
          assoc_eps_v, assoc_kap_v, assoc_sig3_v, assoc_dij_v,
          n_sites_flat_v, n_sites_cumsum_v, total_sites
-        ) = pack_assoc_params(model, system.species.size)
+        ) = pack_assoc_params(model, HSd_local, sigma_local)
 
         nc_model         = length(model)
         ia_global_v      = [n_sites_cumsum_v[assoc_icomp_v[p]] + assoc_isite_v[p] for p in 1:nn]
@@ -501,8 +517,8 @@ function preallocate_params(system::DFTSystem{<:SAFTVRMieModel})
             assoc_n_ia      = assoc_n_ia_t,
             assoc_n_jb      = assoc_n_jb_t,
             assoc_eps       = adapt_to_device(backend, FP, assoc_eps_v),
-            assoc_kap       = adapt_to_device(backend, FP, assoc_kap_v),
-            assoc_sig3      = adapt_to_device(backend, FP, assoc_sig3_v),
+            assoc_kap       = adapt_to_device(backend, FP, assoc_kap_v ./ L^3),
+            assoc_sig3      = adapt_to_device(backend, FP, assoc_sig3_v ./ L^3),
             assoc_dij       = adapt_to_device(backend, FP, assoc_dij_v),
             n_sites_flat    = n_sites_flat_t,
             n_sites_cumsum  = n_sites_cumsum_t,

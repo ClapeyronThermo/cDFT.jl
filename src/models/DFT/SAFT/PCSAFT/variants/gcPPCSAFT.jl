@@ -35,15 +35,24 @@ function preallocate_params(system::DFTSystem{<:HomogcPCPSAFTModel})
     dd_a_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_a[i][j]), 3), 5)
     dd_b_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_b[i][j]), 3), 5)
     dd_c_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_c[i][j]), 3), 5)
+
+    # Reduced units: divide every length-dimensioned parameter by L so it matches the
+    # `get_fields`-side kernel rescaling (inherited from PCSAFT.jl via PCPSAFTModel). See
+    # PCSAFT.jl's `get_fields`/`preallocate_params` docstrings for the full picture.
+    L               = length_scale(system.model)
+    HSd_local       = system.species.size ./ L
+    sigma_local     = ppcmodel.params.sigma.values ./ L
+    pcp_sigma_local = pcp_sigma(ppcmodel) ./ L
+
     base = (;
-        HSd         = adapt_to_device(backend, FP, system.species.size),
+        HSd         = adapt_to_device(backend, FP, HSd_local),
         m           = adapt_to_device(backend, FP, ppcmodel.params.segment.values),
-        sigma       = adapt_to_device(backend, FP, ppcmodel.params.sigma.values),
+        sigma       = adapt_to_device(backend, FP, sigma_local),
         epsilon     = adapt_to_device(backend, FP, ppcmodel.params.epsilon.values),
         pcp_m       = adapt_to_device(backend, FP, pcp_segment(ppcmodel)),
-        pcp_sigma   = adapt_to_device(backend, FP, pcp_sigma(ppcmodel)),
+        pcp_sigma   = adapt_to_device(backend, FP, pcp_sigma_local),
         pcp_epsilon = adapt_to_device(backend, FP, pcp_epsilon(ppcmodel)),
-        dipole2     = adapt_to_device(backend, FP, pcp_dipole2(ppcmodel)),
+        dipole2     = adapt_to_device(backend, FP, pcp_dipole2(ppcmodel) ./ L^3),
         dd_a        = dd_a_fp,
         dd_b        = dd_b_fp,
         dd_c        = dd_c_fp,
@@ -54,7 +63,7 @@ function preallocate_params(system::DFTSystem{<:HomogcPCPSAFTModel})
         (assoc_icomp_v, assoc_jcomp_v, assoc_isite_v, assoc_jsite_v,
          assoc_eps_v, assoc_kap_v, assoc_sig3_v, assoc_dij_v,
          n_sites_flat_v, n_sites_cumsum_v, total_sites
-        ) = pack_assoc_params(ppcmodel, system.species.size)
+        ) = pack_assoc_params(ppcmodel, HSd_local, sigma_local)
 
         nc_model         = length(ppcmodel)
         ia_global_v      = [n_sites_cumsum_v[assoc_icomp_v[p]] + assoc_isite_v[p] for p in 1:nn]

@@ -14,7 +14,7 @@ function PlotlyJS.plot(system::cDFT.DFTSystem, structure::cDFT.DFTStructure1DCar
 
     bounds = structure.bounds
 
-    z = cDFT.uniform_range(structure)
+    z = cDFT.uniform_range(structure, 1)
     L = cDFT.length_scale(model)
 
     colors = ["rgb(31, 119, 180, 1)",

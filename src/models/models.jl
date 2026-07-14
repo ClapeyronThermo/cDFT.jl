@@ -3,9 +3,65 @@ import Clapeyron: a_res
 _kernel_type(system::AbstractcDFTSystem) = typeof(system.model)
 _kernel_type(system::DGTSystem)          = typeof(system)
 
+"""
+    length_scale(model::EoSModel)
+
+Obtains the maximum length scale in the model and helps define the dimensions of the DFT system. This is typically equal to the size of the largest bead.
+"""
+function length_scale end
+
+"""
+    get_species(model::EoSModel, structure::DFTStructure)
+
+For a given `model` and `structure`, define the relevant parameters for each species. These structs will contain additional information not present by default in the inital `model`, such as the bead size, the number of beads and the connectivity of the beads.
+"""
+function get_species end
+
+"""
+    get_propagator(model::EoSModel, species::DFTSpecies, structure::DFTStructure)
+
+For a given `model`, return the relevant propagator structure.
+"""
+function get_propagator end
+
 include("BasicIdeal.jl")
 include("DFT/dft.jl")
 include("DGT/dgt.jl")
+include("SCFT/scft.jl")
+
+"""
+    _energy_scale(system)
+
+Compensating factor for `F_res`'s integrated scalar, for systems whose `get_fields`/
+`preallocate_params` build their weighted-density kernels in reduced (length-scale-divided)
+units (PC-SAFT and all its PCSAFTModel-hierarchy variants — PCPSAFT, QPCPSAFT,
+pharmaPCSAFT, HomogcPCPSAFT, HeterogcPCPSAFT — plus SAFT-VR Mie, SAFTγMie, COFFEE, and PeTS
+— see PCSAFT.jl's `get_fields` docstring). Reduced units make the per-point integrand `L^3`
+times too large (a pure change-of-variables artifact, exact for any `ρ`), so `F_res`
+divides by this. Defaults to `1.0` (no-op) for every other system. Every PCSAFTModel
+subtype shares this one `DFTSystem{<:Clapeyron.PCSAFTModel}` dispatch — no per-variant
+override needed, but that also means any *new* PCSAFTModel-hierarchy variant added later
+must get matching reduced-units treatment in its own `get_fields`/`preallocate_params`, or
+it will silently inherit this correction while still computing raw-unit kernels.
+
+Dispatches on the *system* type, not just the model, so that `DGTSystem` — which wraps the
+same Clapeyron models (e.g. `DGTSystem{<:PCSAFTModel}` in `test_dgt.jl`) but builds its own,
+structurally different reduced-units treatment (`dgt.jl`'s `f_res`/`preallocate_params`: no
+weighted-density convolution kernels, just `density_scale=L` on the `:ρ`/`:∇ρ` smoothing
+fields plus a `κ/L^3` rescale — see `dgt.jl`'s `f_res` docstring) — can't inherit a
+`DFTSystem`-specific per-model-type correction via shared model-type dispatch.
+`DGTSystem{<:PCSAFTModel}` is a distinct outer type from `DFTSystem{<:PCSAFTModel}`, so it
+never matches the `DFTSystem{<:...}`-dispatched methods above; it gets its own blanket
+override below instead (every `DGTSystem` uses reduced units the same way, regardless of
+which Clapeyron model it wraps, unlike `DFTSystem`'s per-model-type kernel differences).
+"""
+_energy_scale(system) = 1.0
+_energy_scale(system::DFTSystem{<:Clapeyron.PCSAFTModel})       = length_scale(system.model)^3
+_energy_scale(system::DFTSystem{<:Clapeyron.SAFTVRMieModel})    = length_scale(system.model)^3
+_energy_scale(system::DFTSystem{<:Clapeyron.SAFTgammaMieModel}) = length_scale(system.model)^3
+_energy_scale(system::DFTSystem{<:Clapeyron.COFFEEModel})       = length_scale(system.model)^3
+_energy_scale(system::DFTSystem{<:Clapeyron.PeTSModel})         = length_scale(system.model)^3
+_energy_scale(system::DGTSystem)                                = length_scale(system.model)^3
 
 """
     F_res(system::DFTSystem, ρ)
@@ -17,7 +73,7 @@ function F_res(system::Union{DFTSystem, DGTSystem}, ρ)
     δfδρ_res, cache_model, _, _ = preallocate(system, ρ)
     δFδρ_res!(system, ρ, δfδρ_res, cache_model...)
     f_val = cache_model[9]
-    return ∫(f_val, system.structure)
+    return ∫(f_val, system.structure) / _energy_scale(system)
 end
 
 """
@@ -54,8 +110,9 @@ end
               params, f_val, δf_val, nc, nd[, fwd_cache])
 
 Enzyme/KernelAbstractions-based functional derivative evaluation. Runs on CPU or GPU
-depending on `system.options.device`. When `system.options.ad_mode === :forward`,
-`fwd_cache` must be the `(dn_seeds, df_outs, Val(BATCH))` tuple from `preallocate_model`.
+depending on `system.options.device`. When `system.options.ad_mode` is `:forward` or
+`:forward_batch`, `fwd_cache` must be the `(dn_seeds, df_outs, Val(BATCH))` tuple from
+`preallocate_model`.
 """
 function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
                    n, δf, fft_buf, in_buf, out_buf, P, iP,
@@ -71,7 +128,7 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
     synchronize(backend)
     copyto!(n, fft_buf)
 
-    if system.options.ad_mode === :forward
+    if system.options.ad_mode === :forward_batch
         dn_seeds, df_outs, BATCH_val = fwd_cache
         fill!(δf, 0)
         kernel_fwd_batch = δf_fwd_batch_kernel!(backend)
@@ -83,7 +140,22 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
             k = (f_idx - 1) * nc + c_idx
             selectdim(selectdim(δf, nd+1, f_idx), nd+1, c_idx) .= df_outs[k]
         end
-    else  # :reverse (default)
+    elseif system.options.ad_mode === :forward
+        dn_seeds, df_outs, _ = fwd_cache
+        fill!(δf, 0)
+        kernel_fwd = δf_fwd_kernel!(backend)
+        for k in eachindex(dn_seeds)
+            fill!(df_outs[k], 0)
+            kernel_fwd(df_outs[k], n, f_val, dn_seeds[k], params, temperature,
+                       Val(NF), Val(NB), Val(nc), Val(nd), M,
+                       ndrange = ngrid)
+        end
+        synchronize(backend)
+        for f_idx in 1:NF, c_idx in 1:nc
+            k = (f_idx - 1) * nc + c_idx
+            selectdim(selectdim(δf, nd+1, f_idx), nd+1, c_idx) .= df_outs[k]
+        end
+    elseif system.options.ad_mode === :reverse
         fill!(δf_val, 1)
         fill!(δf, 0)
         kernel_rev = δf_rev_kernel!(backend)
@@ -91,6 +163,8 @@ function δFδρ_res!(system::AbstractcDFTSystem, ρ, δfδρ_res,
                    Val(NF), Val(NB), Val(nc), Val(nd), M,
                    ndrange = ngrid)
         synchronize(backend)
+    else
+        error("Unknown ad_mode $(system.options.ad_mode); expected :forward, :forward_batch, or :reverse")
     end
 
     copyto!(fft_buf, δf)
@@ -143,7 +217,7 @@ function preallocate_model(system::DFTSystem, ρ)
 
     params, nc = preallocate_params(system)
 
-    if system.options.ad_mode === :forward
+    if system.options.ad_mode === :forward || system.options.ad_mode === :forward_batch
         batch = nf * nc
         dn_seeds = ntuple(Val(batch)) do k
             f_idx = (k - 1) ÷ nc + 1
@@ -188,7 +262,7 @@ function preallocate_model(system::ElectrolyteDFTSystem, ρ)
     params, nc = preallocate_params(system)
 
     # Electrolyte uses its own f_res path; forward-mode batch not yet supported
-    if system.options.ad_mode === :forward
+    if system.options.ad_mode === :forward || system.options.ad_mode === :forward_batch
         batch = nf * nc
         dn_seeds = ntuple(Val(batch)) do k
             f_idx = (k - 1) ÷ nc + 1
@@ -205,6 +279,44 @@ function preallocate_model(system::ElectrolyteDFTSystem, ρ)
     end
 
     return n, δf, fft_buf, in_buf, out_buf, plan, iplan, params, f_val, δf_val, nc, nd, fwd_cache
+end
+
+"""
+    preallocate_model(system::SCFTSystem, ρ; quadrature::Symbol=:trapz)
+
+SCFT's `preallocate_model` counterpart to the generic DFT-family `preallocate_model`
+(`src/models/models.jl`), called by the universal `preallocate(system, ρ)`
+(`src/base/devices.jl`). Bundles everything `get_new_profile!`/`converge!` need each
+iteration besides the propagator buffers and the main field array `δfδρ_res` (SCFT's `w`):
+a second field buffer `w_new`, quadrature weights/`V_eff`, the bulk field `w_bulk`, a
+`compute_fields!` scratch buffer, and per-species `exp_field`/`inv_exp_field` caches.
+
+`quadrature` is a solve-time choice (not a system invariant), so it's accepted as a keyword
+here and forwarded from `preallocate(system, ρ; quadrature=...)`.
+"""
+function preallocate_model(system::SCFTSystem, ρ; quadrature::Symbol=:trapz)
+    nd  = dimension(system)
+    nspecies_ = nspecies(system)
+    dz  = structure_dz(system.structure)
+
+    w_new = similar(ρ)
+
+    weights = if quadrature == :trapz
+        trapz_weights(system.structure.ngrid, dz, system.options)
+    elseif quadrature == :simpson
+        simpson_weights(system.structure.ngrid, dz, system.options)
+    else
+        error("Unknown quadrature rule: $quadrature. Use :trapz or :simpson.")
+    end
+    V_eff = sum(weights)
+
+    w_bulk = compute_bulk_fields(system.model, compute_bulk_densities(system))
+
+    scratch       = similar(selectdim(w_new, nd+1, 1))
+    exp_field     = [similar(selectdim(w_new, nd+1, 1)) for _ in 1:nspecies_]
+    inv_exp_field = [similar(selectdim(w_new, nd+1, 1)) for _ in 1:nspecies_]
+
+    return (; w_new, weights, V_eff, w_bulk, scratch, exp_field, inv_exp_field)
 end
 
 function length_scales(model::EoSModel)
@@ -283,3 +395,7 @@ receives ∂f_res(n[kk,:])/∂n[kk, f_k, c_k].
         Const(params), Const(temperature), Const(Val(NC)), Const(Val(ND))
     )
 end
+
+export length_scale
+export expand_groups, expand_model
+export get_species, get_propagator

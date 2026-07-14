@@ -4,12 +4,18 @@ import Enzyme.EnzymeRules
 # ── GPU/Enzyme-compatible association support ───────────────────────────────
 
 """
-    pack_assoc_params(model, HSd) -> NamedTuple
+    pack_assoc_params(model, HSd, sigma=model.params.sigma.values) -> NamedTuple
 
 Pack Clapeyron's sparse association parameters into flat GPU-compatible vectors.
 Returns flat vectors for each association pair and per-site data.
+
+`sigma` defaults to the model's raw (physical-units) pair diameters, but callers that have
+rescaled `HSd` into some other length unit (e.g. PC-SAFT's reduced-units path, which divides
+`HSd` by `length_scale(model)`) must pass the identically-rescaled `sigma` too, so `assoc_sig3`
+and `assoc_dij` stay dimensionally consistent with the `HSd`-derived weighted densities
+`f_assoc` consumes them alongside.
 """
-function pack_assoc_params(model, HSd)
+function pack_assoc_params(model, HSd, sigma=model.params.sigma.values)
     sites = Clapeyron.getsites(model)
     n_sites_per_comp = [length(sites.n_sites[i]) for i in 1:length(model)]
     total_sites      = sum(n_sites_per_comp)
@@ -22,7 +28,6 @@ function pack_assoc_params(model, HSd)
 
     eps_vals = model.params.epsilon_assoc.values
     kap_vals = model.params.bondvol.values
-    sigma    = model.params.sigma.values
 
     for idx in 1:length(eps_vals.values)
         i, j = eps_vals.outer_indices[idx]
@@ -51,7 +56,7 @@ function pack_assoc_params(model, HSd)
 end
 
 """
-    pack_assoc_params_gc(model, HSd)
+    pack_assoc_params_gc(model, HSd, sigma=model.params.sigma.values)
 
 Like `pack_assoc_params` but for group-contribution models (HeterogcPCPSAFT, SAFTgammaMie)
 where `epsilon_assoc.outer_indices` are *species* (molecular) indices rather than group/bead
@@ -61,10 +66,12 @@ the global bead/group index, then builds `n_sites_cumsum` and `n_sites_flat` ove
 Returns bead indices in `assoc_icomp/jcomp` (for n₀ indexing in `f_assoc`) and species
 indices in `assoc_ispec/jspec` (needed by SAFTgammaMie `_assoc_delta` for Tr via
 `params.epsilon_species`).
+
+`sigma` defaults to the model's raw pair diameters; see `pack_assoc_params` for why
+callers that rescale `HSd` must pass an identically-rescaled `sigma`.
 """
-function pack_assoc_params_gc(model, HSd)
+function pack_assoc_params_gc(model, HSd, sigma=model.params.sigma.values)
     sites    = Clapeyron.getsites(model)
-    sigma    = model.params.sigma.values
     eps_vals = model.params.epsilon_assoc.values
     kap_vals = model.params.bondvol.values
 
@@ -157,7 +164,7 @@ end
     inv1n3 = one(FP) / (one(FP) - n3_mix)
     g_hs   = inv1n3 + FP(0.5)*dij_p*xi_mix*n2_mix*inv1n3^2 +
              dij_p*dij_p*n2_mix*n2_mix*xi_mix*(inv1n3^3)/18
-    return g_hs * params.assoc_sig3[p] * expm1(params.assoc_eps[p]/T) * params.assoc_kap[p]
+    return g_hs * params.assoc_sig3[p] * (exp(params.assoc_eps[p]/T)-1) * params.assoc_kap[p]
 end
 
 # ── @generated tuple-construction helpers ────────────────────────────────────

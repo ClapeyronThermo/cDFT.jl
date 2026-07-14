@@ -9,7 +9,7 @@
     ρbulk = [1/vl]
     L = cDFT.length_scale(model)
 
-    letters = unique(first.(split.(model.groups.flattenedgroups, "_")))
+    letters = String.(unique(first.(split.(model.groups.flattenedgroups, "_"))))
     @test length(letters) >= 2
     core = [letters[1]]
 

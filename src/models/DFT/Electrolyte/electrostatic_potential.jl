@@ -36,7 +36,7 @@ function ElectrostaticPotential(model::ElectrolyteModel, structure::DFTStructure
 end
 
 """
-    ElectrostaticPotential(model, structure::Union{DFTStructureSphr,DFTStructureCyl}, backend, FP)
+    ElectrostaticPotential(model, structure::DFTStructure{N,Union{Cylindrical,Spherical}}, backend, FP)
 
 Spherical/cylindrical (QDHT-based) counterpart of the Cartesian `ElectrostaticPotential`
 constructor above. Reuses the same 3D-isotropic Coulomb Green's-function kernel formula
@@ -45,7 +45,7 @@ slice of the isotropic 3D Coulomb kernel, which has the same functional form, so
 rescaling is needed between the spherical and cylindrical cases. `ω̄=0` never occurs on
 the QDHT grid, so the Cartesian version's zero-mode mask is unnecessary here.
 """
-function ElectrostaticPotential(model::ElectrolyteModel, structure::Union{DFTStructureSphr,DFTStructureCyl}, backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+function ElectrostaticPotential(model::ElectrolyteModel, structure::Union{DFTStructByCoord{Cylindrical},DFTStructByCoord{Spherical}}, backend::Backend, ::Type{FP}=Float64) where {FP<:AbstractFloat}
     backend isa CPU || error("Spherical/cylindrical coordinate systems are CPU-only for now")
     (_, temperature) = structure.conditions
     ρbulk = structure.ρbulk
@@ -64,7 +64,7 @@ function evaluate_external_field!(structure::DFTStructure,external_field::Electr
     Z = model.charge
     ngrid = structure.ngrid
     bounds = structure.bounds
-    L = bounds[2] - bounds[1]
+    L = [bounds[i][2]-bounds[i][1] for i in 1:length(bounds)]
     Vol = prod(L)
     nbeads = length(Z)
     nd = length(ngrid)
@@ -88,7 +88,7 @@ function evaluate_external_field!(structure::DFTStructure,external_field::Electr
     end
 end
 
-function find_ψ_const(structure::DFTStructure,external_field::ElectrostaticPotentialModel,model::ElectrolyteModel,ρ::Array{Float64})
+function find_ψ_const(structure::DFTStructure,external_field::ElectrostaticPotentialModel,model::ElectrolyteModel,ρ)
     Z = model.charge
     nbeads = length(Z)
     nd = length(structure.ngrid)
