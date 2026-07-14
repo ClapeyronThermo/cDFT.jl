@@ -78,9 +78,12 @@ Takes `m̄` and `ηd` from f_disp output.
 
     res_polar = zero(FP)
     if has_polar
+        # `-π*x` and `-4*π*π/3` (Int/Irrational combos before touching an FP value)
+        # promote to Float64, unlike `x*π`/`π*x` for x::FP — see PCSAFT.jl's f_disp.
+        _π      = FP(π)
         ψ       = FP(1.3862)
         idx_ρz  = 6 + ND
-        factor  = 3 / (4*ψ*ψ*ψ*π)
+        factor  = 3 / (4*ψ*ψ*ψ*_π)
         ∑ρ̄_p = zero(FP)
         @inbounds for i in 1:NC
             ∑ρ̄_p += n[kk, idx_ρz, i] * factor / (params.HSd[i]*params.HSd[i]*params.HSd[i])
@@ -102,7 +105,7 @@ Takes `m̄` and `ηd` from f_disp output.
                 _A₂ += xᵢ * xⱼ * dip2_i * dip2_j / σij3 * _J2_ij
             end
         end
-        _A₂ *= -π * ∑ρ̄_p / (T*T)
+        _A₂ *= -_π * ∑ρ̄_p / (T*T)
 
         if abs(_A₂) > 0
             _A₃ = zero(FP)
@@ -127,7 +130,7 @@ Takes `m̄` and `ηd` from f_disp output.
                     end
                 end
             end
-            _A₃ *= -4*π*π/3 * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
+            _A₃ *= -4*_π*_π/3 * ∑ρ̄_p*∑ρ̄_p / (T*T*T)
 
             denom_p = _A₂ - _A₃
             res_polar = ∑ρ̄_p * _A₂*_A₂ / denom_p
@@ -176,15 +179,24 @@ function preallocate_params(system::DFTSystem{<:PCPSAFTModel})
     dd_a_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_a[i][j]), 3), 5)
     dd_b_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_b[i][j]), 3), 5)
     dd_c_fp = ntuple(i -> ntuple(j -> FP(DD_consts.corr_c[i][j]), 3), 5)
+
+    # Reduced units: divide every length-dimensioned parameter by L so it matches the
+    # `get_fields`-side kernel rescaling (inherited from PCSAFT.jl). See PCSAFT.jl's
+    # `get_fields`/`preallocate_params` docstrings for the full picture.
+    L               = length_scale(model)
+    HSd_local       = system.species.size ./ L
+    sigma_local     = model.params.sigma.values ./ L
+    pcp_sigma_local = pcp_sigma(model) ./ L
+
     base = (;
-        HSd         = adapt_to_device(backend, FP, system.species.size),
+        HSd         = adapt_to_device(backend, FP, HSd_local),
         m           = adapt_to_device(backend, FP, model.params.segment.values),
-        sigma       = adapt_to_device(backend, FP, model.params.sigma.values),
+        sigma       = adapt_to_device(backend, FP, sigma_local),
         epsilon     = adapt_to_device(backend, FP, model.params.epsilon.values),
         pcp_m       = adapt_to_device(backend, FP, pcp_segment(model)),
-        pcp_sigma   = adapt_to_device(backend, FP, pcp_sigma(model)),
+        pcp_sigma   = adapt_to_device(backend, FP, pcp_sigma_local),
         pcp_epsilon = adapt_to_device(backend, FP, pcp_epsilon(model)),
-        dipole2     = adapt_to_device(backend, FP, pcp_dipole2(model)),
+        dipole2     = adapt_to_device(backend, FP, pcp_dipole2(model) ./ (L*L*L)),
         dd_a        = dd_a_fp,
         dd_b        = dd_b_fp,
         dd_c        = dd_c_fp,
@@ -195,7 +207,7 @@ function preallocate_params(system::DFTSystem{<:PCPSAFTModel})
         (assoc_icomp_v, assoc_jcomp_v, assoc_isite_v, assoc_jsite_v,
          assoc_eps_v, assoc_kap_v, assoc_sig3_v, assoc_dij_v,
          n_sites_flat_v, n_sites_cumsum_v, total_sites
-        ) = pack_assoc_params(model, system.species.size)
+        ) = pack_assoc_params(model, HSd_local, sigma_local)
 
         nc_model         = length(model)
         ia_global_v      = [n_sites_cumsum_v[assoc_icomp_v[p]] + assoc_isite_v[p] for p in 1:nn]

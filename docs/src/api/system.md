@@ -14,4 +14,5 @@ Depth = 1
 cDFT.DFTSystem
 cDFT.DGTSystem
 cDFT.ElectrolyteDFTSystem
+cDFT.SCFTSystem
 ```

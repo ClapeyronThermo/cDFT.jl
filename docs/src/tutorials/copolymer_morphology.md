@@ -152,3 +152,7 @@ they don't search for the equilibrium domain spacing itself (that would require 
 the box size, or letting the pattern emerge dynamically). For the latter, starting from a
 near-uniform profile and letting the microphase pattern emerge on its own under
 [Dynamic DFT](@ref) is often more robust than assuming a symmetry up front.
+
+For the same morphologies via mean-field `w_α(r)` species fields instead of a
+particle-based free-energy functional — substantially cheaper for large, flexible chain
+architectures — see [Self-Consistent Field Theory](@ref "Self-Consistent Field Theory").

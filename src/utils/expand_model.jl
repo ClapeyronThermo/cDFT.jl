@@ -23,6 +23,13 @@ function expand_model(model::MODEL,
                                 model.references)
 end
 
+function expand_model(model,::Nothing)
+    if !Clapeyron.has_groups(model)
+        return model
+    end
+    return expand_model(model,Dict{String,MolStructure}())
+end
+
 function expand_groups(model,
         mol_structure::Dict{String,<:MolStructure} = Dict{String,MolStructure}())
     nspecies = length(model)

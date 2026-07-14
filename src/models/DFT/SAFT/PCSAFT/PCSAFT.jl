@@ -17,32 +17,51 @@ struct PCSAFTSpecies <: DFTSpecies
 end
 
 """
+    _scaled_ω(ω, L, ::Type{FP})
+
+Rescale a `structure_ω` result by the reduced-units length scale `L`, matching the
+`width → width/L` rescale applied to weighted-density kernel widths elsewhere in
+`get_fields` — together these leave the `ω̄*R` trig argument inside each kernel's closed
+form exactly invariant (see `length_scale`/reduced-units design notes on `PCSAFTSpecies`).
+Dispatches on whether `structure_ω` returned a plain (Cartesian FFT) array or a
+`RadialFrequency` (spherical/cylindrical QDHT) wrapper, since the latter can't be scaled
+by a bare broadcast multiply.
+"""
+_scaled_ω(ω::AbstractArray, L, ::Type{FP}) where FP<:AbstractFloat = ω .* FP(L)
+_scaled_ω(ω::RadialFrequency, L, ::Type{FP}) where FP<:AbstractFloat = RadialFrequency(ω.Q, ω.ω̄ .* FP(L))
+
+"""
     get_fields(model::EoSModel, species::DFTSpecies, structure::DFTStructure)
 
 For a given `model`, obtain all of the fields that will be needed to perform the DFT calculation. This function should return a vector of `DFTField`s.
+
+Builds every weighted-density kernel in **reduced units**: lengths (`sigma`, `HSd`-derived
+widths) are divided by `L = length_scale(model)`. `ω`-rescaling and the `density_scale`/
+`N_A*L^3` compensation now happen internally inside `SWeightedDensity`/`VWeightedDensity`
+(they take `model` directly and compute `L` themselves) — together these keep every
+intermediate weighted-density value near O(1) regardless of floating-point precision. See
+`preallocate_params` for the matching `HSd`/`sigma` rescale applied to the parameters
+consumed directly (unconvolved) by `f_hc`/`f_disp`, and `F_res` for the compensating
+`1/L^3` applied to the returned scalar free energy.
 """
-function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
+function get_fields(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure, device::Backend, ::Type{FP}) where FP<:AbstractFloat
     nc = length(model)
     ngrid = structure.ngrid
     #f = [ngrid[i]/(structure.bounds[i,2]-structure.bounds[i,1]) for i in 1:length(ngrid)]
+    L = length_scale(model)
     ω = structure_ω(structure, device, FP)
     ψ = 1.3862
-    d = species.size
-    return [SWeightedDensity(:ρ,zeros(nc),ω,ngrid,device),
-            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device),
-            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,device),
-            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,device),
-            SWeightedDensity(:∫ρz²dz,d,ω,ngrid,device),
-            SWeightedDensity(:∫ρdz,d,ω,ngrid,device),
-            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device)]
+    d = species.size ./ L
+    return (SWeightedDensity(:ρ,zeros(nc),ω,ngrid,device,model),
+            SWeightedDensity(:∫ρdz,0.5*d,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρz²dz,0.5*d,ω,ngrid,device,model),
+            VWeightedDensity(:∫ρzdz,0.5*d,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρz²dz,d,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρdz,d,ω,ngrid,device,model),
+            SWeightedDensity(:∫ρz²dz,d .* ψ,ω,ngrid,device,model))
 end
 
 
-"""
-    get_species(model::EoSModel, structure::DFTStructure)
-
-For a given `model` and `structure`, define the relevant parameters for each species. These structs will contain additional information not present by default in the inital `model`, such as the bead size, the number of beads and the connectivity of the beads.
-"""
 function get_species(model::PCSAFTModel,structure::DFTStructure)
     (pressure, temperature) = structure.conditions
     ρbulk = structure.ρbulk
@@ -52,25 +71,14 @@ function get_species(model::PCSAFTModel,structure::DFTStructure)
     return PCSAFTSpecies(ones(Int64,nc),size,ρbulk,μres)
 end
 
-"""
-    get_propagator(model::EoSModel, species::DFTSpecies, structure::DFTStructure)
 
-For a given `model`, define the relevant propagator. 
-"""
 function get_propagator(model::PCSAFTModel, species::DFTSpecies, structure::DFTStructure, backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     return IdealPropagator()
 end
 
-"""
-    length_scale(model::EoSModel)
-
-Obtains the maximum length scale in the model and helps define the dimensions of the DFT system. This is typically equal to the size of the largest bead.
-"""
 function length_scale(model::SAFTModel)
     return maximum(model.params.sigma.values)
 end
-
-export length_scale
 
 # ── Enzyme / KernelAbstractions kernel support ──────────────────────────────
 # These constants are GPU-safe (no heap allocation, no Clapeyron calls).
@@ -145,9 +153,13 @@ Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the po
     HSd    = params.HSd
     sigma  = params.sigma
     epsilon = params.epsilon
+    # `-2*π` (Int*Irrational, negated) promotes to Float64 before ever touching an FP
+    # value, unlike `π*x`/`x*π` for x::FP — see line below (`res_disp`) where this
+    # otherwise silently makes the return value Float64.
+    _π     = FP(π)
     ψ      = FP(1.3862)
     idx_ρz = 6 + ND
-    factor = 3 / (4*ψ*ψ*ψ*π)
+    factor = 3 / (4*ψ*ψ*ψ*_π)
 
     ρ̄z_sum=zero(FP); m̄_top=zero(FP); η_sum=zero(FP)
     @inbounds for i in 1:NC
@@ -157,7 +169,7 @@ Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the po
         η_sum  += m[i] * ρ̄zi * HSd[i]*HSd[i]*HSd[i]
     end
     m̄  = m̄_top / ρ̄z_sum
-    ηd = η_sum * π / 6
+    ηd = η_sum * _π / 6
 
     m2ϵσ3_1=zero(FP); m2ϵσ3_2=zero(FP)
     @inbounds for i in 1:NC
@@ -171,7 +183,8 @@ Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the po
         end
     end
     ηd2    = ηd*ηd
-    ηd4    = (one(FP)-ηd)^4
+    m1ηd   = one(FP)-ηd
+    ηd4    = m1ηd*m1ηd*m1ηd*m1ηd
     inv1ηd = one(FP)/(one(FP)-ηd)
     inv2ηd = one(FP)/(2-ηd)
     C₁     = one(FP) + m̄*(8*ηd-2*ηd2)/ηd4 +
@@ -179,23 +192,22 @@ Returns `(res_disp, m̄, ηd)` — m̄ and ηd are reused by PCP-SAFT for the po
               inv1ηd*inv1ηd*inv2ηd*inv2ηd
     I₁     = I_lite(PCSAFT_CORR1, m̄, ηd)
     I₂     = I_lite(PCSAFT_CORR2, m̄, ηd)
-    res_disp = -2*π*I₁*m2ϵσ3_1 - π*m̄*I₂*m2ϵσ3_2 / C₁
+    res_disp = -2*(_π*I₁*m2ϵσ3_1) - _π*m̄*I₂*m2ϵσ3_2 / C₁
     return res_disp, m̄, ηd
 end
 
 @inline function I_lite(corr, m̄, η)
-    T  = typeof(m̄)
-    res = zero(T)
+    FP = typeof(m̄)
     m2 = (m̄ - 1) / m̄
     m3 = m2 * (m̄ - 2) / m̄
-    c1 = corr[1]; res += (T(c1[1]) + m2*T(c1[2]) + m3*T(c1[3]))
-    c2 = corr[2]; res += (T(c2[1]) + m2*T(c2[2]) + m3*T(c2[3])) * η
-    c3 = corr[3]; res += (T(c3[1]) + m2*T(c3[2]) + m3*T(c3[3])) * η * η
-    c4 = corr[4]; res += (T(c4[1]) + m2*T(c4[2]) + m3*T(c4[3])) * η * η * η
-    c5 = corr[5]; res += (T(c5[1]) + m2*T(c5[2]) + m3*T(c5[3])) * η * η * η * η
-    c6 = corr[6]; res += (T(c6[1]) + m2*T(c6[2]) + m3*T(c6[3])) * η * η * η * η * η
-    c7 = corr[7]; res += (T(c7[1]) + m2*T(c7[2]) + m3*T(c7[3])) * η * η * η * η * η * η
-    return res
+    c1 = corr[1]; a1 = FP(c1[1]) + m2*FP(c1[2]) + m3*FP(c1[3])
+    c2 = corr[2]; a2 = FP(c2[1]) + m2*FP(c2[2]) + m3*FP(c2[3])
+    c3 = corr[3]; a3 = FP(c3[1]) + m2*FP(c3[2]) + m3*FP(c3[3])
+    c4 = corr[4]; a4 = FP(c4[1]) + m2*FP(c4[2]) + m3*FP(c4[3])
+    c5 = corr[5]; a5 = FP(c5[1]) + m2*FP(c5[2]) + m3*FP(c5[3])
+    c6 = corr[6]; a6 = FP(c6[1]) + m2*FP(c6[2]) + m3*FP(c6[3])
+    c7 = corr[7]; a7 = FP(c7[1]) + m2*FP(c7[2]) + m3*FP(c7[3])
+    return evalpoly(η, (a1, a2, a3, a4, a5, a6, a7))
 end
 
 function preallocate_params(system::DFTSystem{<:PCSAFTModel})
@@ -203,10 +215,16 @@ function preallocate_params(system::DFTSystem{<:PCSAFTModel})
     FP      = fptype(system.options)
     model   = system.model
 
+    # Reduced units: divide every length-dimensioned parameter by L so it matches the
+    # `get_fields`-side kernel rescaling. See `get_fields`'s docstring for the full picture.
+    L           = length_scale(model)
+    HSd_local   = system.species.size ./ L
+    sigma_local = model.params.sigma.values ./ L
+
     base = (;
-        HSd     = adapt_to_device(backend, FP, system.species.size),
+        HSd     = adapt_to_device(backend, FP, HSd_local),
         m       = adapt_to_device(backend, FP, model.params.segment.values),
-        sigma   = adapt_to_device(backend, FP, model.params.sigma.values),
+        sigma   = adapt_to_device(backend, FP, sigma_local),
         epsilon = adapt_to_device(backend, FP, model.params.epsilon.values),
     )
 
@@ -215,7 +233,7 @@ function preallocate_params(system::DFTSystem{<:PCSAFTModel})
         (assoc_icomp_v, assoc_jcomp_v, assoc_isite_v, assoc_jsite_v,
          assoc_eps_v, assoc_kap_v, assoc_sig3_v, assoc_dij_v,
          n_sites_flat_v, n_sites_cumsum_v, total_sites
-        ) = pack_assoc_params(model, system.species.size)
+        ) = pack_assoc_params(model, HSd_local, sigma_local)
 
         # Integer index arrays stored as NTuples so Enzyme treats them as
         # truly-immutable Const data (avoids EnzymeRuntimeActivityError from

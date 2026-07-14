@@ -23,7 +23,7 @@ end
 
 # Coordinate arrays shifted to start at 0 (one per dimension, each already broadcast to the
 # full ngrid shape via get_coords), plus the box length along each dimension.
-function _morph_coords(structure::DFTStructure)
+function _morph_coords(structure::DFTStructByType{<:BlockCopolymerMorphology})
     nd = dimension(structure)
     Z = get_coords(structure)
     lb_ub = ntuple(d -> bounds(structure,d), nd)
@@ -32,41 +32,45 @@ function _morph_coords(structure::DFTStructure)
     return coords, Ls
 end
 
-function lamellar_ψ(structure::DFTStructure)
+function lamellar_ψ(structure)
     coords, Ls = _morph_coords(structure)
     X, Lx = coords[1], Ls[1]
-    return @. cos(2π*X/Lx)
+    n = structure.topology.periods
+    return @. cos(2π*n*X/Lx)
 end
 
-function hex_ψ(structure::DFTStructure)
+function hex_ψ(structure)
     coords, Ls = _morph_coords(structure)
     X, Y = coords[1], coords[2]
     Lx, Ly = Ls[1], Ls[2]
-    return @. (1/3)*(cos(2π*(X/Lx + Y/Ly)) + cos(2π*(X/Lx - Y/Ly)) + cos(4π*Y/Ly))
+    n = structure.topology.periods
+    return @. (1/3)*(cos(2π*n*(X/Lx + Y/Ly)) + cos(2π*n*(X/Lx - Y/Ly)) + cos(4π*n*Y/Ly))
 end
 
-function bcc_ψ(structure::DFTStructure)
+function bcc_ψ(structure)
     coords, Ls = _morph_coords(structure)
     X, Y, Z = coords
     L = Ls[1]
-    return @. (1/6)*(cos(2π*(X+Y)/L) + cos(2π*(X-Y)/L) +
-                      cos(2π*(Y+Z)/L) + cos(2π*(Y-Z)/L) +
-                      cos(2π*(Z+X)/L) + cos(2π*(Z-X)/L))
+    n = structure.topology.periods
+    return @. (1/6)*(cos(2π*n*(X+Y)/L) + cos(2π*n*(X-Y)/L) +
+                      cos(2π*n*(Y+Z)/L) + cos(2π*n*(Y-Z)/L) +
+                      cos(2π*n*(Z+X)/L) + cos(2π*n*(Z-X)/L))
 end
 
-function gyroid_ψ(structure::DFTStructure)
+function gyroid_ψ(structure)
     coords, Ls = _morph_coords(structure)
     X, Y, Z = coords
     L = Ls[1]
-    return @. (sin(2π*X/L)*cos(2π*Y/L) + sin(2π*Y/L)*cos(2π*Z/L) + sin(2π*Z/L)*cos(2π*X/L)) / 1.5
+    n = structure.topology.periods
+    return @. (sin(2π*n*X/L)*cos(2π*n*Y/L) + sin(2π*n*Y/L)*cos(2π*n*Z/L) + sin(2π*n*Z/L)*cos(2π*n*X/L)) / 1.5
 end
 
 # Shared fill: ρ_k = ρbulk[component] * (1 + amplitude * sign_k * ψ). amplitude < 1
 # guarantees strict positivity everywhere, regardless of ψ's local value.
-function _fill_morphology!(ρ, structure, model, device, ::Type{FP}, ψ) where FP<:AbstractFloat
-    sign = _domain_sign(model, structure.core_groups)
+function _fill_morphology!(ρ, structure::DFTStructByType{<:BlockCopolymerMorphology}, model, device, ::Type{FP}, ψ) where FP<:AbstractFloat
+    sign = _domain_sign(model, structure.topology.core_groups)
     ρbulk = structure.ρbulk
-    A = structure.amplitude
+    A = structure.topology.amplitude
     nd = dimension(structure)
     for i in @comps
         for j in @chain(i)
@@ -78,22 +82,12 @@ function _fill_morphology!(ρ, structure, model, device, ::Type{FP}, ψ) where F
     return ρ
 end
 
-function initialize_profiles(model::EoSModel, structure::Union{LamellarStack1DCart,LamellarStack2DCart,LamellarStack3DCart}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
-    ρ = allocate(device, FP, structure.ngrid..., sum(species.nbeads))
-    return _fill_morphology!(ρ, structure, model, device, FP, lamellar_ψ(structure))
-end
+morphology_ψ(structure::DFTStructByType{BlockCopolymerMorphology{:Lamellar}}) = lamellar_ψ(structure)
+morphology_ψ(structure::DFTStructByType{BlockCopolymerMorphology{:HexLattice}}) = hex_ψ(structure)
+morphology_ψ(structure::DFTStructByType{BlockCopolymerMorphology{:BodyCenteredCubic}}) = bcc_ψ(structure)
+morphology_ψ(structure::DFTStructByType{BlockCopolymerMorphology{:Gyroid}}) = gyroid_ψ(structure)
 
-function initialize_profiles(model::EoSModel, structure::Union{HexLattice2DCart,HexLattice3DCart}, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
+function initialize_profiles(model::EoSModel, structure::DFTStructure{N,Cartesian,<:BlockCopolymerMorphology}, species, device, ::Type{FP}=Float64) where {N,FP<:AbstractFloat}
     ρ = allocate(device, FP, structure.ngrid..., sum(species.nbeads))
-    return _fill_morphology!(ρ, structure, model, device, FP, hex_ψ(structure))
-end
-
-function initialize_profiles(model::EoSModel, structure::BCC3DCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
-    ρ = allocate(device, FP, structure.ngrid..., sum(species.nbeads))
-    return _fill_morphology!(ρ, structure, model, device, FP, bcc_ψ(structure))
-end
-
-function initialize_profiles(model::EoSModel, structure::Gyroid3DCart, species, device, ::Type{FP}=Float64) where FP<:AbstractFloat
-    ρ = allocate(device, FP, structure.ngrid..., sum(species.nbeads))
-    return _fill_morphology!(ρ, structure, model, device, FP, gyroid_ψ(structure))
+    return _fill_morphology!(ρ, structure, model, device, FP, morphology_ψ(structure))
 end

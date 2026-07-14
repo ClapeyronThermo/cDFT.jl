@@ -24,7 +24,7 @@ hero:
 features:
   - icon: ⚛️
     title: Many free-energy functionals
-    details: PC-SAFT, SAFT-VR Mie, SAFT-γ Mie, COFFEE, electrolytes and more, all sharing Clapeyron.jl's equations of state as the underlying bulk model
+    details: PC-SAFT, SAFT-VR Mie, SAFT-γ Mie, COFFEE, electrolytes, Self-Consistent Field Theory and more, all sharing Clapeyron.jl's equations of state as the underlying bulk model
     link: /models/saft
 
   - icon: 🧱

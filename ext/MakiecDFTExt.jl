@@ -1,9 +1,20 @@
 module MakiecDFTExt
 
 using cDFT
+using Adapt
 using Makie
 
 _maybe_texlabel(s, latex::Bool) = latex ? cDFT.texlabel(s) : s
+
+# `segment`/`size` convert a number-density profile to a dimensionless volume fraction
+# for segment-based (SAFT-style) models. SCFT's `SCFTLatticeFluid` has no such params —
+# its converged profiles are already volume fractions — so those models get norm_const=1.
+function _norm_const(species, model, i::Int, k::Int)
+    hasproperty(model.params, :segment) || return 1.0
+    return species.nbeads[i] > 1 ? model.params.segment[k]*species.size[k]^3*cDFT.N_A : model.params.segment[i]*species.size[i]^3*cDFT.N_A
+end
+
+_normalized_ylabel(model) = hasproperty(model.params, :segment) ? "ρσ³" : "φ"
 
 # ── Aggregation ("plot_by") / coloring ("color_by") ──────────────────────
 #
@@ -101,8 +112,9 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
     species = system.species
 
     bounds = structure.bounds
-    z = cDFT.uniform_range(structure)
+    z = cDFT.uniform_range(structure, 1)
     L = cDFT.length_scale(model)
+    _ρ = Adapt.adapt(CPU(), profiles)
 
     fig = Figure()
     ax = Axis(fig[1, 1];
@@ -121,16 +133,16 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
     end
 
     function bead_Y(i, k)
-        norm_const = species.nbeads[i] > 1 ? model.params.segment[k]*species.size[k]^3*cDFT.N_A : model.params.segment[i]*species.size[i]^3*cDFT.N_A
+        norm_const = _norm_const(species, model, i, k)
         if y_units == :normalized
-            return profiles[:,k].*norm_const
+            return _ρ[:,k].*norm_const
         elseif y_units == :mass
             Mw = model.params.Mw[k]
-            return profiles[:,k].*Mw/1e3
+            return _ρ[:,k].*Mw/1e3
         elseif y_units == :angstrom
-            return profiles[:,k].*cDFT.N_A/1e30
+            return _ρ[:,k].*cDFT.N_A/1e30
         else
-            return profiles[:,k]
+            return _ρ[:,k]
         end
     end
 
@@ -162,7 +174,7 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
     ax.xlabel = _maybe_texlabel("z / "*x_norm,latex)
 
     if y_units == :normalized
-        ax.ylabel = _maybe_texlabel("ρσ³",latex)
+        ax.ylabel = _maybe_texlabel(_normalized_ylabel(model),latex)
     elseif y_units == :mass
         ax.ylabel = _maybe_texlabel("ρ / (kg/m³)",latex)
     else
@@ -187,6 +199,8 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTSt
     z = cDFT.structure_r(structure)
     L = cDFT.length_scale(model)
 
+    _ρ = Adapt.adapt(CPU(), profiles)
+
     fig = Figure()
     ax = Axis(fig[1, 1];
         xgridvisible=false, ygridvisible=false,
@@ -204,16 +218,16 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTSt
     end
 
     function bead_Y(i, k)
-        norm_const = species.nbeads[i] > 1 ? model.params.segment[k]*species.size[k]^3*cDFT.N_A : model.params.segment[i]*species.size[i]^3*cDFT.N_A
+        norm_const = _norm_const(species, model, i, k)
         if y_units == :normalized
-            return profiles[:,k].*norm_const
+            return _ρ[:,k].*norm_const
         elseif y_units == :mass
             Mw = model.params.Mw[k]
-            return profiles[:,k].*Mw/1e3
+            return _ρ[:,k].*Mw/1e3
         elseif y_units == :angstrom
-            return profiles[:,k].*cDFT.N_A/1e30
+            return _ρ[:,k].*cDFT.N_A/1e30
         else
-            return profiles[:,k]
+            return _ρ[:,k]
         end
     end
 
@@ -245,7 +259,7 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTSt
     ax.xlabel = _maybe_texlabel("r / "*x_norm,latex)
 
     if y_units == :normalized
-        ax.ylabel = _maybe_texlabel("ρσ³",latex)
+        ax.ylabel = _maybe_texlabel(_normalized_ylabel(model),latex)
     elseif y_units == :mass
         ax.ylabel = _maybe_texlabel("ρ / (kg/m³)",latex)
     else
@@ -265,6 +279,7 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
 
     bounds = structure.bounds
 
+    _ρ = Adapt.adapt(CPU(), profiles)
     x = cDFT.uniform_range(structure,1)
     y = cDFT.uniform_range(structure,2)
     L = cDFT.length_scale(model)
@@ -293,8 +308,8 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
     end
 
     function bead_Z(i, k)
-        norm_const = species.nbeads[i] > 1 ? model.params.segment[k]*species.size[k]^3*cDFT.N_A : model.params.segment[i]*species.size[i]^3*cDFT.N_A
-        return profiles[:,:,k].*norm_const
+        norm_const = _norm_const(species, model, i, k)
+        return _ρ[:,:,k].*norm_const
     end
 
     groups = _plot_groups(species, model, plot_by)
@@ -345,6 +360,7 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
     structure = system.structure
     model = system.model
     species = system.species
+    _ρ = Adapt.adapt(CPU(), profiles)
 
     x = cDFT.uniform_range(structure,1)
     y = cDFT.uniform_range(structure,2)
@@ -375,8 +391,8 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
         zlabel=_maybe_texlabel("z / "*x_norm,latex))
 
     function bead_ρ(i, k)
-        norm_const = species.nbeads[i] > 1 ? model.params.segment[k]*species.size[k]^3*cDFT.N_A : model.params.segment[i]*species.size[i]^3*cDFT.N_A
-        return profiles[:,:,:,k].*norm_const
+        norm_const = _norm_const(species, model, i, k)
+        return _ρ[:,:,:,k].*norm_const
     end
 
     groups = _plot_groups(species, model, plot_by)

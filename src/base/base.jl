@@ -5,6 +5,17 @@ abstract type DFTPropagator end
 abstract type ExternalFieldModel end
 abstract type GradientModel end
 
+"""
+    AbstractcDFTSystem
+
+Supertype for every system cDFT.jl can converge via `converge!`: `DFTSystem`,
+`DGTSystem`, `ElectrolyteDFTSystem` (all defined below), and `SCFTSystem`
+(`src/models/SCFT/scft.jl`, loaded much later via `models/models.jl` — a real abstract
+type is required here, rather than a `Union`, since a `Union` literal can't forward-
+reference a type that doesn't exist yet at this point in the load order).
+"""
+abstract type AbstractcDFTSystem end
+
 const DB_PATH = normpath(Base.pkgdir(cDFT),"database")
 
 include("devices.jl")
@@ -35,7 +46,7 @@ DFTSystem
   device: CPU
 ```
 """
-struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,EF,P<:DFTPropagator,O<:DFTOptions,C}
+struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,EF,P<:DFTPropagator,O<:DFTOptions,C} <: AbstractcDFTSystem
     model::M
     species::S
     structure::T
@@ -46,39 +57,37 @@ struct DFTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,EF,P<:DFTPropagator
     chunksize::Val{C}
 end
 
-function DFTSystem(model::EoSModel, structure::DFTStructure, external_field::Vector{ExternalFieldModel}, options::DFTOptions = DFTOptions())
+function build_DFT_system(orig_model,structure,external_field,options,mol_structure)
+    model = expand_model(orig_model, mol_structure) #if the model has no groups, it does nothing
     species = get_species(model, structure)
     FP = fptype(options)
-    fields = get_fields(model, species, structure, options.device, FP)
-    typed_fields = tuple(fields...)
-    propagator = get_propagator(model, species, structure, options.device, FP)
+    device = options.device
+    fields = get_fields(model, species, structure, device, FP)
+    propagator = get_propagator(model, species, structure, device, FP)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, typed_fields, external_field, propagator, options,chunksize)
-end
-
-function DFTSystem(model::EoSModel, structure::DFTStructure, external_field::ExternalFieldModel, options::DFTOptions = DFTOptions())
-    species = get_species(model, structure)
-    FP = fptype(options)
-    fields = get_fields(model, species, structure, options.device, FP)
-    typed_fields = tuple(fields...)
-    propagator = get_propagator(model, species, structure, options.device, FP)
-    NF = compute_field_len(fields,dimension(structure))
-    chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, typed_fields, [external_field], propagator, options,chunksize)
+    init_external_field = external_field isa ExternalFieldModel ? [external_field] : external_field
+    return DFTSystem(model, species, structure, fields, init_external_field, propagator, options, chunksize)
 end
 
 
-function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions = DFTOptions())
-    species = get_species(model, structure)
-    FP = fptype(options)
-    fields = get_fields(model, species, structure, options.device, FP)
-    typed_fields = tuple(fields...)
-    propagator = get_propagator(model, species, structure, options.device, FP)
-    NF = compute_field_len(fields,dimension(structure))
-    chunksize = Val{NF}()
-    return DFTSystem(model, species, structure, typed_fields, nothing, propagator, options,chunksize)
+function DFTSystem(model::EoSModel, structure::DFTStructure; mol_structure = nothing)
+    return build_DFT_system(model,structure,nothing,DFTOptions(),mol_structure)
 end
+
+function DFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions; mol_structure = nothing)
+    return build_DFT_system(model,structure,nothing,options,mol_structure)
+end
+
+function DFTSystem(model::EoSModel, structure::DFTStructure, external_field::Union{ExternalFieldModel,Vector{<:ExternalFieldModel},Nothing}; mol_structure = nothing)
+    build_DFT_system(model,structure,external_field,DFTOptions(),mol_structure)
+end
+
+function DFTSystem(model::EoSModel, structure::DFTStructure, external_field::Union{ExternalFieldModel,Vector{<:ExternalFieldModel},Nothing},options::DFTOptions; mol_structure = nothing)
+    build_DFT_system(model,structure,external_field,options,mol_structure)
+end
+
+get_fields(model, species, structure, device) = get_fields(model, species, structure, device, Float64)
 
 """
     DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStructure, external_field, options::DFTOptions)
@@ -103,7 +112,7 @@ julia> structure = Uniform1DCart((1e5, 298.15, [1.]), [0, 20L], 201)
 julia> system = DGTSystem(model, gradient, structure)
 ```
 """
-struct DGTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,EF,G<:GradientModel,O<:DFTOptions,C}
+struct DGTSystem{M<:EoSModel,S<:DFTSpecies,T<:DFTStructure,F,EF,G<:GradientModel,O<:DFTOptions,C} <: AbstractcDFTSystem
     model::M
     gradient::G
     species::S
@@ -128,8 +137,15 @@ function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStruc
     μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), temperature, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / temperature
 
     species = DGTSpecies(nbeads,sizes,ρbulk,μres)
-    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid, backend),
-              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid, backend)]
+    # :ρ/:∇ρ kernels don't depend on `width` at all (Ω=1 and Ω=i*2π*ω respectively — no
+    # smoothing/weighting shape to rescale, unlike the SAFT-family's convolution kernels).
+    # `model` is threaded through so the constructor can compute `L=length_scale(model)`
+    # internally for `density_scale`/`NA` (`:∇ρ` deliberately keeps `ω` raw — see
+    # VWeightedDensity's docstring). See dgt.jl's `f_res` for how `preallocate_params`
+    # compensates (κ/L^3, V=N_A*L^3 into a_res) to keep the whole f_res output uniformly
+    # L^3-inflated, matching `_energy_scale(::DGTSystem)`.
+    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid,backend,model),
+              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid,backend,model)]
     typed_fields = tuple(fields...)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
@@ -150,8 +166,15 @@ function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStruc
     μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), temperature, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / temperature
 
     species = DGTSpecies(nbeads,sizes,ρbulk,μres)
-    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid, backend),
-              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid, backend)]
+    # :ρ/:∇ρ kernels don't depend on `width` at all (Ω=1 and Ω=i*2π*ω respectively — no
+    # smoothing/weighting shape to rescale, unlike the SAFT-family's convolution kernels).
+    # `model` is threaded through so the constructor can compute `L=length_scale(model)`
+    # internally for `density_scale`/`NA` (`:∇ρ` deliberately keeps `ω` raw — see
+    # VWeightedDensity's docstring). See dgt.jl's `f_res` for how `preallocate_params`
+    # compensates (κ/L^3, V=N_A*L^3 into a_res) to keep the whole f_res output uniformly
+    # L^3-inflated, matching `_energy_scale(::DGTSystem)`.
+    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid,backend,model),
+              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid,backend,model)]
     typed_fields = tuple(fields...)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
@@ -172,8 +195,15 @@ function DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStruc
     μres = Clapeyron.VT_chemical_potential_res(model, 1/sum(ρbulk), temperature, ρbulk/sum(ρbulk)) / Clapeyron.R̄ / temperature
 
     species = DGTSpecies(nbeads,sizes,ρbulk,μres)
-    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid, backend),
-              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid, backend)]
+    # :ρ/:∇ρ kernels don't depend on `width` at all (Ω=1 and Ω=i*2π*ω respectively — no
+    # smoothing/weighting shape to rescale, unlike the SAFT-family's convolution kernels).
+    # `model` is threaded through so the constructor can compute `L=length_scale(model)`
+    # internally for `density_scale`/`NA` (`:∇ρ` deliberately keeps `ω` raw — see
+    # VWeightedDensity's docstring). See dgt.jl's `f_res` for how `preallocate_params`
+    # compensates (κ/L^3, V=N_A*L^3 into a_res) to keep the whole f_res output uniformly
+    # L^3-inflated, matching `_energy_scale(::DGTSystem)`.
+    fields = [SWeightedDensity(:ρ,zeros(nc),ω,ngrid,backend,model),
+              VWeightedDensity(:∇ρ,zeros(nc),ω,ngrid,backend,model)]
     typed_fields = tuple(fields...)
     NF = compute_field_len(fields,dimension(structure))
     chunksize = Val{NF}()
@@ -203,7 +233,7 @@ julia> structure = Uniform1DCart((1e5, 298.15, [1.]), [0, 20L], 201)
 julia> system = ElectrolyteDFTSystem(model, structure)
 ```
 """
-struct ElectrolyteDFTSystem{M<:ElectrolyteModel,S<:DFTSpecies,iS<:DFTSpecies,T<:DFTStructure,F,EF,P<:DFTPropagator,O<:DFTOptions,C}
+struct ElectrolyteDFTSystem{M<:ElectrolyteModel,S<:DFTSpecies,iS<:DFTSpecies,T<:DFTStructure,F,EF,P<:DFTPropagator,O<:DFTOptions,C} <: AbstractcDFTSystem
     model::M
     species::S
     ion_species::iS
@@ -215,9 +245,7 @@ struct ElectrolyteDFTSystem{M<:ElectrolyteModel,S<:DFTSpecies,iS<:DFTSpecies,T<:
     chunksize::Val{C}
 end
 
-const AbstractcDFTSystem = Union{DFTSystem, DGTSystem, ElectrolyteDFTSystem}
-
-dimension(::Type{Union{DFTSystem{<:Any,<:Any,T},DGTSystem{<:Any,<:Any,T}}}) where T = dimension(T) 
+dimension(::Type{Union{DFTSystem{<:Any,<:Any,T},DGTSystem{<:Any,<:Any,T}}}) where T = dimension(T)
 dimension(x::AbstractcDFTSystem) = dimension(x.structure)
 
 length_fields(system::AbstractcDFTSystem) = length_fields(system.chunksize)
