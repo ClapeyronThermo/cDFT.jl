@@ -271,13 +271,13 @@ function get_species(model::SCFTLatticeFluid, structure::DFTStructure;
     return SCFTSpecies(sequence, nbeads, ensemble, n_molecules_f, molecule_bulk_density, bulk_density)
 end
 
-"""
+#=
     get_propagator(model::SCFTLatticeFluid, species::SCFTSpecies, structure::DFTStructure, backend, FP=Float64)
 
 Build the `DiscreteGaussianChainPropagator` for `model`, matching the generic
 `get_propagator(model, species, structure, backend, FP)` dispatch every other DFT-family
 model uses (e.g. `HeterogcPCPSAFT`'s `TangentHSPropagator`).
-"""
+=#
 function get_propagator(model::SCFTLatticeFluid, species::SCFTSpecies, structure::DFTStructure,
                          backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     return DiscreteGaussianChainPropagator(model, species, structure, backend, FP)
