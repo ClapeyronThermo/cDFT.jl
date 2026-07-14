@@ -214,7 +214,7 @@ converge!(system::AbstractcDFTSystem,ρ::AbstractArray;kwargs...) = converge!(cD
 converge!(prob::cDFTProblem,ρ::AbstractArray,solver) = converge!(prob,solver,ρ)
 converge!(prob::cDFTProblem,ρ::AbstractArray;kwargs...) = converge!(prob,AASol(prob.system;kwargs...),ρ)
 
-function converge!(prob::DFTProblem{S}, solver::AASol, ρ::AbstractArray) where S
+function converge!(prob::DFTProblem{S}, method::AASol, ρ::AbstractArray) where S
     system = prob.system
     FP = fptype(system.options)
     #ngrid = system.structure.ngrid
@@ -241,12 +241,12 @@ function converge!(prob::DFTProblem{S}, solver::AASol, ρ::AbstractArray) where 
 
     ln_X0 = vec(log.(ρ))
 
-    result = aasol(GFix!, ln_X0, solver)
+    result = aasol(GFix!, ln_X0, method)
 
     ρ_vec = @view ρ[:]
     ρ_vec .= exp.(result.solution)
 
-    if solver.verbose
+    if method.verbose
         H = free_energy(system, ρ)
         err = isempty(result.history) ? NaN : result.history[end]
         msg = result.idid ? "DFT converged" : "DFT did not converge"
@@ -315,7 +315,7 @@ function get_new_profile!(system::SCFTSystem, ρ, w, caches)
     return Q
 end
 
-function converge!(system::SCFTProblem{S}, solver::AASol, ρ::AbstractArray) where S
+function converge!(prob::SCFTProblem{S}, method::AASol, ρ::AbstractArray) where S
     system = prob.system
     dz = structure_dz(system.structure)
     FT = eltype(ρ)
@@ -345,12 +345,12 @@ function converge!(system::SCFTProblem{S}, solver::AASol, ρ::AbstractArray) whe
         copyto!(w, reshape(xin, size(w)))
         Qᵢ = get_new_profile!(system, ρ, w, caches)
         Q_last[] = Qᵢ
-        GFix_logger(system, solver, iter_count, ρ, (Qᵢ, w, V_eff, w_bulk))
+        GFix_logger(system, iter_count, ρ, (Qᵢ, w, V_eff, w_bulk))
         copyto!(G, vec(w_new))
         return G
     end
 
-    result = aasol(GFix!, x0, solver)
+    result = aasol(GFix!, x0, method)
 
     w .= reshape(result.solution, size(w))
     # ρ already holds the density from the last GFix! call — aasol evaluates the
@@ -359,7 +359,7 @@ function converge!(system::SCFTProblem{S}, solver::AASol, ρ::AbstractArray) whe
     converged = result.idid
     err = isempty(result.history) ? FT(NaN) : FT(result.history[end])
 
-    if solver.verbose
+    if method.verbose
         H = free_energy(system, ρ, w, Q_last[]; V_eff=V_eff, w_bulk=w_bulk)
         msg = converged ? "SCFT converged" : "SCFT did not converge"
         @info "$msg after $(iter_count[]) iterations: err = $(round(err; sigdigits=3)) | F = $(round(H; sigdigits=6))"
