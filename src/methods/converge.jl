@@ -18,9 +18,8 @@ AASol(system::SCFTSystem;maxit=5000,beta=1e-1,tol= 1e-6,anderson_start=1e-2,ande
     abstract type cDFTProblem{S} end
     cDFTProblem(system::S;kwargs...) where S
 
-
 Abstract type for all types of cDFT.jl problems.
-A `cDFTProblem` is just a wrapper of a `cDFTSystem`, along with different options relevant to the system during the convergence phase, and independent of the solver type used.
+A `cDFTProblem` is just a wrapper of a `AbstractcDFTSystem`, along with different options relevant to the system during the convergence phase, and independent of the solver type used.
 """
 abstract type cDFTProblem{S} end
 
@@ -52,7 +51,7 @@ struct problem type for all DFT and DGT systems.
 function DFTProblem(system;
             log_interval   :: Int  = 0,
             save_interval  :: Int  = 0,
-            save_callback   ::C    = nothing,)
+            save_callback   ::C    = nothing,) where C
     @assert log_interval >= 0
     @assert save_interval >= 0
     save_interval > 0 && (@assert save_callback != nothing)
@@ -86,7 +85,7 @@ function SCFTProblem(system;
             quadrature     :: Symbol = :trapz,
             log_interval   :: Int    = 0,
             save_interval  :: Int    = 0,
-            save_callback   ::C      = nothing,)
+            save_callback   ::C      = nothing,) where C
     @assert log_interval >= 0
     @assert save_interval >= 0
     save_interval > 0 && (@assert save_callback != nothing)
@@ -152,8 +151,8 @@ function get_new_profile!(system::Union{DFTSystem,DGTSystem,ElectrolyteDFTSystem
 end
 
 """
-    converge!(system::cDFTSystem,ρ::AbstractArray,solver;kwargs...)
-    converge!(system::cDFTSystem,ρ::AbstractArray;kwargs...)
+    converge!(system::AbstractcDFTSystem,ρ::AbstractArray,solver;kwargs...)
+    converge!(system::AbstractcDFTSystem,ρ::AbstractArray;kwargs...)
     converge!(prob::cDFTProblem,ρ::AbstractArray;kwargs...)
 
 
@@ -210,8 +209,8 @@ converge!(prob,solver,ρ)
 function converge! end
 
 #convenience methods
-converge!(system::cDFTSystem,ρ::AbstractArray,solver;kwargs...) = converge!(cDFTProblem(system;kwargs...),AASol(system;kwargs...),ρ)
-converge!(system::cDFTSystem,ρ::AbstractArray;kwargs...) = converge!(cDFTProblem(system;kwargs...),solver,ρ)
+converge!(system::AbstractcDFTSystem,ρ::AbstractArray,solver;kwargs...) = converge!(cDFTProblem(system;kwargs...),AASol(system;kwargs...),ρ)
+converge!(system::AbstractcDFTSystem,ρ::AbstractArray;kwargs...) = converge!(cDFTProblem(system;kwargs...),solver,ρ)
 converge!(prob::cDFTProblem,ρ::AbstractArray,solver) = converge!(prob,solver,ρ)
 converge!(prob::cDFTProblem,ρ::AbstractArray;kwargs...) = converge!(prob,AASol(prob.system;kwargs...),ρ)
 

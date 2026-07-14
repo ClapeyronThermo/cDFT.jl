@@ -285,7 +285,7 @@ Construct a Self-consistent field theory (SCFT) system.
 - `external_field`: `nothing` (default), a single `ExternalFieldModel`, or a `Vector{<:ExternalFieldModel}`
 """
 function SCFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions=DFTOptions();
-    mol_structure::Dict{String,<:MolStructure},
+    mol_structure = nothing,
     ensemble::Vector{Symbol} = fill(:grand_canonical, length(model.components)),
     n_molecules::AbstractVector = zeros(length(model.components)),
     external_field = nothing,
