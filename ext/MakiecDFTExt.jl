@@ -91,7 +91,7 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, profiles; x_units=:normaliz
     return Makie.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units, latex=latex, plot_by=plot_by, color_by=color_by)
 end
 
-function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure1DCart, profiles; x_units=:normalized, y_units=:mass, latex=false, plot_by=:bead, color_by=:bead)
+function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure{1,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:mass, latex=false, plot_by=:bead, color_by=:bead) where M
     _check_profile_color_by(plot_by, color_by)
     structure = system.structure
     model = system.model
@@ -174,7 +174,7 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
     return fig
 end
 
-function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTStructure1DSphr,cDFT.DFTStructure1DCyl}, profiles; x_units=:normalized, y_units=:mass, latex=false, plot_by=:bead, color_by=:bead)
+function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTStructure{1,cDFT.Spherical,M},cDFT.DFTStructure{1,cDFT.Cylindrical,M}}, profiles; x_units=:normalized, y_units=:mass, latex=false, plot_by=:bead, color_by=:bead) where M
     _check_profile_color_by(plot_by, color_by)
     structure = system.structure
     model = system.model
@@ -257,7 +257,7 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTSt
     return fig
 end
 
-function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure2DCart, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead)
+function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure{2,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead) where M
     _check_profile_color_by(plot_by, color_by)
     structure = system.structure
     model = system.model
@@ -307,30 +307,30 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
     end
 
     if x_units == :normalized
-        Makie.xlims!(ax,(bounds[1,1],bounds[1,2])./L)
+        Makie.xlims!(ax,(bounds[1][1],bounds[1][2])./L)
         x_norm = "σ"
     elseif x_units == :angstrom
-        Makie.xlims!(ax,(bounds[1,1],bounds[1,2]).*1e10)
+        Makie.xlims!(ax,(bounds[1][1],bounds[1][2]).*1e10)
         x_norm = "Å"
     elseif x_units == :nanometer
-        Makie.xlims!(ax,(bounds[1,1],bounds[1,2]).*1e9)
+        Makie.xlims!(ax,(bounds[1][1],bounds[1][2]).*1e9)
         x_norm = "nm"
     else
-        Makie.xlims!(ax,(bounds[1,1],bounds[1,2]))
+        Makie.xlims!(ax,(bounds[1][1],bounds[1][2]))
         x_norm = "m"
     end
 
     if y_units == :normalized
-        Makie.ylims!(ax,(bounds[2,1],bounds[2,2])./L)
+        Makie.ylims!(ax,(bounds[2][1],bounds[2][2])./L)
         y_norm = "σ"
     elseif y_units == :angstrom
-        Makie.ylims!(ax,(bounds[2,1],bounds[2,2]).*1e10)
+        Makie.ylims!(ax,(bounds[2][1],bounds[2][2]).*1e10)
         y_norm = "Å"
     elseif y_units == :nanometer
-        Makie.ylims!(ax,(bounds[2,1],bounds[2,2]).*1e9)
+        Makie.ylims!(ax,(bounds[2][1],bounds[2][2]).*1e9)
         y_norm = "nm"
     else
-        Makie.ylims!(ax,(bounds[2,1],bounds[2,2]))
+        Makie.ylims!(ax,(bounds[2][1],bounds[2][2]))
         y_norm = "m"
     end
 
@@ -340,7 +340,7 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
     return fig
 end
 
-function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure3DCart, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead)
+function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure{3,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead) where M
     _check_profile_color_by(plot_by, color_by)
     structure = system.structure
     model = system.model

@@ -26,12 +26,11 @@ which embed a sphere/cylinder in a Cartesian box.
 | Type | Use it for |
 |:-----|:-----------|
 | [`TwoPhase1DCart`](@ref cDFT.TwoPhase1DCart) | A planar VLE or LLE interface — see [Vapour-Liquid Interfaces](@ref). |
-| [`TwoPhase2DLamCart`](@ref cDFT.TwoPhase2DLamCart) / [`TwoPhase3DLamCart`](@ref cDFT.TwoPhase3DLamCart) | A lamellar (planar-stripe) microphase-separated copolymer melt, or a slab interface with a second/third periodic dimension. |
-| [`TwoPhase2DHexCart`](@ref cDFT.TwoPhase2DHexCart) / [`TwoPhase3DHexCart`](@ref cDFT.TwoPhase3DHexCart) | A hexagonally-packed cylindrical copolymer microdomain, viewed end-on (2D) or extruded (3D). |
+| [`TwoPhase2DLamCart`](@ref cDFT.TwoPhase2DLamCart) / [`TwoPhase3DLamCart`](@ref cDFT.TwoPhase3DLamCart) | A lamellar (planar-stripe) a slab interface with a second/third periodic dimension. |
+| [`TwoPhase2DHexCart`](@ref cDFT.TwoPhase2DHexCart) / [`TwoPhase3DHexCart`](@ref cDFT.TwoPhase3DHexCart) | A hexagonally-packed cylindrical two-phase domain, viewed end-on (2D) or extruded (3D). |
 | [`TwoPhase3DSphrCart`](@ref cDFT.TwoPhase3DSphrCart) | A spherical droplet or bubble embedded in a 3D box — a GPU-compatible alternative to `Uniform1DSphr` for a symmetric interface. |
 
-See [Multi-Dimensional Interfaces & Copolymer Phases](@ref) for worked examples of the
-lamellar/hexagonal/spherical two-phase structures.
+See [Copolymer Microphase Morphologies](@ref), respectively. for worked examples of the lamellar/hexagonal/spherical two-phase structures.
 
 ## Comparing planar and cylindrical confinement
 
@@ -158,8 +157,5 @@ julia> fig = plot(system_in, ρ_in)
 ![Density profile inside a cylindrical graphite pore](../assets/curved_surface_adsorption_cyl_inside.png)
 
 !!! tip
-    At near-wall densities like this one, the Anderson-mixing solver in
-    [`converge!`](@ref cDFT.converge!) can occasionally diverge for sharp Steele-wall
-    profiles — this is a general characteristic of the solver, not specific to curved
-    coordinates. If it happens, try a lower pressure, a less attractive surface, or more
-    grid points.
+    At near-wall densities like this one, the Anderson-mixing solver in [`converge!`](@ref cDFT.converge!) can occasionally diverge for sharp Steele-wall profiles — this is a general characteristic of the solver, not specific to curved     coordinates.
+    If it happens, try a lower pressure, a less attractive surface, or more grid points.
