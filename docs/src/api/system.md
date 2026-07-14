@@ -9,7 +9,8 @@ Pages = ["system.md"]
 Depth = 1
 ```
 
-## System type
+## System types
+
 ```@docs
 cDFT.DFTSystem
 cDFT.DGTSystem

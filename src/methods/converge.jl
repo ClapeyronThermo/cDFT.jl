@@ -34,9 +34,21 @@ struct DFTProblem{S,C} <: cDFTProblem{S}
     log_interval::Int
     save_interval::Int
     save_callback::C
-    verbose::Bool
 end
 
+"""
+
+    DFTProblem{S} <: cDFTProblem{S}
+    DFTProblem(system::S;kwargs...) where S <: Union{DFTSystem,DGTSystem,ElectrolyteDFTSystem}
+
+
+struct problem type for all DFT and DGT systems.
+
+## Keyword arguments
+- `log_interval::Int = 0`: Log the free energy every N iterations (0 = never).
+- `save_interval::Int = 0`: Call `save_callback` every N iterations (0 = never).
+- `save_callback = nothing`: a function of the form `f(iter, ρ_array)` called at each save interval.
+"""
 function DFTProblem(system;
             log_interval   :: Int  = 0,
             save_interval  :: Int  = 0,
@@ -55,6 +67,21 @@ struct SCFTProblem{S,C} <: cDFTProblem{S}
     save_callback::C
 end
 
+"""
+
+    SCFTProblem{S} <: cDFTProblem{S}
+    SCFTProblem(system::S;kwargs...) where S <: SCFTSystem
+
+struct problem type for all SCFT systems.
+
+## Keyword arguments
+- `log_interval::Int = 0`: Log the free energy every N iterations (0 = never).
+- `save_interval::Int = 0`: Call `save_callback` every N iterations (0 = never).
+- `save_callback = nothing`: a function of the form `f(iter, ρ_array, w_array)` called at each save interval.
+- `quadrature::Symbol = :trapz`: Quadrature rule for partition-function integrals, the available values are:
+  - `:trapz`   — periodic composite trapezoidal (uniform weights, spectral convergence for smooth periodic functions, works for any N). Recommended for periodic SCFT domains.
+  - `:simpson` — composite Simpson rule (O(h⁴), requires odd N per dimension).
+"""
 function SCFTProblem(system;
             quadrature     :: Symbol = :trapz,
             log_interval   :: Int    = 0,
@@ -163,9 +190,9 @@ If only keyword arguments are used, then the problem is solved via the Anderson 
 ## Problem arguments (passed to [`cDFTProblem(system,kwargs...)`](@ref cDFT.cDFTProblem))
 - `log_interval::Int = 0`: Log the free energy every N iterations (0 = never).
 - `save_interval::Int = 0`: Call `save_callback` every N iterations (0 = never).
-- `save_callback = nothing`: `f(iter, ρ_array)` called at each save interval. for SCFT systems, a function of the form `f(iter, ρ_array, w_array)` is needed instead.
+- `save_callback = nothing`: a function of the form `f(iter, ρ_array)` called at each save interval. SCFT systems require the function form `f(iter, ρ_array, w_array)` instead.
 - `quadrature::Symbol = :trapz`: Quadrature rule for partition-function integrals, only used in SCFT systems. the available values are:
-  - `:trapz` — periodic composite trapezoidal (uniform weights, spectral convergence for smooth periodic functions, works for any N). Recommended for periodic SCFT domains.
+  - `:trapz`   — periodic composite trapezoidal (uniform weights, spectral convergence for smooth periodic functions, works for any N). Recommended for periodic SCFT domains.
   - `:simpson` — composite Simpson rule (O(h⁴), requires odd N per dimension).
 
 Returns `nothing` (the input density is modified in-place).
