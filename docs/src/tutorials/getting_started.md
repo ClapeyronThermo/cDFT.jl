@@ -34,7 +34,7 @@ julia> ρbulk = [1/v]
 julia> L = cDFT.length_scale(model)  # a characteristic length (≈ σ) for choosing grid bounds
 ```
 
-Build the walls, then a 1D Cartesian structure:
+Build the walls using a 1D Cartesian structure:
 
 ```julia
 julia> width = 5L
@@ -73,7 +73,7 @@ bulk density `ρbulk[1]` far from it.
 
 ## Next steps
 
-- [Choosing a Geometry & Adsorption](@ref) surveys the other structure types (curved
+- [Choosing a Geometry & Adsorption](@ref) demonstrates the other structure types (curved
   surfaces, 2D/3D boxes, interfaces) and builds on this exact setup to compute adsorption
   isotherms at planar and curved surfaces.
 - [`adsorption(model, surface, p, T, n)`](@ref cDFT.adsorption) is a convenience wrapper

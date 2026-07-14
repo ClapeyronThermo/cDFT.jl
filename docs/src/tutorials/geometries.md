@@ -19,8 +19,8 @@ Full type-by-type reference is on the [Structures](@ref) page; this tutorial is 
 | Type | Use it for |
 |:-----|:-----------|
 | [`TwoPhase1DCart`](@ref cDFT.TwoPhase1DCart) | A planar VLE or LLE interface — see [Vapour-Liquid Interfaces](@ref). |
-| [`TwoPhase2DLamCart`](@ref cDFT.TwoPhase2DLamCart) / [`TwoPhase3DLamCart`](@ref cDFT.TwoPhase3DLamCart) | A lamellar (planar-stripe) microphase-separated copolymer melt, or a slab interface with a second/third periodic dimension. |
-| [`TwoPhase2DHexCart`](@ref cDFT.TwoPhase2DHexCart) / [`TwoPhase3DHexCart`](@ref cDFT.TwoPhase3DHexCart) | A hexagonally-packed cylindrical copolymer microdomain, viewed end-on (2D) or extruded (3D). |
+| [`TwoPhase2DLamCart`](@ref cDFT.TwoPhase2DLamCart) / [`TwoPhase3DLamCart`](@ref cDFT.TwoPhase3DLamCart) | A lamellar (planar-stripe) a slab interface with a second/third periodic dimension. |
+| [`TwoPhase2DHexCart`](@ref cDFT.TwoPhase2DHexCart) / [`TwoPhase3DHexCart`](@ref cDFT.TwoPhase3DHexCart) | A hexagonally-packed cylindrical two-phase domain, viewed end-on (2D) or extruded (3D). |
 | [`TwoPhase3DSphrCart`](@ref cDFT.TwoPhase3DSphrCart) | A spherical droplet or bubble embedded in a 3D box — a GPU-compatible alternative to `Uniform1DSphr` for a symmetric interface. |
 
 See [Copolymer Microphase Morphologies](@ref), respectively. for worked examples of the lamellar/hexagonal/spherical two-phase structures.
