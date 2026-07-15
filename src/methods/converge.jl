@@ -209,8 +209,9 @@ converge!(prob,solver,ρ)
 function converge! end
 
 #convenience methods
-converge!(system::AbstractcDFTSystem,ρ::AbstractArray,solver;kwargs...) = converge!(cDFTProblem(system;kwargs...),AASol(system;kwargs...),ρ)
-converge!(system::AbstractcDFTSystem,ρ::AbstractArray;kwargs...) = converge!(cDFTProblem(system;kwargs...),solver,ρ)
+converge!(system::AbstractcDFTSystem,ρ::AbstractArray;kwargs...) = converge!(cDFTProblem(system;kwargs...),AASol(system;kwargs...),ρ)
+converge!(system::AbstractcDFTSystem,ρ::AbstractArray,solver;kwargs...) = converge!(cDFTProblem(system;kwargs...),solver,ρ)
+
 converge!(prob::cDFTProblem,ρ::AbstractArray,solver) = converge!(prob,solver,ρ)
 converge!(prob::cDFTProblem,ρ::AbstractArray;kwargs...) = converge!(prob,AASol(prob.system;kwargs...),ρ)
 

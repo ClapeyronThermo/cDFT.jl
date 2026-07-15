@@ -12,9 +12,9 @@ Depth = 1
 ## Solvers
 
 ```@docs
-cDFT.cDFTSystem
-cDFT.DFTSystem
-cDFT.SCFTSystem
+cDFT.cDFTProblem
+cDFT.DFTProblem
+cDFT.SCFTProblem
 cDFT.converge!
 ```
 
