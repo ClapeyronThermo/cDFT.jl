@@ -1,7 +1,7 @@
 ![cDFT_logo](docs/cDFT_logo.svg)
 
-[![codecov](https://codecov.io/gh/ClapeyronThermo/cDFT.jl/graph/badge.svg?token=EbGmdNPFNf)](https://codecov.io/gh/ClapeyronThermo/cDFT.jl)
 [![Build Status](https://github.com/ClapeyronThermo/cDFT.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/ClapeyronThermo/cDFT.jl/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/ClapeyronThermo/cDFT.jl/graph/badge.svg?token=EbGmdNPFNf)](https://codecov.io/gh/ClapeyronThermo/cDFT.jl)
 [![Docs stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://clapeyronthermo.github.io/cDFT.jl/stable)
 [![Docs dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://clapeyronthermo.github.io/cDFT.jl/dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
