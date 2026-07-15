@@ -6,6 +6,7 @@ on:
 permissions:
   actions: write
   contents: read
+  id-token: write #for codecov
 concurrency:
     # Skip intermediate builds: always.
     # Cancel intermediate builds: only if it is a pull request build.
