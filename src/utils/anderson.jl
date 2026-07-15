@@ -296,7 +296,7 @@ function aasol(
 
 end
 
-aasol(GFix!,x0,method::AASol{Float64,P,NoVstore{Float64}}) where P = aasol(GFix!,AASol(x0,method))
+aasol(GFix!,x0,method::AASol{Float64,P,NoVstore{Float64}}) where P = aasol(GFix!,x0,AASol(x0,method))
 
 function aasol(GFix!, x0, method::AASol{T,P,V}) where {T,P,V}
     # unpack options from the struct
