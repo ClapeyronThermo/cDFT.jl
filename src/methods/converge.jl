@@ -342,7 +342,7 @@ function converge!(prob::SCFTProblem{S}, method::AASol, ρ::AbstractArray) where
         copyto!(w, reshape(xin, size(w)))
         Qᵢ = get_new_profile!(system, ρ, w, caches)
         Q_last[] = Qᵢ
-        GFix_logger(system, iter_count, ρ, (Qᵢ, w, V_eff, w_bulk))
+        GFix_logger(prob, iter_count, ρ, (Qᵢ, w, V_eff, w_bulk))
         copyto!(G, vec(w_new))
         return G
     end
