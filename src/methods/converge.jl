@@ -9,8 +9,8 @@ function __AASol(;maxit, beta, tol, anderson_start, anderson_m, verbose)
 end
 
 #dispatches for specific defaults
-AASol(system::Union{DFTSystem,DGTSystem,ElectrolyteDFTSystem};maxit=10000,beta=1e-2,tol= 1e-4,anderson_start=1e-1,anderson_m=5,verbose=false,kwargs...) = __AASol(;maxit, beta, tol, anderson_start, anderson_m, verbose)
-AASol(system::SCFTSystem;maxit=5000,beta=1e-1,tol= 1e-6,anderson_start=1e-2,anderson_m=5,verbose=false,kwargs...) = __AASol(;maxit, beta, tol, anderson_start, anderson_m, verbose)
+AASol(system::Union{DFTSystem,DGTSystem,ElectrolyteDFTSystem};maxit=10000,beta=1e-2,tol=1e-4,anderson_start=1e-1,anderson_m=5,verbose=false,kwargs...) = __AASol(;maxit, beta, tol, anderson_start, anderson_m, verbose)
+AASol(system::SCFTSystem;maxit=5000,beta=1e-2,tol=1e-6,anderson_start=1e-2,anderson_m=5,verbose=false,kwargs...) = __AASol(;maxit, beta, tol, anderson_start, anderson_m, verbose)
 
 
 """
@@ -182,7 +182,7 @@ If only keyword arguments are used, then the problem is solved via the Anderson 
 
 ## Default anderson values
 - `DFTSystem`           : `maxit = 10000,beta = 1e-2, tol = 1e-4,anderson_start = 1e-1, anderson_m = 5,verbose = false`
-- `SCFTSystem`          : `maxit = 5000,beta = 1e-1, tol = 1e-6,anderson_start = 1e-2, anderson_m = 5,verbose = false`
+- `SCFTSystem`          : `maxit = 5000,beta = 1e-2, tol = 1e-6,anderson_start = 1e-2, anderson_m = 5,verbose = false`
 - `DGTSytem`            : same as `DFTSystem`
 - `ElectrolyteDFTSystem`: same as `DFTSystem`
 
