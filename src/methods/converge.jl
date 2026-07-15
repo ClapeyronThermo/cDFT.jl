@@ -227,24 +227,20 @@ function converge!(prob::DFTProblem{S}, method::AASol, ρ::AbstractArray) where 
     caches = (; cache_model, cache_external, cache_propagator, ln_Gx)
 
     iter_count = Ref(0)
-
+    ρ_vec = @view ρ[:]
     # aasol's fixed-point map: given the current log-density (flattened), advance one
     # DFT step and return the new log-density guess (flattened).
     function GFix!(ln_G, ln_x)
-        ρᵢ_vec = @view ρᵢ[:]
-        ρᵢ_vec .= exp.(ln_x)
+        ρ_vec .= exp.(ln_x)
         #ρᵢ .= exp.(reshape(ln_x, (ngrid..., nbeads)))
-        get_new_profile!(prob.system, ρᵢ, δfδρ_res, caches)
-        GFix_logger(prob,ρᵢ,iter_count)
+        get_new_profile!(prob.system, ρ, δfδρ_res, caches)
+        GFix_logger(prob,iter_count,ρ)
         copyto!(ln_G, vec(ln_Gx))
         return ln_G
     end
 
     ln_X0 = vec(log.(ρ))
-
     result = aasol(GFix!, ln_X0, method)
-
-    ρ_vec = @view ρ[:]
     ρ_vec .= exp.(result.solution)
 
     if method.verbose
