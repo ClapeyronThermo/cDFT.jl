@@ -43,3 +43,16 @@ end
 function Base.show(io::IO, system::GradientModel)
     return Clapeyron.eosshow(io,system)
 end
+
+ function Base.show(io::IO, ::MIME"text/plain", system::SCFTSystem)
+    n = length(system.model.groups.flattenedgroups)
+    print(io, "SCFTSystem with ", n, " species")
+    n > 1 && print(io, "s")
+    println(io, ":")
+    print(io, " model: ")
+    show(io, system.model)
+    println(io)
+    println(io, " molecule types: ", length(system.model.components))
+    println(io, " structure: "*string(typeof(system.structure)))
+    print(io, " device: "*string(typeof(system.options.device)))
+end

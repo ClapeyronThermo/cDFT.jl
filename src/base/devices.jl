@@ -2,21 +2,20 @@ import KernelAbstractions: Backend, get_backend, synchronize
 
 
 """
-    DFTOptions(device, ad_mode::Symbol=:forward; precision::Type{FP}=Float64)
+    DFTOptions(device, ad_mode= :forward; precision::Type{FP}=Float64)
 
-A struct which includes all the settings that need to be set for the convergence algorithms and devices used:
+A struct which includes all the settings that need to be set for the convergence algorithms and devices used
+
+## Arguments:
+
 - `device`: Specification of either CPU (pinned or un-pinned) or GPU devices. (unpinned CPU by default)
-- `ad_mode`: One of `:forward` (unbatched — one Enzyme `Duplicated` forward-mode call per
-  (field, component) direction), `:forward_batch` (default on most backends — one Enzyme
-  `BatchDuplicated` forward-mode call covering all directions at once; fastest where it
-  compiles, but the resulting kernel can overflow some GPU shader compilers, e.g. Apple's
-  Metal AGX backend, for non-trivial free-energy terms), or `:reverse` (one adjoint pass;
-  the cheapest choice in general, since `f_res` returns a single scalar and reverse-mode
-  cost is independent of the number of directional derivatives needed — also the only mode
-  presently proven to compile on Metal for dispersion-level complexity, hence the default
-  there via `ext/MetalcDFTExt.jl`).
+- `ad_mode`: One of:
+  - `:forward` (unbatched — one Enzyme `Duplicated` forward-mode call per (field, component) direction)
+  - `:forward_batch` (default on most backends — one Enzyme `BatchDuplicated` forward-mode call covering all directions at once; fastest where it compiles, but the resulting kernel can overflow some GPU shader compilers, e.g. Apple's Metal AGX backend, for non-trivial free-energy terms)
+  - `:reverse` (one adjoint pass; the cheapest choice in general, since `f_res` returns a single scalar and reverse-mode cost is independent of the number of directional derivatives needed — also the only mode presently proven to compile on Metal for dispersion-level complexity, hence the default there via `ext/MetalcDFTExt.jl`).
 - `precision`: The floating-point type (e.g. `Float64`, `Float32`) used to allocate and run the DFT calculation, retrievable via `fptype(options)`.
-Example usage:
+
+## Example usage:
 ```julia
 julia> options = DFTOptions()
 

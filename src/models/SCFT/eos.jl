@@ -271,13 +271,13 @@ function get_species(model::SCFTLatticeFluid, structure::DFTStructure;
     return SCFTSpecies(sequence, nbeads, ensemble, n_molecules_f, molecule_bulk_density, bulk_density)
 end
 
-"""
+#=
     get_propagator(model::SCFTLatticeFluid, species::SCFTSpecies, structure::DFTStructure, backend, FP=Float64)
 
 Build the `DiscreteGaussianChainPropagator` for `model`, matching the generic
 `get_propagator(model, species, structure, backend, FP)` dispatch every other DFT-family
 model uses (e.g. `HeterogcPCPSAFT`'s `TangentHSPropagator`).
-"""
+=#
 function get_propagator(model::SCFTLatticeFluid, species::SCFTSpecies, structure::DFTStructure,
                          backend::Backend, ::Type{FP}=Float64) where FP<:AbstractFloat
     return DiscreteGaussianChainPropagator(model, species, structure, backend, FP)
@@ -309,11 +309,11 @@ lb_volume(model::SCFTLatticeFluid, T, z) =
     sum(z[i]*sum(model.groups.n_flattenedgroups[i]) for i in eachindex(z)) / (2*model.rho0)
 T_scale(model::SCFTLatticeFluid, z) = one(eltype(z))
 
-"""
+#=
     length_scale(model::SCFTLatticeFluid)
 
 The largest statistical segment length `b` across every species — the SCFT analogue of
 `length_scale(model::SAFTModel) = maximum(model.params.sigma.values)`, used the same way
 (e.g. for choosing grid bounds, and by the Makie plotting recipe's axis normalization).
-"""
+=#
 length_scale(model::SCFTLatticeFluid) = maximum(model.params.b.values)

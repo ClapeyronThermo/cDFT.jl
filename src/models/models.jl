@@ -5,10 +5,13 @@ _kernel_type(system::DGTSystem)          = typeof(system)
 
 """
     length_scale(model::EoSModel)
+    length_scale(L::Real) = L
 
 Obtains the maximum length scale in the model and helps define the dimensions of the DFT system. This is typically equal to the size of the largest bead.
+For real numbers is just the identity function.
 """
 function length_scale end
+length_scale(L::Real) = L
 
 """
     get_species(model::EoSModel, structure::DFTStructure)
@@ -296,7 +299,7 @@ here and forwarded from `preallocate(system, ρ; quadrature=...)`.
 """
 function preallocate_model(system::SCFTSystem, ρ; quadrature::Symbol=:trapz)
     nd  = dimension(system)
-    nspecies_ = nspecies(system)
+    nspecies = length(system.model.groups.flattenedgroups)
     dz  = structure_dz(system.structure)
 
     w_new = similar(ρ)
@@ -313,8 +316,8 @@ function preallocate_model(system::SCFTSystem, ρ; quadrature::Symbol=:trapz)
     w_bulk = compute_bulk_fields(system.model, compute_bulk_densities(system))
 
     scratch       = similar(selectdim(w_new, nd+1, 1))
-    exp_field     = [similar(selectdim(w_new, nd+1, 1)) for _ in 1:nspecies_]
-    inv_exp_field = [similar(selectdim(w_new, nd+1, 1)) for _ in 1:nspecies_]
+    exp_field     = [similar(selectdim(w_new, nd+1, 1)) for _ in 1:nspecies]
+    inv_exp_field = [similar(selectdim(w_new, nd+1, 1)) for _ in 1:nspecies]
 
     return (; w_new, weights, V_eff, w_bulk, scratch, exp_field, inv_exp_field)
 end
