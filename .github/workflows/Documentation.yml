@@ -4,9 +4,11 @@ on:
 # needed to allow julia-actions/cache to delete old caches that it has created
 permissions:
   actions: write
-  contents: read
+  contents: write
   pull-requests: read
   statuses: write
+  pages: write
+  id-token: write
 concurrency:
   # Skip intermediate builds: always.
   # Cancel intermediate builds: always.
@@ -17,9 +19,16 @@ jobs:
     name: Documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: julia-actions/julia-buildpkg@latest
-      - uses: julia-actions/julia-docdeploy@latest
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Julia 
+        uses: julia-actions/setup-julia@v3
+      - name: Load Julia packages from cache
+        uses: julia-actions/cache@v3
+      - name: Pkg builder
+        uses: julia-actions/julia-buildpkg@latest
+      - name: Build and deploy docs
+        uses: julia-actions/julia-docdeploy@latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
