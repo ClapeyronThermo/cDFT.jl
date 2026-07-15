@@ -12,7 +12,6 @@ concurrency:
   # Cancel intermediate builds: always.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-runs-on: ubuntu-latest
 jobs:
   docs:
     name: Documentation
