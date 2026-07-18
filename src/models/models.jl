@@ -11,6 +11,17 @@ Obtains the maximum length scale in the model and helps define the dimensions of
 function length_scale end
 
 """
+    length_scale(model::Clapeyron.ABCubicModel)
+
+The DGT analogue for cubic (van der Waals-family: PR, SRK, RK, ...) equations of state,
+which have no SAFT-style `sigma` bead diameter to fall back on. `b` (the EoS covolume) is a
+per-mole excluded volume, so `(b/N_A)^(1/3)` converts it to a per-molecule length on the same
+footing as `length_scale(model::SAFTModel) = maximum(model.params.sigma.values)` -- verified
+to land in the same physical ballpark (both ~3-5 Å for ethanol via PCSAFT vs. PR).
+"""
+length_scale(model::Clapeyron.ABCubicModel) = (maximum(model.params.b.values)/N_A)^(1/3)
+
+"""
     get_species(model::EoSModel, structure::DFTStructure)
 
 For a given `model` and `structure`, define the relevant parameters for each species. These structs will contain additional information not present by default in the inital `model`, such as the bead size, the number of beads and the connectivity of the beads.
