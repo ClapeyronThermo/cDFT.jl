@@ -12,11 +12,22 @@ julia> surface = Steele(["graphite"])
 julia> adsorption(model, surface, 1e5, 298.15)
 ```
 """
+
+# Volume of the domain `∫` integrates over, for each coordinate system: for Cartesian this is
+# literally the product of the bound lengths (matching `∫`'s plain `dz`/`dx dy`/... measure),
+# but `bounds` on a radial (Cylindrical/Spherical) structure holds the *radial* extent
+# `(r_min, r_max)`, not a literal length -- the accessible volume there is the disk area (per
+# unit axial length, matching `∫`'s `2π∫r dr` convention) or the sphere volume (matching `∫`'s
+# `4π∫r² dr`), not `r_max - r_min` itself.
+_domain_volume(structure::DFTStructByCoord{Cartesian}) = prod(b[2]-b[1] for b in structure.bounds)
+_domain_volume(structure::DFTStructByCoord{Cylindrical}) = π*(structure.bounds[1][2]^2 - structure.bounds[1][1]^2)
+_domain_volume(structure::DFTStructByCoord{Spherical}) = (4π/3)*(structure.bounds[1][2]^3 - structure.bounds[1][1]^3)
+
 function adsorption(system,ρ)
     # Integrate over all profiles
     nc = length(system.model)
     nd = dimension(system)
-    V = prod([system.structure.bounds[i][2]-system.structure.bounds[i][1] for i in 1:nd])
+    V = _domain_volume(system.structure)
     return [∫(selectdim(ρ,nd+1,i)[:],system.structure)/V for i in 1:nc]
 end
 

@@ -17,15 +17,14 @@ function ElectrolyteDFTSystem(model::ElectrolyteModel, structure::DFTStructure, 
 
     fields = get_fields(model.neutralmodel, species, structure, options.device, FP)
     fields_ion = get_fields((model.ionmodel,FP(length_scale(model))), ion_species, structure, options.device, FP)
-    append!(fields,fields_ion)
 
-    typed_fields = tuple(fields...)
+    typed_fields = tuple(fields..., fields_ion...)
 
     propagator = get_propagator(model.neutralmodel, species, structure, options.device, FP)
 
     external_field = [external_field, ElectrostaticPotential(model, structure, options.device, FP)]
 
-    NF = compute_field_len(fields,dimension(structure))
+    NF = compute_field_len(typed_fields,dimension(structure))
     chunksize = Val{NF}()
     return ElectrolyteDFTSystem(model, species, ion_species, structure, typed_fields, external_field, propagator, options,chunksize)
 end

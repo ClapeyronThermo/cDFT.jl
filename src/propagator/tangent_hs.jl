@@ -19,7 +19,7 @@ function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::DFTS
                 mask = ω̄ .== 0
                 val = ifelse.(mask,
                         1 ,                  # ω̄=0 case
-                        sin.(ω̄.*R)./ω̄        # ω̄≠0 case
+                        sin.(ω̄.*R)./ω̄./R        # ω̄≠0 case
                     )
                 selectdim(selectdim(Ω, nd+1, j), nd+1, k) .= val
                 selectdim(selectdim(Ω, nd+1, k), nd+1, j) .= val
@@ -52,7 +52,7 @@ function TangentHSPropagator(model::EoSModel,species::DFTSpecies,structure::Unio
             for k in @chain(i)[l:end]
                 R = (species.size[j] + species.size[k])/L*π
 
-                val = @. 2*sin(ω̄*R)/ω̄ / R / 2
+                val = @. sin(ω̄*R)/ω̄ / R
 
                 selectdim(selectdim(Ω, nd+1, j), nd+1, k) .= val
                 selectdim(selectdim(Ω, nd+1, k), nd+1, j) .= val

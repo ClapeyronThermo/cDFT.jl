@@ -58,11 +58,12 @@ comes out uniformly `L^3`-inflated, matching `_energy_scale(::DGTSystem)`.
 end
 
 include("gradients/const.jl")
+include("gradients/zuo_stenby.jl")
 
 function preallocate_params(system::DGTSystem)
     T  = system.structure.conditions[2]
     ρ̄  = system.species.bulk_density
-    κ  = kappa(system.gradient, T, ρ̄)
+    κ  = kappa(system.gradient, system.model, T, ρ̄)
 
     # Reduced units: L must match base.jl's DGTSystem constructors (density_scale=L on
     # the :ρ/:∇ρ fields) — see f_res's docstring for the full derivation.

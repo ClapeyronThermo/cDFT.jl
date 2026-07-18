@@ -35,6 +35,6 @@ function ConstGradient(components::Array{String,1};
 end
 
 
-function kappa(gradient::ConstGradientModel, T, ρ̄)
+function kappa(gradient::ConstGradientModel, model, T, ρ̄)
     return gradient.params.kappa.values
 end

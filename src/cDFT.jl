@@ -46,6 +46,7 @@ include("utils/integrals.jl")
 include("utils/anderson.jl")
 include("utils/matmul.jl")
 include("utils/plot_labels.jl")
+include("utils/plot_style.jl")
 
 include("fields/fields.jl")
 include("models/models.jl")
