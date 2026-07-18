@@ -35,6 +35,22 @@ end
 
 _normalized_ylabel(model) = hasproperty(model.params, :segment) ? "ρσ³" : "φ"
 
+# `equilibrium_densities`, if given, is `(ρ_phase1, ρ_phase2)` -- the two bulk coexisting
+# number densities of a two-phase-separating system, one entry per component, in the same
+# convention a `tp_flash`/`saturation_pressure` call already returns (e.g. `ρ1`, `ρ2` in
+# dynamic_dft.jl). When given, a heatmap/volume group's color range is pinned to those bulk
+# values (scaled the same way its plotted density is, via `_norm_const`) instead of that
+# frame's own `extrema` -- so a movie of frames plotted with the same `equilibrium_densities`
+# gets one consistent color bar throughout, rather than one that rescales itself every frame
+# based on how far that frame's domain has phase-separated so far.
+function _group_colorrange(equilibrium_densities, species, model, members)
+    equilibrium_densities === nothing && return nothing
+    ρ_phase1, ρ_phase2 = equilibrium_densities
+    v1 = sum(_norm_const(species, model, i, k) * ρ_phase1[i] for (i, k) in members) / length(members)
+    v2 = sum(_norm_const(species, model, i, k) * ρ_phase2[i] for (i, k) in members) / length(members)
+    return v1 <= v2 ? (v1, v2) : (v2, v1)
+end
+
 # ── Aggregation ("plot_by") / coloring ("color_by") ──────────────────────
 #
 # Both are ∈ (:bead, :group, :molecule), from finest to coarsest granularity. `:bead`
@@ -128,11 +144,14 @@ function _cdft_figure(width::Symbol, dpi::Real, font)
                                Figure(size=sz, backgroundcolor=:white, fonts=(; regular=font))
 end
 
-function Makie.plot(system::cDFT.AbstractcDFTSystem, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false)
-    return Makie.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units, latex=latex, plot_by=plot_by, color_by=color_by, color_scheme=color_scheme, font=font, width=width, dpi=dpi, grid=grid)
+function Makie.plot(system::cDFT.AbstractcDFTSystem, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing)
+    return Makie.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units, latex=latex, plot_by=plot_by, color_by=color_by, color_scheme=color_scheme, font=font, width=width, dpi=dpi, grid=grid, equilibrium_densities=equilibrium_densities)
 end
 
-function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure{1,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:mass, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false) where M
+function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure{1,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:mass, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing) where M
+    # `equilibrium_densities` only applies to the 2D/3D heatmap/volume methods below -- accepted
+    # (and ignored) here too so the generic `Makie.plot(system, profiles; ...)` entry point can
+    # forward it unconditionally regardless of the system's structure dimensionality.
     _check_profile_color_by(plot_by, color_by)
     structure = system.structure
     model = system.model
@@ -221,7 +240,9 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
     return Makie.FigureAxisPlot(fig, ax, plt)
 end
 
-function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTStructure{1,cDFT.Spherical,M},cDFT.DFTStructure{1,cDFT.Cylindrical,M}}, profiles; x_units=:normalized, y_units=:mass, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false) where M
+function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTStructure{1,cDFT.Spherical,M},cDFT.DFTStructure{1,cDFT.Cylindrical,M}}, profiles; x_units=:normalized, y_units=:mass, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing) where M
+    # `equilibrium_densities` only applies to the 2D/3D heatmap/volume methods below -- see the
+    # Cartesian 1D method just above for why it's accepted (and ignored) here too.
     _check_profile_color_by(plot_by, color_by)
     structure = system.structure
     model = system.model
@@ -309,7 +330,7 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTSt
     return Makie.FigureAxisPlot(fig, ax, plt)
 end
 
-function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure{2,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false) where M
+function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure{2,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing) where M
     _check_profile_color_by(plot_by, color_by)
     structure = system.structure
     model = system.model
@@ -362,7 +383,8 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
         Z = sum(bead_Z(i,k) for (i,k) in members) ./ length(members)
         c = Makie.to_color(c)
         csalpha = [Makie.RGBAf(c.r, c.g, c.b, 0.0), Makie.RGBAf(c.r, c.g, c.b, 1.0)]
-        plt = Makie.heatmap!(ax, X, Y, Z; colormap=csalpha, label=_maybe_texlabel(label,latex; upright=true))
+        colorrange = something(_group_colorrange(equilibrium_densities, species, model, members), Makie.automatic)
+        plt = Makie.heatmap!(ax, X, Y, Z; colormap=csalpha, colorrange=colorrange, label=_maybe_texlabel(label,latex; upright=true))
     end
 
     if x_units == :normalized
@@ -399,7 +421,7 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
     return Makie.FigureAxisPlot(fig, ax, plt)
 end
 
-function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure{3,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false) where M
+function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure{3,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing) where M
     _check_profile_color_by(plot_by, color_by)
     structure = system.structure
     model = system.model
@@ -446,8 +468,11 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
     plt = nothing
     for ((label, members), c) in zip(groups, colors)
         ρk = sum(bead_ρ(i,k) for (i,k) in members) ./ length(members)
-        ρmin, ρmax = extrema(ρk)
-        normed = (ρk .- ρmin) ./ (ρmax - ρmin + 1e-8)
+        ρmin, ρmax = something(_group_colorrange(equilibrium_densities, species, model, members), extrema(ρk))
+        # Clamped rather than left to float outside [0,1]: with a fixed `equilibrium_densities`
+        # range (as opposed to this frame's own `extrema`), a transient profile can briefly
+        # overshoot the final bulk values (noisy initial guess, finite-size ringing, ...).
+        normed = clamp.((ρk .- ρmin) ./ (ρmax - ρmin + 1e-8), 0, 1)
 
         c = Makie.to_color(c)
         cmap = [Makie.RGBAf(c.r, c.g, c.b, 0.45*a^2) for a in range(0,1;length=256)]
