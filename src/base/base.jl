@@ -8,11 +8,7 @@ abstract type GradientModel end
 """
     AbstractcDFTSystem
 
-Supertype for every system cDFT.jl can converge via `converge!`: `DFTSystem`,
-`DGTSystem`, `ElectrolyteDFTSystem` (all defined below), and `SCFTSystem`
-(`src/models/SCFT/scft.jl`, loaded much later via `models/models.jl` — a real abstract
-type is required here, rather than a `Union`, since a `Union` literal can't forward-
-reference a type that doesn't exist yet at this point in the load order).
+Supertype for every system cDFT.jl can converge via [`converge!`](@ref): [`DFTSystem`](@ref), [`DGTSystem`](@ref), [`ElectrolyteDFTSystem`](@ref) and [`SCFTSystem`](@ref)
 """
 abstract type AbstractcDFTSystem end
 
@@ -24,13 +20,18 @@ include("structure.jl")
 """
     DFTSystem(model::EoSModel, species::DFTSpecies, structure::DFTStructure, fields::Vector{DFTField}, options::DFTOptions)
 
-Generic struct which includes all the information needed to perform DFT / SCFT calculations:
+Generic struct which includes all the information needed to perform DFT calculations.
+
+## Fields:
+
 - `model`: A model object that should be obtained from Clapeyron.jl, and contains all information regarding species parameters.
 - `species`: A `DFTSpecies` object which is model-dependent. Typically contains the number of beads in each species and the bead sizes.
 - `structure`: A `DFTStructure` object which provides information regarding the geometry (including bounds) and conditions (n, p, T) of the DFT calculations.
 - `fields`: A vector of `DFTField`s for each field used in the DFT-calculation. This is typically model-dependent. 
-- `options`: A `DFTOptions` object which contains information regarding the convergence settings and the devices used as part of the DFT calculation.
-Example usage:
+- `options`: A `DFTOptions` object which contains information regarding the automatic differentiation strategy, the devices used as part of the DFT calculation, and if any logging/saving callbacks are used.
+
+#Example usage:
+
 ```julia
 julia> model = PCSAFT(["water"])
 
@@ -92,14 +93,19 @@ get_fields(model, species, structure, device) = get_fields(model, species, struc
 """
     DGTSystem(model::EoSModel, gradient::GradientModel, structure::DFTStructure, external_field, options::DFTOptions)
 
-Generic struct which includes all the information needed to perform Density Gradient Theory (DGT/SCFT) calculations, i.e. a square-gradient functional built on top of a bulk `model` rather than a full weighted-density DFT functional:
+Generic struct which includes all the information needed to perform Density Gradient Theory (DGT/SCFT) calculations, i.e. a square-gradient functional built on top of a bulk `model` rather than a full weighted-density DFT functional.
+
+## Fields:
+
 - `model`: A model object that should be obtained from Clapeyron.jl, and contains all information regarding species parameters.
 - `gradient`: A `GradientModel` (e.g. `ConstGradient`) which supplies the influence parameter(s) `κ` for the square-gradient term.
 - `species`: A `DGTSpecies` object containing the bulk densities, chemical potentials and length scales for each species.
 - `structure`: A `DFTStructure` object which provides information regarding the geometry (including bounds) and conditions (n, p, T) of the DFT calculations.
 - `fields`: A vector of `DFTField`s for each field used in the calculation (density and its gradient).
-- `options`: A `DFTOptions` object which contains information regarding the convergence settings and the devices used as part of the calculation.
-Example usage:
+- `options`: A `DFTOptions` object which contains information regarding the automatic differentiation strategy, the devices used as part of the DFT calculation, and if any logging/saving callbacks are used.
+
+## Example usage:
+
 ```julia
 julia> model = PCSAFT(["water"])
 
@@ -213,7 +219,10 @@ end
 """
     ElectrolyteDFTSystem(model::ElectrolyteModel, structure::DFTStructure, external_field, options::DFTOptions)
 
-Generic struct which includes all the information needed to perform DFT / SCFT calculations for electrolyte systems:
+Generic struct which includes all the information needed to perform DFT / SCFT calculations for electrolyte systems.
+
+## Fields:
+
 - `model`: An `ElectrolyteModel` obtained from Clapeyron.jl, combining a neutral bulk model (`model.neutralmodel`) with an ion model (`model.ionmodel`) and the species charges.
 - `species`: A `DFTSpecies` object for the neutral species, obtained from `model.neutralmodel`.
 - `ion_species`: A `DFTSpecies` object for the ionic species, obtained from `model.ionmodel`.
@@ -221,8 +230,10 @@ Generic struct which includes all the information needed to perform DFT / SCFT c
 - `fields`: A vector of `DFTField`s for the neutral and ionic species combined.
 - `external_field`: In addition to any user-supplied external field(s), an `ElectrostaticPotential` field is always appended automatically to account for the mean-field electrostatic interactions between ions.
 - `propagator`: The `DFTPropagator` used for the neutral model (ions use an `IdealPropagator`).
-- `options`: A `DFTOptions` object which contains information regarding the convergence settings and the devices used as part of the DFT calculation.
-Example usage:
+- `options`: A `DFTOptions` object which contains information regarding the automatic differentiation strategy, the devices used as part of the DFT calculation, and if any logging/saving callbacks are used.
+
+## Example usage:
+
 ```julia
 julia> model = SPCSAFT(["water"]) + DH(["water"],["Na","Cl"])
 
@@ -244,6 +255,64 @@ struct ElectrolyteDFTSystem{M<:ElectrolyteModel,S<:DFTSpecies,iS<:DFTSpecies,T<:
     options::O
     chunksize::Val{C}
 end
+
+struct SCFTSystem{M<:EoSModel, S<:DFTSpecies, T<:DFTStructure, P<:DFTPropagator, O<:DFTOptions, EF} <: AbstractcDFTSystem
+    model::M
+    species::S
+    structure::T
+    propagator::P
+    options::O
+    external_field::EF
+end
+
+"""
+    SCFTSystem(model::SCFTLatticeFluid, structure::DFTStructure, options::DFTOptions=DFTOptions();
+               mol_structure, ensemble=fill(:grand_canonical,ncomponents), n_molecules=zeros(ncomponents))
+
+Construct a Self-consistent field theory (SCFT) system.
+
+## Arguments:
+
+- `model`: An `EoSModel` for the bulk interaction (e.g., `SCFTLatticeFluid`), built from a Clapeyron group-contribution `grouplist` — `model.components` are molecule types  (chains/solvents), `model.groups.flattenedgroups` are species.
+- `structure`: Spatial discretization, e.g. `Uniform1DCart((0.,0.), ρbulk, [0.,L], ngrid)`.
+- `options`: `DFTOptions` for device/solver settings.
+
+## Keyword Arguments:
+
+- `mol_structure::Dict{String,<:MolStructure}`: Per molecule type, chain connectivity, e.g. `Dict("diblock" => custom_structure("AAAABBBB"), "solvent" => custom_structure("S"))`.
+- `ensemble`: Per molecule type, `:canonical` or `:grand_canonical`. Defaults to `:grand_canonical` for every molecule type
+- `n_molecules`: Per molecule type, chain/molecule count — only meaningful (and needed)  for molecule types explicitly marked `:canonical`; defaults to `0` for every type.
+- `external_field`: `nothing` (default), a single `ExternalFieldModel`, or a `Vector{<:ExternalFieldModel}`
+"""
+function SCFTSystem(model::EoSModel, structure::DFTStructure, options::DFTOptions=DFTOptions();
+    mol_structure = nothing,
+    ensemble::Vector{Symbol} = fill(:grand_canonical, length(model.components)),
+    n_molecules::AbstractVector = zeros(length(model.components)),
+    external_field = nothing,
+)
+    @assert length(structure.ρbulk) == length(model.components) "structure.ρbulk must have one entry per molecule type ($(length(model.components))), got $(length(structure.ρbulk))"
+    structure.topology isa TwoPhaseSystem && error(
+        """
+        SCFTSystem does not support TwoPhaseSystem structures — SCFT has no two-phase/interfacial-tension support yet. 
+        Use a UniformXDCart or morphology structure instead.
+        """
+    )
+
+    # get_species reads off the expanded model (chain order baked into
+    # model.groups.i_groups) but SCFTSystem itself keeps the original, unexpanded
+    # `model` — SCFT's mean-field fields are per species-letter, not per chain-position
+    # instance (see expand_model's docstring).
+    expanded_model = expand_model(model, mol_structure)
+    species = get_species(expanded_model, structure; ensemble=ensemble, n_molecules=n_molecules)
+
+    FP = fptype(options)
+    propagator = get_propagator(model, species, structure, options.device, FP)
+
+    normalized_external_field = external_field isa ExternalFieldModel ? [external_field] : external_field
+
+    return SCFTSystem(model, species, structure, propagator, options, normalized_external_field)
+end
+
 
 dimension(::Type{Union{DFTSystem{<:Any,<:Any,T},DGTSystem{<:Any,<:Any,T}}}) where T = dimension(T)
 dimension(x::AbstractcDFTSystem) = dimension(x.structure)

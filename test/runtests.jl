@@ -5,7 +5,7 @@ using GCIdentifier
 using ChemicalIdentifiers
 @info "Loading cDFT took $(round(t1,digits = 2)) seconds"
 
-@testset "cDFT" begin
+@testset verbose = true "cDFT" begin
     include("test_models.jl")
     include("test_dgt.jl")
     include("test_scft.jl")

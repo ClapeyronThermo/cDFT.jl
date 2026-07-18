@@ -1,17 +1,4 @@
 """
-    length_scale(L::Real)
-
-Identity escape hatch: lets `SWeightedDensity`/`VWeightedDensity`'s internal `L =
-length_scale(model)` call accept an already-resolved `L` value directly, not just an
-`EoSModel`. Needed by `DH.jl`'s `get_fields` — the ion field must share the *neutral*
-model's `L` (not `length_scale(ionmodel)`, its own, different, ion-diameter-based value),
-so it computes/receives the shared `L` as a plain number and passes that through as the
-`model` argument instead of an actual model — ordinary dispatch then routes it here
-instead of to any real `length_scale(::EoSModel)` method.
-"""
-length_scale(L::Real) = L
-
-"""
     SWeightedDensity(type::Symbol,width::Vector{Float64},map::Array{ComplexF64})
 
 Generic `SWeightedDensity` type used to calculate the scalar weighted densities of the system. One must specify:

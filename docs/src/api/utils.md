@@ -10,6 +10,7 @@ Depth = 1
 ```
 
 ## Functions
+
 ```@docs
 cDFT.∫
 cDFT.texlabel
