@@ -133,6 +133,21 @@ function _group_colors(groups, species, model, color_by::Symbol, palette=cDFT.CD
     return [colors[key] for key in color_keys]
 end
 
+# `only`, if given, restricts drawing to specific group(s) -- matched against the exact label
+# text that would otherwise show up in the legend (from `_profile_label`/`_plot_groups`), so it
+# lines up with whatever `plot_by` granularity is in effect (:bead/:group/:molecule) without
+# the caller needing to know species/bead indices. Filters `groups`/`colors` together, applied
+# *after* `_group_colors` assigns from the full unfiltered list, so a retained group keeps the
+# same color it would have had alongside the others (e.g. "water" stays the same blue whether
+# plotted with hexane or on its own).
+function _filter_groups(groups, colors, only)
+    only === nothing && return groups, colors
+    wanted = only isa AbstractString ? (only,) : Tuple(only)
+    keep = [i for (i, (label, _)) in enumerate(groups) if label in wanted]
+    isempty(keep) && error("only=$only matched no plotted group; available labels are $(first.(groups))")
+    return groups[keep], colors[keep]
+end
+
 # Figure kwargs shared by every geometry's `Makie.plot` method below: pixel size (from
 # `width ∈ (:single,:double)` at `dpi`, matching the rcParams `figure.figsize`/`figure.dpi`
 # pair) and background color (`figure.facecolor="white"`). `font` (a font family name,
@@ -144,11 +159,11 @@ function _cdft_figure(width::Symbol, dpi::Real, font)
                                Figure(size=sz, backgroundcolor=:white, fonts=(; regular=font))
 end
 
-function Makie.plot(system::cDFT.AbstractcDFTSystem, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing)
-    return Makie.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units, latex=latex, plot_by=plot_by, color_by=color_by, color_scheme=color_scheme, font=font, width=width, dpi=dpi, grid=grid, equilibrium_densities=equilibrium_densities)
+function Makie.plot(system::cDFT.AbstractcDFTSystem, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing, only=nothing)
+    return Makie.plot(system, system.structure, profiles; x_units=x_units, y_units=y_units, latex=latex, plot_by=plot_by, color_by=color_by, color_scheme=color_scheme, font=font, width=width, dpi=dpi, grid=grid, equilibrium_densities=equilibrium_densities, only=only)
 end
 
-function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure{1,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:mass, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing) where M
+function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructure{1,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:mass, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing, only=nothing) where M
     # `equilibrium_densities` only applies to the 2D/3D heatmap/volume methods below -- accepted
     # (and ignored) here too so the generic `Makie.plot(system, profiles; ...)` entry point can
     # forward it unconditionally regardless of the system's structure dimensionality.
@@ -200,6 +215,7 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
 
     groups = _plot_groups(species, model, plot_by)
     colors = _group_colors(groups, species, model, color_by, color_scheme)
+    groups, colors = _filter_groups(groups, colors, only)
 
     ymax = 0.
     plt = nothing
@@ -240,7 +256,7 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::cDFT.DFTStructur
     return Makie.FigureAxisPlot(fig, ax, plt)
 end
 
-function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTStructure{1,cDFT.Spherical,M},cDFT.DFTStructure{1,cDFT.Cylindrical,M}}, profiles; x_units=:normalized, y_units=:mass, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing) where M
+function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTStructure{1,cDFT.Spherical,M},cDFT.DFTStructure{1,cDFT.Cylindrical,M}}, profiles; x_units=:normalized, y_units=:mass, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing, only=nothing) where M
     # `equilibrium_densities` only applies to the 2D/3D heatmap/volume methods below -- see the
     # Cartesian 1D method just above for why it's accepted (and ignored) here too.
     _check_profile_color_by(plot_by, color_by)
@@ -291,6 +307,7 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTSt
 
     groups = _plot_groups(species, model, plot_by)
     colors = _group_colors(groups, species, model, color_by, color_scheme)
+    groups, colors = _filter_groups(groups, colors, only)
 
     ymax = 0.
     plt = nothing
@@ -330,7 +347,7 @@ function Makie.plot(system::cDFT.AbstractcDFTSystem, structure::Union{cDFT.DFTSt
     return Makie.FigureAxisPlot(fig, ax, plt)
 end
 
-function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure{2,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing) where M
+function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure{2,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing, only=nothing) where M
     _check_profile_color_by(plot_by, color_by)
     structure = system.structure
     model = system.model
@@ -377,6 +394,7 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
 
     groups = _plot_groups(species, model, plot_by)
     colors = _group_colors(groups, species, model, color_by, color_scheme)
+    groups, colors = _filter_groups(groups, colors, only)
 
     plt = nothing
     for ((label, members), c) in zip(groups, colors)
@@ -421,7 +439,7 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
     return Makie.FigureAxisPlot(fig, ax, plt)
 end
 
-function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure{3,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing) where M
+function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDFT.DFTStructure{3,cDFT.Cartesian,M}, profiles; x_units=:normalized, y_units=:normalized, latex=false, plot_by=:bead, color_by=:bead, color_scheme=cDFT.CDFT_DEFAULT_COLORS, font=nothing, width=:single, dpi=cDFT.CDFT_DPI, grid=false, equilibrium_densities=nothing, only=nothing) where M
     _check_profile_color_by(plot_by, color_by)
     structure = system.structure
     model = system.model
@@ -464,6 +482,7 @@ function Makie.plot(system::Union{cDFT.DFTSystem,cDFT.DGTSystem}, structure::cDF
 
     groups = _plot_groups(species, model, plot_by)
     colors = _group_colors(groups, species, model, color_by, color_scheme)
+    groups, colors = _filter_groups(groups, colors, only)
 
     plt = nothing
     for ((label, members), c) in zip(groups, colors)
