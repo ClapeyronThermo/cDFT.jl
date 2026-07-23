@@ -85,7 +85,7 @@ function kappa(gradient::ZuoStenbyGradientModel, model, T, ρ̄)
         # factor needed here specifically because the a/N_A^2, b/N_A conversion above
         # already absorbed it.
         κ_number = a * b^(2/3) * A * (1 - Tr)^B / N_A^(8/3)
-        κ_number / k_B / R̄
+        κ_number / k_B
     end
     κT = SingleParam("kappa", gradient.species, κ_values)
     return epsilon_LorentzBerthelot(κT, gradient.params.beta).values
